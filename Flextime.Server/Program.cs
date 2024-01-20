@@ -1,0 +1,84 @@
+﻿using System.CommandLine;
+using System.Reflection;
+using Flextime;
+using Inhill.Flextime.Server;
+using Microsoft.Extensions.Logging;
+
+var options = new Options();
+
+var folderOption = new Option<DirectoryInfo>("--folder", () => new DirectoryInfo(Constants.MeasurementsFolder), "Folder to read measurements from");
+folderOption.AddAlias("-f");
+
+var logLevelOption = new Option<LogLevel>("--log-level", () => LogLevel.Information , "Set logging severity level");
+logLevelOption.AddAlias("-v");
+
+var rootCommand = new RootCommand("Flextime -- tracking working hours");
+rootCommand.AddOption(folderOption);
+rootCommand.AddOption(logLevelOption);
+
+rootCommand.SetHandler((folder, logLevel) =>
+    {
+        options.MeasurementsFolder = folder.FullName;
+        options.LogLevel = logLevel;
+    },
+    folderOption, 
+    logLevelOption);
+
+var result = await rootCommand.InvokeAsync(args);
+
+if (result != 0)
+{
+    return result;
+}
+
+using var loggerFactory =
+    LoggerFactory.Create(builder => 
+    {
+        builder.AddSystemdConsole();
+
+        builder
+            .AddSimpleConsole(formatterOptions =>
+                {
+                formatterOptions.SingleLine = true;
+                formatterOptions.TimestampFormat = "HH:mm:ss ";
+            });
+
+        builder.SetMinimumLevel(options.LogLevel);
+    });
+
+var logger = loggerFactory.CreateLogger<Daemon>();
+var version = Assembly.GetExecutingAssembly().GetName().Version;
+
+logger.LogInformation("Flextime daemon {Version} started.", version);
+
+var daemon = new Daemon(logger);
+
+var tokenSource = new CancellationTokenSource();
+
+Console.CancelKeyPress += (_, args) =>
+{
+    tokenSource.Cancel();
+    args.Cancel = true; // We want to run the rest of our code
+};
+
+daemon.Initialize();
+
+await daemon.MarkStart();
+
+// We could also ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing)
+// since .NET 8, but I want to limit the exceptions we catch to just
+// the cancellation token.
+// https://blog.stephencleary.com/2023/11/configureawait-in-net-8.html
+try
+{
+    await daemon.Run(tokenSource.Token);
+}
+catch (TaskCanceledException)
+{
+    // Ignore.
+}
+
+await daemon.MarkStop();
+logger.LogDebug("Flextime daemon {Version} stopped.", version);
+
+return 0;
