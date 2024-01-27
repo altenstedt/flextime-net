@@ -30,7 +30,7 @@ public static class Reader
         return list;
     }
 
-    private static Dictionary<DateOnly, (List<MeasurementWithZone> list, uint hash)> GroupAndHash(List<MeasurementWithZone> list, TimeSpan since)
+    private static Dictionary<DateOnly, (List<MeasurementWithZone> list, long hash)> GroupAndHash(List<MeasurementWithZone> list, TimeSpan since)
     {
         var byDates = list
             .GroupBy(item => DateOnly.FromDateTime(item.Timestamp.Date))
@@ -40,7 +40,7 @@ public static class Reader
         return byDates;
     }
 
-    public static async Task<Dictionary<DateOnly, (List<MeasurementWithZone> list, uint hash)>> ReadRemote(HttpClient httpClient, TimeSpan since, string computerId)
+    public static async Task<Dictionary<DateOnly, (List<MeasurementWithZone> list, long hash)>> ReadRemote(HttpClient httpClient, TimeSpan since, string computerId)
     {
         PagedMeasurementsDataContract? pagedMeasurements = null;
 
@@ -58,15 +58,14 @@ public static class Reader
             return [];
         }
 
-        var measurements = pagedMeasurements.Items.SelectMany(item => item.Items.Select(x => new MeasurementWithZone(new Measurement { Idle = x.Idle, Kind = (MeasurementKind)x.Kind, Timestamp = x.Timestamp}, item.Zone, item.Interval))).ToList();
-
+        var measurements = pagedMeasurements.Items.SelectMany(item => item.Items.Select(x => new MeasurementWithZone(new Measurement { Idle = x.Idle, Kind = MeasurementKind.None, Timestamp = x.Timestamp}, item.Zone, item.Interval))).ToList();
 
         var byDates = GroupAndHash(measurements, since);
 
         return byDates;
     }
 
-    public static Dictionary<DateOnly, (List<MeasurementWithZone> list, uint hash)> ReadFiles(string folder, TimeSpan since)
+    public static Dictionary<DateOnly, (List<MeasurementWithZone> list, long hash)> ReadFiles(string folder, TimeSpan since)
     {
         var list = ReadFiles(folder);
 
@@ -75,7 +74,7 @@ public static class Reader
         return byDates;
     }
 
-    public static (List<MeasurementWithZone> list, bool found) ReadFiles(string folder, TimeSpan since, DateOnly date, uint hash) {
+    public static (List<MeasurementWithZone> list, bool found) ReadFiles(string folder, TimeSpan since, DateOnly date, long hash) {
         var byDates = ReadFiles(folder, since);
 
         if (!byDates.ContainsKey(date)) {
@@ -99,10 +98,10 @@ public static class Reader
         return await File.ReadAllTextAsync(path);
     }
 
-    private static uint HashMeasurements(IEnumerable<MeasurementWithZone> measurements)
+    private static long HashMeasurements(IEnumerable<MeasurementWithZone> measurements)
     {
-        uint hashCode = (uint)measurements.Count();
-        foreach (uint val in measurements.Select(item => item.Measurement.Timestamp))
+        long hashCode = measurements.Count();
+        foreach (long val in measurements.Select(item => item.Measurement.Timestamp))
         {
             hashCode = unchecked(hashCode * 31 + val);
         }
