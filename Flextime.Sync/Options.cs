@@ -19,4 +19,8 @@ public struct Options()
     public string Computer { get; set; }
 
     public bool Computers { get; set; }
+
+    public string TenantId => "6b3c1467-664f-4edb-8328-43b7687d0366";
+
+    public string ClientId => "80ae8503-ef51-4443-8f05-e677f52a56d1";
 }
