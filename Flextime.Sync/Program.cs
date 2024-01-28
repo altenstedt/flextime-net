@@ -1,4 +1,5 @@
 ﻿using System.CommandLine;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using Flextime;
@@ -140,7 +141,16 @@ if (ping)
 
 if (list)
 {
+    var deviceCode = new DeviceCode(options);
+    await deviceCode.Initialize();
+
+    if (!deviceCode.IsLoggedOn)
+    {
+        await deviceCode.LogOn();
+    }
+    
     var httpClient = new HttpClient { BaseAddress = options.Uri };
+    httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", deviceCode.AccessToken);
 
     if (options.Computers) {
         var computers = await httpClient.GetStringAsync("/computers");
