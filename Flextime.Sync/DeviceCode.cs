@@ -10,7 +10,7 @@ public class DeviceCode(Options options)
 
     private string? accessToken;
 
-    public string? refreshToken;
+    private string? refreshToken;
 
     public async Task Initialize()
     {

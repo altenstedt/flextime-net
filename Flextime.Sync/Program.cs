@@ -154,9 +154,13 @@ if (list)
     httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
     if (options.Computers) {
-        var computers = await httpClient.GetStringAsync("/computers");
+        var computersResponseMessage = await httpClient.GetAsync("/computers");
 
-        Console.WriteLine(computers);
+        var computers = await computersResponseMessage.Content.ReadFromJsonAsync<ComputersDataContract>();
+
+        Console.WriteLine(string.Join(", ", computers?.Items ?? Array.Empty<string>()));
+
+        return 0;
     }
 
     SummaryDataContract? remoteSummary = null;
