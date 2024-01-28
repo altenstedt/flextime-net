@@ -8,16 +8,64 @@ public class DeviceCode(Options options)
 {
     private DateTimeOffset expires = DateTimeOffset.MinValue;
 
-    public bool IsLoggedOn => expires > DateTime.Now;
+    private string? accessToken;
 
-    public string? AccessToken { get; private set; }
+    public string? refreshToken;
 
     public async Task Initialize()
     {
         var result = await ReadFromFile();
 
-        AccessToken = result.accessToken;
+        accessToken = result.accessToken;
+        refreshToken = result.refreshToken;
         expires = result.expires;
+    }
+
+    public async Task<string?> GetAccessToken() {
+        if (expires > DateTimeOffset.UtcNow) {
+            return accessToken;
+        }
+
+        if (!string.IsNullOrEmpty(refreshToken))
+        {
+            if (options.Verbose)
+            {
+                Console.WriteLine("Refreshing access token");
+            }
+            
+            var httpClient = new HttpClient { BaseAddress = new Uri($"https://login.microsoftonline.com/{options.TenantId}/oauth2/v2.0/token") };
+
+            KeyValuePair<string, string>[] collection = [ 
+                new KeyValuePair<string, string>("client_id", options.ClientId),
+                new KeyValuePair<string, string>("scope", "openid offline_access api://80ae8503-ef51-4443-8f05-e677f52a56d1/Flextime.User.Read api://80ae8503-ef51-4443-8f05-e677f52a56d1/Flextime.User.Write"),
+                new KeyValuePair<string, string>("grant_type", "refresh_token"),
+                new KeyValuePair<string, string>("refresh_token", refreshToken)
+            ];
+            
+            var responseMessage = await httpClient.PostAsync("", new FormUrlEncodedContent(collection));
+
+            if (responseMessage.StatusCode != HttpStatusCode.OK)
+            {
+                return null;
+            }
+
+            var refreshTokenResponse = await responseMessage.Content.ReadFromJsonAsync<RefreshTokenResponse>();
+
+            if (refreshTokenResponse == null)
+            {
+                return null;
+            }
+
+            accessToken = refreshTokenResponse.access_token;
+            refreshToken = refreshTokenResponse.refresh_token;
+            expires = DateTimeOffset.UtcNow.Add(TimeSpan.FromSeconds(refreshTokenResponse.expires_in));
+
+            await WriteToFile(accessToken, expires, refreshToken);
+
+            return accessToken;
+        }
+
+        return null;
     }
     
     public async Task LogOn()
@@ -64,10 +112,11 @@ public class DeviceCode(Options options)
                     throw new InvalidOperationException("Device code poll response is null.");
                 }
 
-                AccessToken = pollResponse.access_token;
+                accessToken = pollResponse.access_token;
+                refreshToken = pollResponse.refresh_token;
                 expires = DateTimeOffset.UtcNow.Add(TimeSpan.FromSeconds(pollResponse.expires_in));
 
-                await WriteToFile(AccessToken, expires);
+                await WriteToFile(accessToken, expires, refreshToken);
                 
                 Console.WriteLine($"Session ends {expires:t}");
                 return;
@@ -79,30 +128,33 @@ public class DeviceCode(Options options)
         } while (deviceCodeExpires > DateTime.Now);
     }
 
-    private async Task<(string accessToken, DateTimeOffset expires)> ReadFromFile()
+    private async Task<(string accessToken, DateTimeOffset expires, string refreshToken)> ReadFromFile()
     {
         var path = Path.Combine(options.MeasurementsFolder, "../user");
 
         if (!File.Exists(path))
         {
-            return (string.Empty, DateTimeOffset.MinValue);
+            return (string.Empty, DateTimeOffset.MinValue, string.Empty);
         }
         
         var lines = await File.ReadAllLinesAsync(path, Encoding.UTF8);
 
         return lines.Length < 2 
-            ? (string.Empty, DateTimeOffset.MinValue) 
-            : (lines[0], DateTimeOffset.Parse(lines[1]));
+            ? (string.Empty, DateTimeOffset.MinValue, string.Empty) 
+            : lines.Length == 2
+                ? (lines[0], DateTimeOffset.Parse(lines[1]), string.Empty)
+                : (lines[0], DateTimeOffset.Parse(lines[1]), lines[2]);
     }
 
-    private async Task WriteToFile(string accessToken, DateTimeOffset expirez)
+    private async Task WriteToFile(string accessToken, DateTimeOffset expirez, string refreshToken)
     {
         var path = Path.Combine(options.MeasurementsFolder, "../user");
 
         string[] lines =
         [
             accessToken,
-            expirez.ToString("O")
+            expirez.ToString("O"),
+            refreshToken
         ];
         
         await File.WriteAllLinesAsync(path, lines, Encoding.UTF8);
@@ -111,4 +163,6 @@ public class DeviceCode(Options options)
 
 public record DeviceCodeResponse(string message, string device_code, int expires_in, int interval);
 
-public record PollResponse(string error, string access_token, int expires_in);
+public record PollResponse(string error, string access_token, string refresh_token, int expires_in);
+
+public record RefreshTokenResponse(string access_token, int expires_in, string refresh_token);

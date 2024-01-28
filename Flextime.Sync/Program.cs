@@ -144,13 +144,14 @@ if (list)
     var deviceCode = new DeviceCode(options);
     await deviceCode.Initialize();
 
-    if (!deviceCode.IsLoggedOn)
+    var accessToken = await deviceCode.GetAccessToken();
+    if (string.IsNullOrEmpty(accessToken))
     {
         await deviceCode.LogOn();
     }
     
     var httpClient = new HttpClient { BaseAddress = options.Uri };
-    httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", deviceCode.AccessToken);
+    httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
     if (options.Computers) {
         var computers = await httpClient.GetStringAsync("/computers");

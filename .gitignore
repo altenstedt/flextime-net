@@ -7,6 +7,8 @@ global.json
 
 .DS_Store
 
+requests.http
+
 # User-specific files
 *.suo
 *.user
