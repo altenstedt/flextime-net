@@ -136,6 +136,32 @@ public class MeasurementsFormatterTest
                 TimeSpan.FromMinutes(10),
                 false,
                 1);
+
+            Add(
+                [
+                    Create(DateTimeOffset.Parse("2023-12-01T07:00:00+01:00"), TimeSpan.FromMinutes(10)),
+                ],
+                string.Empty,
+                TimeSpan.FromMinutes(10),
+                false,
+                1);
+            
+            Add(
+                [
+                    Create(DateTimeOffset.Parse("2023-12-01T07:00:00+01:00"), TimeSpan.FromMinutes(10)),
+                ],
+                "Single measurement",
+                TimeSpan.FromMinutes(10),
+                true,
+                1);
+            
+            Add(
+                [
+                ],
+                string.Empty,
+                TimeSpan.FromMinutes(10),
+                false,
+                1);
         }
     }
 }
