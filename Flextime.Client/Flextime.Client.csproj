@@ -15,11 +15,4 @@
   <ItemGroup>
     <ProjectReference Include="..\Flextime\Flextime.csproj" />
   </ItemGroup>
-
-  <PropertyGroup>
-    <!-- We want to use ICU time zones on Windows -->
-    <!-- https://learn.microsoft.com/en-us/dotnet/api/system.timezoneinfo.tryconvertianaidtowindowsid?view=net-8.0#remarks -->
-    <InvariantGlobalization>true</InvariantGlobalization>
-  </PropertyGroup>
-
 </Project>

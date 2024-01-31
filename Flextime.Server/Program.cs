@@ -1,5 +1,7 @@
 ﻿using System.CommandLine;
+using System.Globalization;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using Flextime;
 using Inhill.Flextime.Server;
 using Microsoft.Extensions.Logging;
@@ -60,6 +62,27 @@ Console.CancelKeyPress += (_, args) =>
     tokenSource.Cancel();
     args.Cancel = true; // We want to run the rest of our code
 };
+
+
+if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
+    // https://learn.microsoft.com/en-us/dotnet/core/extensions/globalization-icu
+    var sortVersion = CultureInfo.InvariantCulture.CompareInfo.Version;
+    byte[] bytes = sortVersion.SortId.ToByteArray();
+    int tmp = bytes[3] << 24 | bytes[2] << 16 | bytes[1] << 8 | bytes[0];
+    var isUsingIcu = tmp != 0 && tmp == sortVersion.FullVersion;
+
+    if (isUsingIcu) {
+        if (TimeZoneInfo.TryConvertWindowsIdToIanaId(TimeZoneInfo.Local.Id, out var ianaId)) {
+            logger.LogDebug("Local time zone is {ICU}, converted from {Id} on {OS}", ianaId, TimeZoneInfo.Local.Id, RuntimeInformation.RuntimeIdentifier);
+        } else {
+            logger.LogWarning("Windows platform is not able to convert {Id} to ICU time zone", TimeZoneInfo.Local.Id);
+        }
+    } else {
+        logger.LogWarning("Windows platform is not using ICU which is needed for cross-platform functionality");
+    }
+} else {
+    logger.LogDebug("Local time zone is {Id}", TimeZoneInfo.Local.Id);
+}
 
 daemon.Initialize();
 

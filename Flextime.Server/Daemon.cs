@@ -77,6 +77,8 @@ public class Daemon(ILogger logger)
             // API works.  It is unfortunate, but I cannot find a way to get around
             // it.
             idle = TimeSpan.FromMilliseconds(await idleMonitor.GetIdletimeAsync());
+        } else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
+            idle = TimeSpan.FromMilliseconds(LastInputInfo.GetIdleTimeSinceLastInputInMilliSeconds());
         } else {
             throw new InvalidOperationException($"OS {RuntimeInformation.OSDescription} is not supported");
         }
