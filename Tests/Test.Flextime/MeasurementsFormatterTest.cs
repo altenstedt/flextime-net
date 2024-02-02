@@ -25,6 +25,12 @@ public class MeasurementsFormatterTest
                 return new MeasurementWithZone(measurement, "Europe/Stockholm", 60);
             }
 
+            MeasurementWithZone CreateWithZone(DateTimeOffset dateTime, TimeSpan idle, string zone) {
+                var measurement = new Measurement { Idle = (uint)idle.TotalSeconds, Kind = MeasurementKind.None, Timestamp = (uint)dateTime.ToUnixTimeSeconds()};
+
+                return new MeasurementWithZone(measurement, zone, 60);
+            }
+
             Add(Array.Empty<MeasurementWithZone>(), string.Empty, TimeSpan.Zero, false, 0);
             Add([Create(DateTimeOffset.Now, TimeSpan.Zero)], string.Empty, TimeSpan.Zero, false, 0); // Single measurement
             Add([Create(DateTimeOffset.Now, TimeSpan.Zero)], string.Empty, TimeSpan.Zero, false, 42); // Single measurement
@@ -133,6 +139,26 @@ public class MeasurementsFormatterTest
                     Create(DateTimeOffset.Parse("2023-12-01T07:09:00+01:00"), TimeSpan.FromMinutes(10)),
                 ],
                 "2023-12-01 07:00 – 07:09 00:09 | 00:09 w/48 Fri",
+                TimeSpan.FromMinutes(10),
+                false,
+                1);
+
+            Add(
+                [
+                    CreateWithZone(DateTimeOffset.Parse("2024-02-01T17:17:00-05:00"), TimeSpan.FromMinutes(10), "America/New_York"),
+                    CreateWithZone(DateTimeOffset.Parse("2024-02-01T11:18:00+00:00"), TimeSpan.FromMinutes(10), "Europe/London"),
+                ],
+                "2024-02-01 17:17 – 11:18 05:59 | 05:59 w/05 Thu", // Maybe counter intuitive, but each time should be in local time
+                TimeSpan.FromMinutes(10),
+                false,
+                1);
+
+            Add(
+                [
+                    CreateWithZone(DateTimeOffset.Parse("2024-02-01T11:13:00+01:00"), TimeSpan.FromMinutes(10), "Europe/Stockholm"),
+                    CreateWithZone(DateTimeOffset.Parse("2024-02-01T11:14:00+00:00"), TimeSpan.FromMinutes(10), "Europe/London"),
+                ],
+                "2024-02-01 11:13 – 11:14 00:01 | 00:01 w/05 Thu", // Maybe counter intuitive, but each time should be in local time
                 TimeSpan.FromMinutes(10),
                 false,
                 1);

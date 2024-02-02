@@ -14,17 +14,23 @@ folderOption.AddAlias("-f");
 var logLevelOption = new Option<LogLevel>("--log-level", () => LogLevel.Information , "Set logging severity level");
 logLevelOption.AddAlias("-v");
 
+var dryRunOption = new Option<bool>("--dry-run", "Exit before starting the daemon and capturing measurements");
+dryRunOption.AddAlias("--exit");
+
 var rootCommand = new RootCommand("Flextime -- tracking working hours");
 rootCommand.AddOption(folderOption);
 rootCommand.AddOption(logLevelOption);
+rootCommand.AddOption(dryRunOption);
 
-rootCommand.SetHandler((folder, logLevel) =>
+rootCommand.SetHandler((folder, logLevel, dryRun) =>
     {
         options.MeasurementsFolder = folder.FullName;
         options.LogLevel = logLevel;
+        options.DryRun = dryRun;
     },
     folderOption, 
-    logLevelOption);
+    logLevelOption,
+    dryRunOption);
 
 var result = await rootCommand.InvokeAsync(args);
 
@@ -51,8 +57,6 @@ using var loggerFactory =
 var logger = loggerFactory.CreateLogger<Daemon>();
 var version = Assembly.GetExecutingAssembly().GetName().Version;
 
-logger.LogInformation("Flextime daemon {Version} started.", version);
-
 var daemon = new Daemon(logger);
 
 var tokenSource = new CancellationTokenSource();
@@ -73,7 +77,7 @@ if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
 
     if (isUsingIcu) {
         if (TimeZoneInfo.TryConvertWindowsIdToIanaId(TimeZoneInfo.Local.Id, out var ianaId)) {
-            logger.LogDebug("Local time zone is {ICU}, converted from {Id} on {OS}", ianaId, TimeZoneInfo.Local.Id, RuntimeInformation.RuntimeIdentifier);
+            logger.LogDebug("Local time zone is {ICU}, converted from {Id} on {Runtime}", ianaId, TimeZoneInfo.Local.Id, RuntimeInformation.RuntimeIdentifier);
         } else {
             logger.LogWarning("Windows platform is not able to convert {Id} to ICU time zone", TimeZoneInfo.Local.Id);
         }
@@ -84,7 +88,14 @@ if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
     logger.LogDebug("Local time zone is {Id}", TimeZoneInfo.Local.Id);
 }
 
+if (options.DryRun) {
+    logger.LogInformation("Flextime daemon {Version} exited (dry-run).", version);
+    return 0;
+}
+
 daemon.Initialize();
+
+logger.LogInformation("Flextime daemon {Version} started.", version);
 
 await daemon.MarkStart();
 

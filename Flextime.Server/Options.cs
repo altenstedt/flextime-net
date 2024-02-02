@@ -9,4 +9,6 @@ public struct Options()
     public bool Verbose { get; set; }
 
     public LogLevel LogLevel { get; set; }
+
+    public bool DryRun { get; set; }
 }
