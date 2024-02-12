@@ -104,6 +104,14 @@ if (!File.Exists(computerFilePath)) {
     computerId = Convert.ToHexString(bytes).ToLowerInvariant();
     computerName = Environment.MachineName;
 
+    var directoryName = Path.GetDirectoryName(computerFilePath);
+    if (directoryName != null)
+    {
+        // Create the directory if it does not exist.  This happens
+        // if this command is the first command you run on this machine.
+        Directory.CreateDirectory(directoryName);
+    }
+    
     await File.WriteAllTextAsync(computerFilePath, $"{computerId}{Environment.NewLine}{computerName}");
 
     if (options.Verbose) {

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
@@ -14,11 +15,7 @@ public class DeviceCode(Options options)
 
     public async Task Initialize()
     {
-        var result = await ReadFromFile();
-
-        accessToken = result.accessToken;
-        refreshToken = result.refreshToken;
-        expires = result.expires;
+        (accessToken, expires, refreshToken) = await ReadFromFile();
     }
 
     public async Task<string?> GetAccessToken() {
@@ -37,7 +34,7 @@ public class DeviceCode(Options options)
 
             KeyValuePair<string, string>[] collection = [ 
                 new KeyValuePair<string, string>("client_id", options.ClientId),
-                new KeyValuePair<string, string>("scope", "openid offline_access api://80ae8503-ef51-4443-8f05-e677f52a56d1/Flextime.User.Read api://80ae8503-ef51-4443-8f05-e677f52a56d1/Flextime.User.Write"),
+                new KeyValuePair<string, string>("scope", "openid offline_access api://77d3d897-f62d-4f69-a3db-5394049156c1/Flextime.User.Read api://77d3d897-f62d-4f69-a3db-5394049156c1/Flextime.User.Write"),
                 new KeyValuePair<string, string>("grant_type", "refresh_token"),
                 new KeyValuePair<string, string>("refresh_token", refreshToken)
             ];
@@ -49,18 +46,14 @@ public class DeviceCode(Options options)
                 return null;
             }
 
-            var refreshTokenResponse = await responseMessage.Content.ReadFromJsonAsync<RefreshTokenResponse>();
+            var refreshTokenResponse = await responseMessage.Content.ReadFromJsonAsync<TokenResponse>();
 
             if (refreshTokenResponse == null)
             {
                 return null;
             }
 
-            accessToken = refreshTokenResponse.access_token;
-            refreshToken = refreshTokenResponse.refresh_token;
-            expires = DateTimeOffset.UtcNow.Add(TimeSpan.FromSeconds(refreshTokenResponse.expires_in));
-
-            await WriteToFile(accessToken, expires, refreshToken);
+            await SetAndWriteTokensToFile(refreshTokenResponse);
 
             return accessToken;
         }
@@ -74,10 +67,10 @@ public class DeviceCode(Options options)
 
         KeyValuePair<string, string>[] collection = [ 
             new KeyValuePair<string, string>("client_id", options.ClientId),
-            new KeyValuePair<string, string>("scope", "openid offline_access api://80ae8503-ef51-4443-8f05-e677f52a56d1/Flextime.User.Read api://80ae8503-ef51-4443-8f05-e677f52a56d1/Flextime.User.Write")
+            new KeyValuePair<string, string>("scope", "openid offline_access api://77d3d897-f62d-4f69-a3db-5394049156c1/Flextime.User.Read api://77d3d897-f62d-4f69-a3db-5394049156c1/Flextime.User.Write")
         ];
         
-        var responseMessage = await httpClient.PostAsync("devicecode", new FormUrlEncodedContent(collection));
+        var responseMessage = await httpClient.PostAsync("deviceCode", new FormUrlEncodedContent(collection));
 
         var deviceCodeResponse = await responseMessage.Content.ReadFromJsonAsync<DeviceCodeResponse>();
 
@@ -102,7 +95,15 @@ public class DeviceCode(Options options)
             {
                 if (pollResponse?.error == "authorization_pending")
                 {
+                    if (options.Verbose) Console.WriteLine($"Pending for {TimeSpan.FromSeconds(deviceCodeResponse.interval)}");
+
                     await Task.Delay(TimeSpan.FromSeconds(deviceCodeResponse.interval));
+                }
+                else
+                {
+                    Console.WriteLine($"Unexpected response {pollResponse?.error}. {pollResponse?.error_description}");
+
+                    return;
                 }
             } 
             else if (pollResponseMessage.StatusCode == HttpStatusCode.OK)
@@ -112,17 +113,14 @@ public class DeviceCode(Options options)
                     throw new InvalidOperationException("Device code poll response is null.");
                 }
 
-                accessToken = pollResponse.access_token;
-                refreshToken = pollResponse.refresh_token;
-                expires = DateTimeOffset.UtcNow.Add(TimeSpan.FromSeconds(pollResponse.expires_in));
-
-                await WriteToFile(accessToken, expires, refreshToken);
+                await SetAndWriteTokensToFile(pollResponse);
                 
                 Console.WriteLine($"Session ends {expires:t}");
                 return;
             }
             else
             {
+                Console.WriteLine($"Unexpected status code {pollResponseMessage.StatusCode}");
                 return;
             }
         } while (deviceCodeExpires > DateTime.Now);
@@ -146,23 +144,38 @@ public class DeviceCode(Options options)
                 : (lines[0], DateTimeOffset.Parse(lines[1]), lines[2]);
     }
 
-    private async Task WriteToFile(string accessToken, DateTimeOffset expirez, string refreshToken)
+    private async Task SetAndWriteTokensToFile(TokenResponse tokenResponse)
     {
-        var path = Path.Combine(options.MeasurementsFolder, "../user");
+        accessToken = tokenResponse.access_token;
+        refreshToken = tokenResponse.refresh_token;
+        expires = DateTimeOffset.UtcNow.Add(TimeSpan.FromSeconds(tokenResponse.expires_in));
 
         string[] lines =
         [
             accessToken,
-            expirez.ToString("O"),
+            expires.ToString("O"),
             refreshToken
         ];
         
+        var path = Path.Combine(options.MeasurementsFolder, "../user");
+
         await File.WriteAllLinesAsync(path, lines, Encoding.UTF8);
     }
 }
 
+[SuppressMessage("ReSharper", "InconsistentNaming")]
+[SuppressMessage("ReSharper", "ClassNeverInstantiated.Global")]
 public record DeviceCodeResponse(string message, string device_code, int expires_in, int interval);
 
-public record PollResponse(string error, string access_token, string refresh_token, int expires_in);
+[SuppressMessage("ReSharper", "InconsistentNaming")]
+[SuppressMessage("ReSharper", "ClassNeverInstantiated.Global")]
+public record PollResponse(
+    string access_token,
+    int expires_in,
+    string refresh_token,
+    string error,
+    string error_description) : TokenResponse(access_token, expires_in, refresh_token);
 
-public record RefreshTokenResponse(string access_token, int expires_in, string refresh_token);
+[SuppressMessage("ReSharper", "InconsistentNaming")]
+[SuppressMessage("ReSharper", "ClassNeverInstantiated.Global")]
+public record TokenResponse(string access_token, int expires_in, string refresh_token);

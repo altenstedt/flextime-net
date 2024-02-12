@@ -22,5 +22,5 @@ public struct Options()
 
     public string TenantId => "6b3c1467-664f-4edb-8328-43b7687d0366";
 
-    public string ClientId => "80ae8503-ef51-4443-8f05-e677f52a56d1";
+    public string ClientId => "506c78bf-3e07-4caa-b20c-0deec3356d4d";
 }
