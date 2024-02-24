@@ -17,20 +17,25 @@ logLevelOption.AddAlias("-v");
 var dryRunOption = new Option<bool>("--dry-run", "Exit before starting the daemon and capturing measurements");
 dryRunOption.AddAlias("--exit");
 
+var logSummaryIntervalOption = new Option<TimeSpan>("--log-summary-interval", () => TimeSpan.FromHours(1), "Log summary interval");
+
 var rootCommand = new RootCommand("Flextime -- tracking working hours");
 rootCommand.AddOption(folderOption);
 rootCommand.AddOption(logLevelOption);
 rootCommand.AddOption(dryRunOption);
+rootCommand.AddOption(logSummaryIntervalOption);
 
-rootCommand.SetHandler((folder, logLevel, dryRun) =>
+rootCommand.SetHandler((folder, logLevel, dryRun, logSummaryInterval) =>
     {
         options.MeasurementsFolder = folder.FullName;
         options.LogLevel = logLevel;
         options.DryRun = dryRun;
+        options.LogSummaryInterval = logSummaryInterval;
     },
     folderOption, 
     logLevelOption,
-    dryRunOption);
+    dryRunOption,
+    logSummaryIntervalOption);
 
 var result = await rootCommand.InvokeAsync(args);
 
@@ -57,7 +62,7 @@ using var loggerFactory =
 var logger = loggerFactory.CreateLogger<Daemon>();
 var version = Assembly.GetExecutingAssembly().GetName().Version;
 
-var daemon = new Daemon(logger);
+var daemon = new Daemon(logger, options);
 
 var tokenSource = new CancellationTokenSource();
 
@@ -96,6 +101,7 @@ if (options.DryRun) {
 daemon.Initialize();
 
 logger.LogInformation("Flextime daemon {Version} started.", version);
+logger.LogInformation("Summary is logged every {Interval}.", options.LogSummaryInterval);
 
 await daemon.MarkStart();
 

@@ -6,14 +6,16 @@ using Tmds.DBus;
 
 namespace Inhill.Flextime.Server;
 
-public class Daemon(ILogger logger)
+public class Daemon(ILogger logger, Options options)
 {
     private readonly TimeSpan interval = TimeSpan.FromMinutes(1);
     private readonly TimeSpan fileTimeLimit = TimeSpan.FromHours(1);
-    private readonly IList<Measurement> measurements = new List<Measurement>();
+    private readonly IList<Measurement> measurements = [];
     
     private DateTimeOffset? lastFlush;
     private string? lastPath;
+    private DateTimeOffset lastLogSummary = DateTimeOffset.UtcNow;
+    private int lastLogSummaryCount = 0;
     
     // https://github.com/tmds/Tmds.DBus
     private IIdleMonitor? idleMonitor;
@@ -83,6 +85,14 @@ public class Daemon(ILogger logger)
             throw new InvalidOperationException($"OS {RuntimeInformation.OSDescription} is not supported");
         }
 
+        if (kind == MeasurementKind.Start) {
+            logger.LogDebug("Start measurement at {Now:o}", DateTimeOffset.Now);
+        }
+
+        if (kind == MeasurementKind.Stop) {
+            logger.LogDebug("Stop measurement at {Now:o}", DateTimeOffset.Now);
+        }
+
         logger.LogTrace("Mark {Kind} with {Seconds}s idle.", kind, idle);
 
         // The time between measurements is not perfect, so be on the safe side,
@@ -100,6 +110,28 @@ public class Daemon(ILogger logger)
             measurements.Add(measurement);
 
             FlushMeasurements();
+
+            lastLogSummaryCount++;
+        }
+
+        if (DateTimeOffset.UtcNow - lastLogSummary >= options.LogSummaryInterval) {
+            switch (lastLogSummaryCount)
+            {
+                case 0:
+                    logger.LogInformation("No measurements since {LastLogSummary:HH:mm:ss (K)}", lastLogSummary.ToLocalTime());
+                    break;
+
+                case 1:
+                    logger.LogInformation("1 measurement since {LastLogSummary:HH:mm:ss (K)}", lastLogSummary.ToLocalTime());
+                    break;
+
+                default:
+                    logger.LogInformation("{LastLogSummaryCount} measurements since {LastLogSummary:HH:mm:ss (K)}", lastLogSummaryCount, lastLogSummary.ToLocalTime());
+                    break;
+            }
+
+            lastLogSummary = DateTimeOffset.UtcNow;
+            lastLogSummaryCount = 0;
         }
     }
 

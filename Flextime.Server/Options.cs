@@ -11,4 +11,6 @@ public struct Options()
     public LogLevel LogLevel { get; set; }
 
     public bool DryRun { get; set; }
+
+    public TimeSpan LogSummaryInterval { get; set; }
 }
