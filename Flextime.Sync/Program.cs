@@ -14,7 +14,7 @@ folderOption.AddAlias("-f");
 var verboseOption = new Option<bool>("--verbose", "More verbose output");
 verboseOption.AddAlias("-v");
 
-var uriOption = new Option<Uri>("--uri", () => new Uri("https://localhost:5000/", UriKind.Absolute), "URL of API");
+var uriOption = new Option<Uri>("--uri", () => new Uri("https://api.mangoground-e628dd34.swedencentral.azurecontainerapps.io/", UriKind.Absolute), "URL of API");
 uriOption.AddAlias("-u");
 
 var rootCommand = new RootCommand("Flextime Sync -- Syncing data with the cloud");
