@@ -142,10 +142,19 @@ public class Daemon(ILogger logger, Options options)
             return;
         }
 
+        var zone = TimeZoneInfo.Local.Id;
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            if (TimeZoneInfo.TryConvertWindowsIdToIanaId(zone, out var iana))
+            {
+                zone = iana;
+            }
+        }
+
         var measurement = new Measurements
         {
             Interval = (uint)interval.TotalSeconds,
-            Zone = TimeZoneInfo.Local.Id,
+            Zone = zone,
             Items = measurements
         };
 
