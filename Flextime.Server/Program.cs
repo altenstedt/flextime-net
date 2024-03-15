@@ -1,4 +1,5 @@
 ﻿using System.CommandLine;
+using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -65,7 +66,9 @@ using var loggerFactory =
     });
 
 var logger = loggerFactory.CreateLogger<Daemon>();
-var version = Assembly.GetExecutingAssembly().GetName().Version;
+var version = FileVersionInfo
+    .GetVersionInfo(Environment.GetCommandLineArgs()[0])
+    .ProductVersion;
 
 var daemon = new Daemon(logger, options);
 

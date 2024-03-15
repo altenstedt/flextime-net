@@ -8,6 +8,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>Inhill.Flextime.Server</AssemblyName>
     <RootNamespace>Inhill.Flextime.Server</RootNamespace>
+    <VersionPrefix>7.0.0</VersionPrefix>
   </PropertyGroup>
 
   <PropertyGroup>
