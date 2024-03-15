@@ -17,6 +17,8 @@ logLevelOption.AddAlias("-v");
 var dryRunOption = new Option<bool>("--dry-run", "Exit before starting the daemon and capturing measurements");
 dryRunOption.AddAlias("--exit");
 
+var ignoreSessionLockedOption = new Option<bool>("--ignore-session-locked", "Keep tracking measurements when the computer is locked");
+
 var logSummaryIntervalOption = new Option<TimeSpan>("--log-summary-interval", () => TimeSpan.FromHours(1), "Log summary interval");
 
 var rootCommand = new RootCommand("Flextime -- tracking working hours");
@@ -24,18 +26,21 @@ rootCommand.AddOption(folderOption);
 rootCommand.AddOption(logLevelOption);
 rootCommand.AddOption(dryRunOption);
 rootCommand.AddOption(logSummaryIntervalOption);
+rootCommand.AddOption(ignoreSessionLockedOption);
 
-rootCommand.SetHandler((folder, logLevel, dryRun, logSummaryInterval) =>
+rootCommand.SetHandler((folder, logLevel, dryRun, logSummaryInterval, ignoreSessionLocked) =>
     {
         options.MeasurementsFolder = folder.FullName;
         options.LogLevel = logLevel;
         options.DryRun = dryRun;
         options.LogSummaryInterval = logSummaryInterval;
+        options.IgnoreSessionLocked = ignoreSessionLocked;
     },
     folderOption, 
     logLevelOption,
     dryRunOption,
-    logSummaryIntervalOption);
+    logSummaryIntervalOption,
+    ignoreSessionLockedOption);
 
 var result = await rootCommand.InvokeAsync(args);
 
@@ -119,6 +124,6 @@ catch (TaskCanceledException)
 }
 
 await daemon.MarkStop();
-logger.LogDebug("Flextime daemon {Version} stopped.", version);
+logger.LogInformation("Flextime daemon {Version} stopped.", version);
 
 return 0;

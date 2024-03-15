@@ -2,7 +2,9 @@ using System.Runtime.InteropServices;
 using Flextime;
 using Microsoft.Extensions.Logging;
 using ProtoBuf;
+using Microsoft.Win32;
 using Tmds.DBus;
+
 
 namespace Inhill.Flextime.Server;
 
@@ -20,11 +22,44 @@ public class Daemon(ILogger logger, Options options)
     // https://github.com/tmds/Tmds.DBus
     private IIdleMonitor? idleMonitor;
 
+    private bool sessionLocked = false;
+
     public void Initialize()
     {
         idleMonitor = Connection.Session.CreateProxy<IIdleMonitor>(
             "org.gnome.Mutter.IdleMonitor",
             "/org/gnome/Mutter/IdleMonitor/Core");
+
+        if (!options.IgnoreSessionLocked) {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                SystemEvents.SessionSwitch += async (object sender, SessionSwitchEventArgs e) =>
+                {
+                    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                    {
+                        if (e.Reason == SessionSwitchReason.SessionLock) {
+
+                            // A measurement here seems natural, or it will be dropped if 
+                            // the session is locked for longer than idle.
+                            await Mark(MeasurementKind.Measurement);
+
+                            await Mark(MeasurementKind.SessionLock);
+
+                            sessionLocked = true;
+                        }
+                        else if (e.Reason == SessionSwitchReason.SessionUnlock)
+                        {
+                            sessionLocked = false;
+
+                            // Since we marked a measurement at lock, we just mark unlock now
+                            await Mark(MeasurementKind.SessionUnlock);
+                        }
+
+                        logger.LogTrace("Session switch: {Reason}", e.Reason);
+                    }
+                };
+            }
+        }
     }
     
     public async Task Run(CancellationToken token)
@@ -91,6 +126,12 @@ public class Daemon(ILogger logger, Options options)
 
         if (kind == MeasurementKind.Stop) {
             logger.LogDebug("Stop measurement at {Now:o}", DateTimeOffset.Now);
+        }
+
+        if (kind == MeasurementKind.Measurement && sessionLocked) {
+            logger.LogDebug("Session is locked, measurement is not added.");
+
+            return;
         }
 
         logger.LogTrace("Mark {Kind} with {Seconds}s idle.", kind, idle);
@@ -173,7 +214,7 @@ public class Daemon(ILogger logger, Options options)
             using var stream = File.OpenWrite(path);
             Serializer.Serialize(stream, measurement);
         
-            logger.LogDebug("Flushed {Path}.", path);
+            logger.LogTrace("Flushed {Path}.", path);
 
             lastPath = path;
             lastFlush = DateTimeOffset.Now;
@@ -182,15 +223,15 @@ public class Daemon(ILogger logger, Options options)
             using var stream = File.OpenWrite(lastPath);
             Serializer.Serialize(stream, measurement);
     
-            logger.LogDebug("Flushed {Path}.", lastPath);
+            logger.LogTrace("Flushed {Path}.", lastPath);
 
             if (lastFlush < DateTimeOffset.Now.Subtract(fileTimeLimit))
             {
+                logger.LogDebug("File time limit {Limit} exceeded for file {File}.", fileTimeLimit, Path.GetFileName(lastPath));
+
                 // Create a new file for subsequent writes so that we do not create big files
                 lastFlush = null;
                 lastPath = null;
-
-                logger.LogDebug("File time limit {Limit} exceeded.", fileTimeLimit);
 
                 measurements.Clear();
             }

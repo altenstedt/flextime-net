@@ -15,7 +15,13 @@ public enum MeasurementKind
     Start = 2,
     
     [ProtoEnum(Name = "STOP")]
-    Stop = 3
+    Stop = 3,
+
+    [ProtoEnum(Name = "SESSION_LOCK")]
+    SessionLock = 4,
+
+    [ProtoEnum(Name = "SESSION_UNLOCK")]
+    SessionUnlock = 5,
 }
 
 [ProtoContract]

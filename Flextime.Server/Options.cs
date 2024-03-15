@@ -13,4 +13,6 @@ public struct Options()
     public bool DryRun { get; set; }
 
     public TimeSpan LogSummaryInterval { get; set; }
+
+    public bool IgnoreSessionLocked { get; set; }
 }
