@@ -227,7 +227,7 @@ public class Daemon(ILogger logger, Options options)
 
             if (lastFlush < DateTimeOffset.Now.Subtract(fileTimeLimit))
             {
-                logger.LogDebug("File time limit {Limit} exceeded for file {File}.", fileTimeLimit, Path.GetFileName(lastPath));
+                logger.LogDebug("File time limit {Limit} reached for file {File}.", fileTimeLimit, Path.GetFileName(lastPath));
 
                 // Create a new file for subsequent writes so that we do not create big files
                 lastFlush = null;
