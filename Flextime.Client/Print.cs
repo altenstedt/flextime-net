@@ -8,6 +8,12 @@ public class Print(Options options)
     {
         var byDates = Reader.ReadFiles(options.MeasurementsFolder, options.Since);
 
+        if (byDates.Count == 0)
+        {
+            Console.WriteLine("No measurements");
+            return;
+        }
+
         var currentWeek = ISOWeek.GetWeekOfYear(byDates.First().Key.ToDateTime(TimeOnly.MinValue));
 
         var formatter = new MeasurementsFormatter(options.Idle, options.Verbose, options.BlocksPerDay);
