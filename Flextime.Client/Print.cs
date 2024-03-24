@@ -6,6 +6,11 @@ public class Print(Options options)
 {
     public void PrintMeasurements()
     {
+        if (options.Verbose)
+        {
+            Console.WriteLine($"Measurements folder is \"{options.MeasurementsFolder}\".");
+        }
+
         var byDates = Reader.ReadFiles(options.MeasurementsFolder, options.Since);
 
         if (byDates.Count == 0)

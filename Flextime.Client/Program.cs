@@ -2,8 +2,6 @@
 using Flextime;
 using Flextime.Client;
 
-var options = new Options();
-
 var folderOption = new Option<DirectoryInfo>("--folder", () => new DirectoryInfo(Constants.MeasurementsFolder), "Folder to read measurements from");
 folderOption.AddAlias("-f");
 
@@ -29,12 +27,18 @@ rootCommand.AddOption(sinceOption);
 
 rootCommand.SetHandler((folder, verbose, splitWeek, blocksPerDay, idle, since) =>
     {
-        options.MeasurementsFolder = folder.FullName;
-        options.Verbose = verbose;
-        options.SplitWeek = splitWeek;
-        options.BlocksPerDay = blocksPerDay;
-        options.Idle = idle;
-        options.Since = since;
+        var options = new Options
+        {
+            MeasurementsFolder = folder.FullName,
+            Verbose = verbose,
+            SplitWeek = splitWeek,
+            BlocksPerDay = blocksPerDay,
+            Idle = idle,
+            Since = since
+        };
+
+        var print = new Print(options);
+        print.PrintMeasurements();
     },
     folderOption, 
     verboseOption,
@@ -43,19 +47,4 @@ rootCommand.SetHandler((folder, verbose, splitWeek, blocksPerDay, idle, since) =
     idleOption,
     sinceOption);
 
-var result = await rootCommand.InvokeAsync(args);
-
-if (result != 0)
-{
-    return result;
-}
-
-if (options.Verbose)
-{
-    Console.WriteLine($"Measurements folder is \"{options.MeasurementsFolder}\".");
-}
-
-var print = new Print(options);
-print.PrintMeasurements();
-
-return 0;
+return await rootCommand.InvokeAsync(args);
