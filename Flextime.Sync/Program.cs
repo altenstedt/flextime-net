@@ -161,6 +161,10 @@ if (list)
     var httpClient = new HttpClient { BaseAddress = options.Uri };
     httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
+    if (options.ListSync) {
+        await httpClient.PatchAsJsonAsync($"/{computerId}/name", computerName);
+    }
+
     if (options.Computers) {
         var computersResponseMessage = await httpClient.GetAsync("/computers");
 
