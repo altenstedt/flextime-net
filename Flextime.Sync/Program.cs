@@ -112,7 +112,7 @@ if (!File.Exists(computerFilePath)) {
         Directory.CreateDirectory(directoryName);
     }
     
-    await File.WriteAllTextAsync(computerFilePath, $"{computerId}{Environment.NewLine}{computerName}");
+    await File.WriteAllTextAsync(computerFilePath, $"{computerId}{Environment.NewLine}{computerName}"); // Second line never used.
 
     if (options.Verbose) {
         Console.WriteLine($"Computer is {computerId} {computerName} (created).");
@@ -121,7 +121,7 @@ if (!File.Exists(computerFilePath)) {
     var computerFileText = await File.ReadAllLinesAsync(computerFilePath);
 
     computerId = computerFileText.ElementAt(0);
-    computerName = computerFileText.ElementAt(1);
+    computerName = Environment.MachineName; // computerFileText.ElementAt(1); so this means that the second line is reserved
 
     if (options.Verbose) {
         Console.WriteLine($"Computer is {computerId} {computerName}.");
