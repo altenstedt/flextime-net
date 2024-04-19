@@ -104,7 +104,12 @@ rootCommand.SetHandler(async (folder, logLevel, dryRun, logSummaryInterval, igno
         }
 
         if (string.IsNullOrEmpty(options.TimeZone)) {
-            logger.LogInformation("Time zone is {Id}.", Daemon.GetTimeZoneInfo());
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
+                logger.LogError("The --time-zone option is required on Windows. (System reports {Id}.)", Daemon.GetTimeZoneInfo());
+                return;
+            } else {
+                logger.LogInformation("Time zone is {Id}.", Daemon.GetTimeZoneInfo());
+            }
         } else {
             if (TimeZoneInfo.TryFindSystemTimeZoneById(options.TimeZone, out var byOption)) {
                 var optionOffset = byOption.GetUtcOffset(DateTime.Now);
@@ -117,7 +122,7 @@ rootCommand.SetHandler(async (folder, logLevel, dryRun, logSummaryInterval, igno
             } else {
                 logger.LogCritical("Time zone {Id} not found on this system.", options.TimeZone);
                 
-                throw new InvalidOperationException($"Time zone {options.TimeZone} not found on this system.");
+                return;
             }
         }
 
