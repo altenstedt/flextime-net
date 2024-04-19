@@ -21,20 +21,25 @@ var ignoreSessionLockedOption = new Option<bool>("--ignore-session-locked", "Kee
 
 var logSummaryIntervalOption = new Option<TimeSpan>("--log-summary-interval", () => TimeSpan.FromHours(1), "Log summary interval");
 
+var timeZoneOption = new Option<string?>("--time-zone", "Set time zone");
+timeZoneOption.AddAlias("-t");
+
 var rootCommand = new RootCommand("Flextime -- tracking working hours");
 rootCommand.AddOption(folderOption);
 rootCommand.AddOption(logLevelOption);
 rootCommand.AddOption(dryRunOption);
 rootCommand.AddOption(logSummaryIntervalOption);
 rootCommand.AddOption(ignoreSessionLockedOption);
+rootCommand.AddOption(timeZoneOption);
 
-rootCommand.SetHandler(async (folder, logLevel, dryRun, logSummaryInterval, ignoreSessionLocked) =>
+rootCommand.SetHandler(async (folder, logLevel, dryRun, logSummaryInterval, ignoreSessionLocked, timeZone) =>
     {
         options.MeasurementsFolder = folder.FullName;
         options.LogLevel = logLevel;
         options.DryRun = dryRun;
         options.LogSummaryInterval = logSummaryInterval;
         options.IgnoreSessionLocked = ignoreSessionLocked;
+        options.TimeZone = timeZone;
 
         using var loggerFactory =
             LoggerFactory.Create(builder =>
@@ -98,6 +103,24 @@ rootCommand.SetHandler(async (folder, logLevel, dryRun, logSummaryInterval, igno
             logger.LogDebug("Local time zone is {Id}", TimeZoneInfo.Local.Id);
         }
 
+        if (string.IsNullOrEmpty(options.TimeZone)) {
+            logger.LogInformation("Time zone is {Id}.", Daemon.GetTimeZoneInfo());
+        } else {
+            if (TimeZoneInfo.TryFindSystemTimeZoneById(options.TimeZone, out var byOption)) {
+                var optionOffset = byOption.GetUtcOffset(DateTime.Now);
+                var localOffset = DateTimeOffset.Now.Offset;
+                if (optionOffset != localOffset) {
+                    logger.LogWarning("Time zone {Id} with offset {OptionOffset} does not match local {LocalOffet}.", options.TimeZone, optionOffset, localOffset);
+                } else {
+                    logger.LogInformation("Time zone set to {Id}.", options.TimeZone);
+                }
+            } else {
+                logger.LogCritical("Time zone {Id} not found on this system.", options.TimeZone);
+                
+                throw new InvalidOperationException($"Time zone {options.TimeZone} not found on this system.");
+            }
+        }
+
         if (!options.DryRun)
         {
             daemon.Initialize();
@@ -129,6 +152,7 @@ rootCommand.SetHandler(async (folder, logLevel, dryRun, logSummaryInterval, igno
     logLevelOption,
     dryRunOption,
     logSummaryIntervalOption,
-    ignoreSessionLockedOption);
+    ignoreSessionLockedOption,
+    timeZoneOption);
 
 return await rootCommand.InvokeAsync(args);

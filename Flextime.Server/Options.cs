@@ -15,4 +15,6 @@ public struct Options()
     public TimeSpan LogSummaryInterval { get; set; }
 
     public bool IgnoreSessionLocked { get; set; }
+
+    public string? TimeZone { get; set; }
 }

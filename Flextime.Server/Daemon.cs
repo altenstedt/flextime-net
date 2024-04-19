@@ -176,13 +176,7 @@ public class Daemon(ILogger logger, Options options)
         }
     }
 
-    private void FlushMeasurements() 
-    {
-        if (measurements.Count == 0)
-        {
-            return;
-        }
-
+    public static string GetTimeZoneInfo() {
         var zone = TimeZoneInfo.Local.Id;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
@@ -191,6 +185,20 @@ public class Daemon(ILogger logger, Options options)
                 zone = iana;
             }
         }
+
+        return zone;
+    }
+
+    private void FlushMeasurements() 
+    {
+        if (measurements.Count == 0)
+        {
+            return;
+        }
+
+        var zone = options.TimeZone ?? GetTimeZoneInfo();
+
+        logger.LogTrace("Use time zone {Zone}.", zone);
 
         var measurement = new Measurements
         {
