@@ -77,11 +77,11 @@ public static class Reader
     public static (List<MeasurementWithZone> list, bool found) ReadFiles(string folder, TimeSpan since, DateOnly date, long hash) {
         var byDates = ReadFiles(folder, since);
 
-        if (!byDates.ContainsKey(date)) {
+        if (!byDates.TryGetValue(date, out var byDate)) {
             return ([], false);
         }
 
-        var measurements = byDates[date].list;
+        var measurements = byDate.list;
 
         for (var i = 0; i < measurements.Count; i++) {
             var tmp = HashMeasurements(measurements[..i]);
@@ -100,8 +100,11 @@ public static class Reader
 
     private static long HashMeasurements(IEnumerable<MeasurementWithZone> measurements)
     {
-        long hashCode = measurements.Count();
-        foreach (long val in measurements.Select(item => item.Measurement.Timestamp))
+        var measurementWithZones = measurements as MeasurementWithZone[] ?? measurements.ToArray();
+        
+        long hashCode = measurementWithZones.Length;
+        
+        foreach (long val in measurementWithZones.Select(item => item.Measurement.Timestamp))
         {
             hashCode = unchecked(hashCode * 31 + val);
         }
