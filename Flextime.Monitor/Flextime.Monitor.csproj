@@ -8,6 +8,7 @@
         <AssemblyName>Inhill.Flextime.Monitor</AssemblyName>
         <RootNamespace>Inhill.Flextime.Monitor</RootNamespace>
         <LangVersion>default</LangVersion>
+        <VersionPrefix>7.5.0</VersionPrefix>
     </PropertyGroup>
 
     <ItemGroup>
