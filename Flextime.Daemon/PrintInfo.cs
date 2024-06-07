@@ -27,16 +27,16 @@ public static class PrintInfo
             .GetVersionInfo(Environment.GetCommandLineArgs()[0])
             .ProductVersion;
 
-        AnsiConsole.MarkupLine($"Client version    : {version ?? "Unknown"}");
-        AnsiConsole.MarkupLine($"Measurement folder: {Path.GetFullPath(computer.MeasurementsFolder)}");
-        AnsiConsole.MarkupLine($"Computer name     : {computer.Name}");
-        AnsiConsole.MarkupLine($"Computer id       : {computer.Id}");
-        AnsiConsole.MarkupLine($"Time zone         : {PrintTimeZone()}");
+        AnsiConsole.MarkupLine($"Client version     : {version ?? "Unknown"}");
+        AnsiConsole.MarkupLine($"Measurement folder : {Path.GetFullPath(computer.MeasurementsFolder)}");
+        AnsiConsole.MarkupLine($"Computer name      : {computer.Name}");
+        AnsiConsole.MarkupLine($"Computer id        : {computer.Id}");
+        AnsiConsole.MarkupLine($"Time zone          : {PrintTimeZone()}");
 
         var uri = new Uri("https://api.mangoground-e628dd34.swedencentral.azurecontainerapps.io/", UriKind.Absolute);
         var httpClient = new HttpClient { BaseAddress = uri };
 
-        AnsiConsole.MarkupLine($"Server            : {uri}");
+        AnsiConsole.MarkupLine($"Server             : {uri}");
 
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots2)
@@ -48,7 +48,7 @@ public static class PrintInfo
                     var pingResult = await httpClient.GetFromJsonAsync<PingDataContract>("/ping");
 
                     AnsiConsole.MarkupLine(
-                        $"Server version    : {pingResult?.Version} {pingResult?.Details} {pingResult?.Runtime} {pingResult?.InstanceId}");
+                        $"Server version     : {pingResult?.Version} {pingResult?.Details} {pingResult?.Runtime} {pingResult?.InstanceId}");
                 }
                 catch (HttpRequestException exception)
                 {
@@ -75,12 +75,12 @@ public static class PrintInfo
 
                         if (string.IsNullOrEmpty(accessToken) || !accessToken.Contains('.'))
                         {
-                            AnsiConsole.MarkupLine("Signed in         : Yes");
+                            AnsiConsole.MarkupLine("Signed in          : Yes");
                         }
                         else
                         {
                             var user = GetUserInfo(accessToken);
-                            AnsiConsole.MarkupLine($"Signed in         : {user}");
+                            AnsiConsole.MarkupLine($"Signed in          : {user}");
                         }
                     });
 
@@ -93,14 +93,14 @@ public static class PrintInfo
                         var accessToken = await deviceCode.GetAccessToken();
                         httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-                        AnsiConsole.MarkupLine("Server data       :");
+                        AnsiConsole.MarkupLine("Server data        :");
                         AnsiConsole.WriteLine();
                         await PrintSummary(httpClient, deviceCode, computer);
                     });
         }
         else
         {
-            AnsiConsole.MarkupLine("Logged in         : No. Use login command to log in.");
+            AnsiConsole.MarkupLine("Logged in          : No. Use login command to log in.");
         }
     }
 
