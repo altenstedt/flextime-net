@@ -9,9 +9,9 @@ public class DeviceCode
 {
     private DateTimeOffset expires = DateTimeOffset.MinValue;
 
-    private string tenantId => "6b3c1467-664f-4edb-8328-43b7687d0366";
+    private static string TenantId => "6b3c1467-664f-4edb-8328-43b7687d0366";
 
-    private string clientId => "506c78bf-3e07-4caa-b20c-0deec3356d4d";
+    private static string ClientId => "506c78bf-3e07-4caa-b20c-0deec3356d4d";
 
     private string? accessToken;
 
@@ -31,10 +31,10 @@ public class DeviceCode
 
         if (!string.IsNullOrEmpty(refreshToken))
         {
-            var httpClient = new HttpClient { BaseAddress = new Uri($"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token") };
+            var httpClient = new HttpClient { BaseAddress = new Uri($"https://login.microsoftonline.com/{TenantId}/oauth2/v2.0/token") };
 
             KeyValuePair<string, string>[] collection = [ 
-                new KeyValuePair<string, string>("client_id", clientId),
+                new KeyValuePair<string, string>("client_id", ClientId),
                 new KeyValuePair<string, string>("scope", "openid offline_access api://77d3d897-f62d-4f69-a3db-5394049156c1/Flextime.User.Read api://77d3d897-f62d-4f69-a3db-5394049156c1/Flextime.User.Write"),
                 new KeyValuePair<string, string>("grant_type", "refresh_token"),
                 new KeyValuePair<string, string>("refresh_token", refreshToken)
@@ -64,10 +64,10 @@ public class DeviceCode
     
     public async Task LogOn(CancellationToken cancellationToken)
     {
-        var httpClient = new HttpClient { BaseAddress = new Uri($"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/") };
+        var httpClient = new HttpClient { BaseAddress = new Uri($"https://login.microsoftonline.com/{TenantId}/oauth2/v2.0/") };
 
         KeyValuePair<string, string>[] collection = [ 
-            new KeyValuePair<string, string>("client_id", clientId),
+            new KeyValuePair<string, string>("client_id", ClientId),
             new KeyValuePair<string, string>("scope", "openid offline_access api://77d3d897-f62d-4f69-a3db-5394049156c1/Flextime.User.Read api://77d3d897-f62d-4f69-a3db-5394049156c1/Flextime.User.Write")
         ];
         
@@ -82,7 +82,7 @@ public class DeviceCode
         KeyValuePair<string, string>[] pullCollection =
         [
             new KeyValuePair<string, string>("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
-            new KeyValuePair<string, string>("client_id", clientId),
+            new KeyValuePair<string, string>("client_id", ClientId),
             new KeyValuePair<string, string>("device_code", deviceCodeResponse.device_code)
         ];
 

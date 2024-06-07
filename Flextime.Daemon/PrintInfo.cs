@@ -167,8 +167,4 @@ public static class PrintInfo
         string? Details,
         string Runtime,
         string InstanceId);
-    
-    private record DayDataContract(DateOnly Date, long Hash);
-
-    private record SummaryDataContract(DayDataContract[] Items);
 }

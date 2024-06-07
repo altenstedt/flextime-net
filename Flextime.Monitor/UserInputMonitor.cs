@@ -16,12 +16,12 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
     private DateTimeOffset? lastFlush;
     private string? lastPath;
     private DateTimeOffset lastLogSummary = DateTimeOffset.UtcNow;
-    private int lastLogSummaryCount = 0;
+    private int lastLogSummaryCount;
     
     // https://github.com/tmds/Tmds.DBus
     private IIdleMonitor? idleMonitor;
 
-    private bool sessionLocked = false;
+    private bool sessionLocked;
 
     public void Initialize()
     {
@@ -32,7 +32,7 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
         if (!options.IgnoreSessionLocked) {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                SystemEvents.SessionSwitch += async (object sender, SessionSwitchEventArgs e) =>
+                SystemEvents.SessionSwitch += async (_, e) =>
                 {
                     if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                     {
@@ -103,9 +103,9 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
         TimeSpan idle;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) {
             idle = TimeSpan.FromSeconds(
-                Monitor.CGEventSource.SecondsSinceLastEventType(
-                    Monitor.CGEventSource.CGEventSourceStateID.HidSystemState,
-                    Monitor.CGEventSource.CGEventType.MouseAndKeyboard));
+                CGEventSource.SecondsSinceLastEventType(
+                    CGEventSource.CGEventSourceStateID.HidSystemState,
+                    CGEventSource.CGEventType.MouseAndKeyboard));
         } else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) {
             // Note that this does not take screen lock into account.  If the user
             // interacts with the computer while the screen is locked, we will

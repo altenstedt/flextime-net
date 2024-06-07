@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 
-namespace Flextime;
+namespace Flextime.Daemon;
 
 public class Computer
 {

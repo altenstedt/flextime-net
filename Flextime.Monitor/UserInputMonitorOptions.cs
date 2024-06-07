@@ -1,5 +1,3 @@
-using Microsoft.Extensions.Logging;
-
 namespace Inhill.Flextime.Monitor;
 
 public struct UserInputMonitorOptions
