@@ -5,6 +5,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json.Serialization;
 using Spectre.Console;
 
 namespace Flextime.Daemon;
@@ -23,9 +24,7 @@ public static class PrintInfo
         var deviceCode = new DeviceCode();
         await deviceCode.Initialize();
 
-        var version = FileVersionInfo
-            .GetVersionInfo(Environment.GetCommandLineArgs()[0])
-            .ProductVersion;
+        var version = VersionHelper.GetVersion();
 
         AnsiConsole.MarkupLine($"Client version     : {version ?? "Unknown"}");
         AnsiConsole.MarkupLine($"Measurement folder : {Path.GetFullPath(computer.MeasurementsFolder)}");
@@ -45,7 +44,7 @@ public static class PrintInfo
             {
                 try
                 {
-                    var pingResult = await httpClient.GetFromJsonAsync<PingDataContract>("/ping");
+                    var pingResult = await httpClient.GetFromJsonAsync("/ping", PingSourceGenerationContext.Default.PingDataContract);
 
                     AnsiConsole.MarkupLine(
                         $"Server version     : {pingResult?.Version} {pingResult?.Details} {pingResult?.Runtime} {pingResult?.InstanceId}");
@@ -131,7 +130,7 @@ public static class PrintInfo
     
     private static async Task PrintSummary(HttpClient httpClient, DeviceCode deviceCode, Computer computer)
     {
-        await Sync.Invoke(httpClient, deviceCode, computer, false, TimeSpan.FromMinutes(10), 0, false, false,
+        await Sync.Invoke(httpClient, deviceCode, computer, TimeSpan.FromMinutes(10), 0, false,
             (text, _) => AnsiConsole.WriteLine(text), AnsiConsole.WriteLine, 5);
     }
 
@@ -161,10 +160,14 @@ public static class PrintInfo
 
         return TimeZoneInfo.Local.Id;
     }
-
-    private record PingDataContract(
-        string Version,
-        string? Details,
-        string Runtime,
-        string InstanceId);
 }
+
+internal record PingDataContract(
+    string Version,
+    string? Details,
+    string Runtime,
+    string InstanceId);
+
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSerializable(typeof(PingDataContract))]
+internal partial class PingSourceGenerationContext : JsonSerializerContext;

@@ -1,4 +1,5 @@
 ﻿using System.Net.Http.Json;
+using System.Text.Json.Serialization;
 
 namespace Flextime.Daemon;
 
@@ -16,10 +17,8 @@ public static class Sync
         HttpClient httpClient,
         DeviceCode deviceCode,
         Computer computer,
-        bool listRemote,
         TimeSpan idle,
         int blocksPerDay,
-        bool verbose,
         bool syncWithRemote,
         Action<string, PrintDayKind> printDay,
         Action<string> printInformation,
@@ -29,14 +28,15 @@ public static class Sync
         {
             return;
         }
-        
-        await httpClient.PatchAsJsonAsync($"/{computer.Id}/name", computer.Name);
-        
-        var remoteSummary = await httpClient.GetFromJsonAsync<SummaryDataContract>($"/{computer.Id}/summary");
 
-        var byDates = listRemote
-            ? await Reader.ReadRemote(httpClient, TimeSpan.MinValue, computer.Id!)
-            : Reader.ReadFiles(Constants.MeasurementsFolder, TimeSpan.MinValue);
+        if (!string.IsNullOrEmpty(computer.Name))
+        {
+            await httpClient.PatchAsJsonAsync($"/{computer.Id}/name", computer.Name, StringSourceGenerationContext.Default.String);
+        }
+        
+        var remoteSummary = await httpClient.GetFromJsonAsync($"/{computer.Id}/summary", SummarySourceGenerationContext.Default.SummaryDataContract);
+
+        var byDates = Reader.ReadFiles(Constants.MeasurementsFolder, TimeSpan.MinValue);
 
         if (byDates.Count == 0)
         {
@@ -44,7 +44,7 @@ public static class Sync
         }
         else
         {
-            var formatter = new MeasurementsFormatter(idle, verbose, blocksPerDay);
+            var formatter = new MeasurementsFormatter(idle, false, blocksPerDay);
 
             foreach (var date in byDates.TakeLast(limit))
             {
@@ -54,14 +54,13 @@ public static class Sync
                 {
                     if (syncWithRemote)
                     {
-                        var measurements = new Measurements
-                        {
-                            Interval = date.Value.list.First().Interval,
-                            Zone = date.Value.list.First().Zone,
-                            Items = date.Value.list.Select(item => item.Measurement).ToList()
-                        };
+                        var measurements = new MeasurementsDataContract(
+                            date.Value.list.First().Zone,
+                            date.Value.list
+                                .Select(item => new MeasurementDataContract((int)item.Measurement.Kind, item.Measurement.Timestamp))
+                                .ToArray());
 
-                        await httpClient.PatchAsJsonAsync($"/{computer.Id}", measurements);
+                        await httpClient.PatchAsJsonAsync($"/{computer.Id}", measurements, MeasurementsSourceGenerationContext.Default.MeasurementsDataContract);
 
                         printDay($"{formatter.SummarizeDay(date.Value.list.ToArray())} [synced]", PrintDayKind.Synced);
                     }
@@ -83,14 +82,13 @@ public static class Sync
                     {
                         if (syncWithRemote)
                         {
-                            var measurements = new Measurements
-                            {
-                                Interval = mismatch.list.First().Interval,
-                                Zone = mismatch.list.First().Zone,
-                                Items = mismatch.list.Select(item => item.Measurement).ToList()
-                            };
-
-                            await httpClient.PatchAsJsonAsync($"/{computer.Id}", measurements);
+                            var measurements = new MeasurementsDataContract(
+                                mismatch.list.First().Zone,
+                                mismatch.list
+                                    .Select(item => new MeasurementDataContract((int)item.Measurement.Kind, item.Measurement.Timestamp))
+                                    .ToArray());
+                            
+                            await httpClient.PatchAsJsonAsync($"/{computer.Id}", measurements, MeasurementsSourceGenerationContext.Default.MeasurementsDataContract);
                             printDay($"{formatter.SummarizeDay(date.Value.list.ToArray())} [synced]", PrintDayKind.Synced);
 
                         }
@@ -107,8 +105,22 @@ public static class Sync
             }
         }
     }
-
-    private record DayDataContract(DateOnly Date, long Hash);
-
-    private record SummaryDataContract(DayDataContract[] Items);
 }
+
+internal record DayDataContract(DateOnly Date, long Hash);
+internal record SummaryDataContract(DayDataContract[] Items);
+
+internal record MeasurementDataContract(int Kind, long Timestamp);
+internal record MeasurementsDataContract(string Zone, MeasurementDataContract[] Items);
+
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSerializable(typeof(string))]
+internal partial class StringSourceGenerationContext : JsonSerializerContext;
+
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSerializable(typeof(SummaryDataContract))]
+internal partial class SummarySourceGenerationContext : JsonSerializerContext;
+
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSerializable(typeof(MeasurementsDataContract))]
+internal partial class MeasurementsSourceGenerationContext : JsonSerializerContext;

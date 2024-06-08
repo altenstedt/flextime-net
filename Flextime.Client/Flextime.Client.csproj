@@ -5,17 +5,14 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <VersionPrefix>7.5.0</VersionPrefix>
+    <VersionPrefix>7.6.0</VersionPrefix>
   </PropertyGroup>
 
   <PropertyGroup>
-    <PublishSingleFile>true</PublishSingleFile>
-    <OutputType>Exe</OutputType>
-    <SelfContained>true</SelfContained>
+    <PublishAot>true</PublishAot>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="protobuf-net" Version="3.2.30" />
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
   </ItemGroup>
 
