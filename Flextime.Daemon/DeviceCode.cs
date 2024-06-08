@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json.Serialization;
 
 namespace Flextime.Daemon;
 
@@ -47,7 +48,7 @@ public class DeviceCode
                 return null;
             }
 
-            var refreshTokenResponse = await responseMessage.Content.ReadFromJsonAsync<TokenResponse>();
+            var refreshTokenResponse = await responseMessage.Content.ReadFromJsonAsync(TokenResponseSourceGenerationContext.Default.TokenResponse);
 
             if (refreshTokenResponse == null)
             {
@@ -73,7 +74,7 @@ public class DeviceCode
         
         var responseMessage = await httpClient.PostAsync("deviceCode", new FormUrlEncodedContent(collection), cancellationToken);
 
-        var deviceCodeResponse = await responseMessage.Content.ReadFromJsonAsync<DeviceCodeResponse>(cancellationToken: cancellationToken);
+        var deviceCodeResponse = await responseMessage.Content.ReadFromJsonAsync(DeviceCodeResponseSourceGenerationContext.Default.DeviceCodeResponse, cancellationToken: cancellationToken);
 
         var deviceCodeExpires = DateTime.Now.Add(TimeSpan.FromSeconds(deviceCodeResponse!.expires_in));
         
@@ -90,7 +91,7 @@ public class DeviceCode
         {
             var pollResponseMessage = await httpClient.PostAsync("token", new FormUrlEncodedContent(pullCollection), cancellationToken);
 
-            var pollResponse = await pollResponseMessage.Content.ReadFromJsonAsync<PollResponse>(cancellationToken: cancellationToken);
+            var pollResponse = await pollResponseMessage.Content.ReadFromJsonAsync(PollResponseSourceGenerationContext.Default.PollResponse, cancellationToken: cancellationToken);
 
             if (pollResponseMessage.StatusCode == HttpStatusCode.BadRequest)
             {
@@ -160,22 +161,33 @@ public class DeviceCode
 
         await File.WriteAllLinesAsync(path, lines, Encoding.UTF8);
     }
-    
-
-    [SuppressMessage("ReSharper", "InconsistentNaming")]
-    [SuppressMessage("ReSharper", "ClassNeverInstantiated.Global")]
-    private record DeviceCodeResponse(string message, string device_code, int expires_in, int interval);
-
-    [SuppressMessage("ReSharper", "InconsistentNaming")]
-    [SuppressMessage("ReSharper", "ClassNeverInstantiated.Global")]
-    private record PollResponse(
-        string access_token,
-        int expires_in,
-        string refresh_token,
-        string error,
-        string error_description) : TokenResponse(access_token, expires_in, refresh_token);
-
-    [SuppressMessage("ReSharper", "InconsistentNaming")]
-    [SuppressMessage("ReSharper", "ClassNeverInstantiated.Global")]
-    private record TokenResponse(string access_token, int expires_in, string refresh_token);
 }
+
+[SuppressMessage("ReSharper", "InconsistentNaming")]
+[SuppressMessage("ReSharper", "ClassNeverInstantiated.Global")]
+internal record DeviceCodeResponse(string message, string device_code, int expires_in, int interval);
+
+[SuppressMessage("ReSharper", "InconsistentNaming")]
+[SuppressMessage("ReSharper", "ClassNeverInstantiated.Global")]
+internal record PollResponse(
+    string access_token,
+    int expires_in,
+    string refresh_token,
+    string error,
+    string error_description) : TokenResponse(access_token, expires_in, refresh_token);
+
+[SuppressMessage("ReSharper", "InconsistentNaming")]
+[SuppressMessage("ReSharper", "ClassNeverInstantiated.Global")]
+internal record TokenResponse(string access_token, int expires_in, string refresh_token);
+
+[JsonSourceGenerationOptions]
+[JsonSerializable(typeof(TokenResponse))]
+internal partial class TokenResponseSourceGenerationContext : JsonSerializerContext;
+
+[JsonSourceGenerationOptions]
+[JsonSerializable(typeof(DeviceCodeResponse))]
+internal partial class DeviceCodeResponseSourceGenerationContext : JsonSerializerContext;
+
+[JsonSourceGenerationOptions]
+[JsonSerializable(typeof(PollResponse))]
+internal partial class PollResponseSourceGenerationContext : JsonSerializerContext;

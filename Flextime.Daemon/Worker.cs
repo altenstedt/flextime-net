@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
@@ -62,7 +61,7 @@ public class Worker(
 
             if (onceOptions.Value.Once)
             {
-                await Sync.Invoke(httpClient, deviceCode, computer, false, TimeSpan.Zero, 0, false, true,
+                await Sync.Invoke(httpClient, deviceCode, computer, TimeSpan.Zero, 0, true,
                     (text, _) =>
                     {
                         AnsiConsole.WriteLine(text);
@@ -70,10 +69,13 @@ public class Worker(
                     AnsiConsole.WriteLine);
             } else if (everyOptions.Value.Every.HasValue)
             {
+                var version = VersionHelper.GetVersion();
+
+                logger.LogInformation("Flextime sync {Version} started.", version);
                 logger.LogInformation("Data is synced every {Every}.", everyOptions.Value.Every.Value);
                 while (!stoppingToken.IsCancellationRequested)
                 {
-                    await Sync.Invoke(httpClient, deviceCode, computer, false, TimeSpan.Zero, 0, false, true,
+                    await Sync.Invoke(httpClient, deviceCode, computer, TimeSpan.Zero, 0, true,
                         (text, kind) =>
                         {
                             if (kind == Sync.PrintDayKind.Synced)
@@ -164,13 +166,11 @@ public class Worker(
                 LogSummaryInterval = logSummaryIntervalOptions.Value.Interval
             });
             
-            monitor.Initialize();
+            await monitor.Initialize();
 
-            var version = FileVersionInfo
-                .GetVersionInfo(Environment.GetCommandLineArgs()[0])
-                .ProductVersion;
+            var version = VersionHelper.GetVersion();
 
-            logger.LogInformation("Flextime monitor {Version} started.", version);
+            logger.LogInformation("Flextime listener {Version} started.", version);
             logger.LogInformation("Summary is logged every {Interval}.", logSummaryIntervalOptions.Value.Interval);
 
             logger.LogDebug("Start.");

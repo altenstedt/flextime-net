@@ -20,13 +20,13 @@ public class MeasurementsFormatterTest
         public MeasurementsData()
         {
             MeasurementWithZone Create(DateTimeOffset dateTime, TimeSpan idle) {
-                var measurement = new Measurement { Idle = (uint)idle.TotalSeconds, Kind = MeasurementKind.None, Timestamp = (uint)dateTime.ToUnixTimeSeconds()};
+                var measurement = new Measurement { Idle = (uint)idle.TotalSeconds, Kind = Measurement.Types.Kind.None, Timestamp = (uint)dateTime.ToUnixTimeSeconds()};
 
                 return new MeasurementWithZone(measurement, "Europe/Stockholm", 60);
             }
 
             MeasurementWithZone CreateWithZone(DateTimeOffset dateTime, TimeSpan idle, string zone) {
-                var measurement = new Measurement { Idle = (uint)idle.TotalSeconds, Kind = MeasurementKind.None, Timestamp = (uint)dateTime.ToUnixTimeSeconds()};
+                var measurement = new Measurement { Idle = (uint)idle.TotalSeconds, Kind = Measurement.Types.Kind.None, Timestamp = (uint)dateTime.ToUnixTimeSeconds()};
 
                 return new MeasurementWithZone(measurement, zone, 60);
             }

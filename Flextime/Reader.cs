@@ -1,5 +1,5 @@
 using System.Net.Http.Json;
-using ProtoBuf;
+using System.Text.Json.Serialization;
 
 namespace Flextime;
 
@@ -20,9 +20,9 @@ public static class Reader
         foreach (var file in files)
         {
             using var stream = File.OpenRead(file);
-            var measurements = Serializer.Deserialize<Measurements>(stream);
+            var measurements = Measurements.Parser.ParseFrom(stream);
 
-            list.AddRange(measurements.Items.Select(item => new MeasurementWithZone(item, measurements.Zone, measurements.Interval)));
+            list.AddRange(measurements.Measurements_.Select(item => new MeasurementWithZone(item, measurements.Zone, measurements.Interval)));
         }
 
         list.Sort((left, right) => left.Timestamp < right.Timestamp ? -1 : 1);
@@ -45,7 +45,7 @@ public static class Reader
         PagedMeasurementsDataContract? pagedMeasurements = null;
 
         try {
-            pagedMeasurements = await httpClient.GetFromJsonAsync<PagedMeasurementsDataContract>($"/{computerId}");
+            pagedMeasurements = await httpClient.GetFromJsonAsync($"/{computerId}", PagedMeasurementsSourceGenerationContext.Default.PagedMeasurementsDataContract);
         } catch (HttpRequestException exception) {
             Console.WriteLine($"Error contacting backend: {exception.Message}.");
 
@@ -58,7 +58,7 @@ public static class Reader
             return [];
         }
 
-        var measurements = pagedMeasurements.Items.SelectMany(item => item.Items.Select(x => new MeasurementWithZone(new Measurement { Idle = x.Idle, Kind = MeasurementKind.None, Timestamp = x.Timestamp}, item.Zone, item.Interval))).ToList();
+        var measurements = pagedMeasurements.Items.SelectMany(item => item.Items.Select(x => new MeasurementWithZone(new Measurement { Idle = x.Idle, Kind = Measurement.Types.Kind.None, Timestamp = x.Timestamp}, item.Zone, item.Interval))).ToList();
 
         var byDates = GroupAndHash(measurements, since);
 
@@ -112,3 +112,21 @@ public static class Reader
         return hashCode;
     }
 }
+
+public record MeasurementDataContract(
+    uint Kind,
+    uint Timestamp,
+    uint Idle);
+
+public record MeasurementsDataContract(
+    string ComputerId,
+    string Zone,
+    uint Interval,
+    MeasurementDataContract[] Items);
+
+public record PagedMeasurementsDataContract(
+    MeasurementsDataContract[] Items);
+
+[JsonSourceGenerationOptions]
+[JsonSerializable(typeof(PagedMeasurementsDataContract))]
+internal partial class PagedMeasurementsSourceGenerationContext : JsonSerializerContext;

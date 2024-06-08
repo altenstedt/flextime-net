@@ -1,9 +1,9 @@
 using System.Runtime.InteropServices;
 using Flextime;
+using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
-using ProtoBuf;
-using Tmds.DBus;
+using Tmds.DBus.Protocol;
 
 namespace Inhill.Flextime.Monitor;
 
@@ -19,16 +19,22 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
     private int lastLogSummaryCount;
     
     // https://github.com/tmds/Tmds.DBus
-    private IIdleMonitor? idleMonitor;
+    private IdleMonitor? idleMonitor;
 
     private bool sessionLocked;
 
-    public void Initialize()
+    public async Task Initialize()
     {
-        idleMonitor = Connection.Session.CreateProxy<IIdleMonitor>(
-            "org.gnome.Mutter.IdleMonitor",
-            "/org/gnome/Mutter/IdleMonitor/Core");
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && !string.IsNullOrEmpty(Address.Session))
+        {
+            var connection = new Connection(Address.Session);
 
+            await connection.ConnectAsync();
+
+            var service = new IdleMonitorService(connection, "org.gnome.Mutter.IdleMonitor");
+            idleMonitor = service.CreateIdleMonitor("/org/gnome/Mutter/IdleMonitor/Core");
+        }
+        
         if (!options.IgnoreSessionLocked) {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
@@ -40,9 +46,9 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
 
                             // A measurement here seems natural, or it will be dropped if 
                             // the session is locked for longer than idle.
-                            await Mark(MeasurementKind.Measurement);
+                            await Mark(Measurement.Types.Kind.Measurement);
 
-                            await Mark(MeasurementKind.SessionLock);
+                            await Mark(Measurement.Types.Kind.SessionLock);
 
                             sessionLocked = true;
                         }
@@ -51,7 +57,7 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
                             sessionLocked = false;
 
                             // Since we marked a measurement at lock, we just mark unlock now
-                            await Mark(MeasurementKind.SessionUnlock);
+                            await Mark(Measurement.Types.Kind.SessionUnlock);
                         }
 
                         logger.LogTrace("Session switch: {Reason}", e.Reason);
@@ -78,28 +84,23 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
 
             await Task.Delay(next.Subtract(now), token);
 
-            await Mark(MeasurementKind.Measurement);
+            await Mark(Measurement.Types.Kind.Measurement);
 
         } while (!token.IsCancellationRequested);
     }
 
     public Task MarkStart()
     {
-        return Mark(MeasurementKind.Start);
+        return Mark(Measurement.Types.Kind.Start);
     }
     
     public Task MarkStop()
     {
-        return Mark(MeasurementKind.Stop);
+        return Mark(Measurement.Types.Kind.Stop);
     }
 
-    private async Task Mark(MeasurementKind kind)
+    private async Task Mark(Measurement.Types.Kind kind)
     {
-        if (idleMonitor == null)
-        {
-            throw new InvalidOperationException("Initialize must be called first.");
-        }
-
         TimeSpan idle;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) {
             idle = TimeSpan.FromSeconds(
@@ -107,6 +108,11 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
                     CGEventSource.CGEventSourceStateID.HidSystemState,
                     CGEventSource.CGEventType.MouseAndKeyboard));
         } else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) {
+            if (idleMonitor == null)
+            {
+                throw new InvalidOperationException("Initialize must be called first.");
+            }
+
             // Note that this does not take screen lock into account.  If the user
             // interacts with the computer while the screen is locked, we will
             // measure that time as well.  This is simply the way the IdleMonitor
@@ -119,15 +125,15 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
             throw new InvalidOperationException($"OS {RuntimeInformation.OSDescription} is not supported");
         }
 
-        if (kind == MeasurementKind.Start) {
+        if (kind == Measurement.Types.Kind.Start) {
             logger.LogDebug("Start measurement at {Now:o}", DateTimeOffset.Now);
         }
 
-        if (kind == MeasurementKind.Stop) {
+        if (kind == Measurement.Types.Kind.Stop) {
             logger.LogDebug("Stop measurement at {Now:o}", DateTimeOffset.Now);
         }
 
-        if (kind == MeasurementKind.Measurement && sessionLocked) {
+        if (kind == Measurement.Types.Kind.Measurement && sessionLocked) {
             logger.LogDebug("Session is locked, measurement is not added.");
 
             return;
@@ -202,9 +208,9 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
         var measurement = new Measurements
         {
             Interval = (uint)interval.TotalSeconds,
-            Zone = zone,
-            Items = measurements
+            Zone = zone
         };
+        measurement.Measurements_.AddRange(measurements);
 
         if ((lastFlush == null) || (lastPath == null)) {
             // Write to a new file
@@ -219,7 +225,7 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
             }
 
             using var stream = File.OpenWrite(path);
-            Serializer.Serialize(stream, measurement);
+            measurement.WriteTo(stream);
         
             logger.LogTrace("Flushed {Path}.", path);
 
@@ -228,7 +234,7 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
         } else {
             // Write to an existing file
             using var stream = File.OpenWrite(lastPath);
-            Serializer.Serialize(stream, measurement);
+            measurement.WriteTo(stream);
     
             logger.LogTrace("Flushed {Path}.", lastPath);
 
@@ -250,13 +256,5 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
         var fileName = $"{DateTimeOffset.UtcNow:yyyy-MM-ddTHHmmss}.bin";
 
         return Path.Combine(Constants.MeasurementsFolder, fileName);
-    }
-
-    public enum Kind
-    {
-        None = 0,
-        Measurement = 1,
-        Start = 2,
-        Stop = 3
     }
 }

@@ -11,6 +11,20 @@ Publish:
 dotnet publish -c Release --use-current-runtime --self-contained
 ```
 
+# protobuf
+
+We use Google's protobuf implementation.
+
+If you want to change the storage format, you will want to edit file
+`measurement.proto` and then regenerate the C# code:
+
+```
+$ protoc measurement.proto --csharp_out=./Flextime
+```
+
+* https://grpc.io/docs/protoc-installation/
+* https://github.com/protocolbuffers/protobuf/tree/main/csharp
+
 # CLI refactor, needed again after Powderhouse
 
 * https://github.com/orgs/dotnet/projects/381
