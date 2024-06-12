@@ -13,6 +13,7 @@ public static class Sync
         CanSync,
         CannotSync
     }
+    
     public static async Task Invoke(
         HttpClient httpClient,
         DeviceCode deviceCode,

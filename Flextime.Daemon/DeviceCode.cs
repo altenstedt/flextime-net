@@ -1,7 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Http.Json;
-using System.Text;
 using System.Text.Json.Serialization;
 
 namespace Flextime.Daemon;
@@ -14,6 +13,9 @@ public class DeviceCode
 
     private static string ClientId => "506c78bf-3e07-4caa-b20c-0deec3356d4d";
 
+    private static string Scope =>
+        "openid offline_access api://77d3d897-f62d-4f69-a3db-5394049156c1/Flextime.User.Read api://77d3d897-f62d-4f69-a3db-5394049156c1/Flextime.User.Write";
+
     private string? accessToken;
 
     private string? refreshToken;
@@ -22,45 +24,7 @@ public class DeviceCode
     
     public async Task Initialize()
     {
-        (accessToken, expires, refreshToken) = await ReadFromFile();
-    }
-
-    public async Task<string?> GetAccessToken() {
-        if (expires > DateTimeOffset.UtcNow) {
-            return accessToken;
-        }
-
-        if (!string.IsNullOrEmpty(refreshToken))
-        {
-            var httpClient = new HttpClient { BaseAddress = new Uri($"https://login.microsoftonline.com/{TenantId}/oauth2/v2.0/token") };
-
-            KeyValuePair<string, string>[] collection = [ 
-                new KeyValuePair<string, string>("client_id", ClientId),
-                new KeyValuePair<string, string>("scope", "openid offline_access api://77d3d897-f62d-4f69-a3db-5394049156c1/Flextime.User.Read api://77d3d897-f62d-4f69-a3db-5394049156c1/Flextime.User.Write"),
-                new KeyValuePair<string, string>("grant_type", "refresh_token"),
-                new KeyValuePair<string, string>("refresh_token", refreshToken)
-            ];
-            
-            var responseMessage = await httpClient.PostAsync("", new FormUrlEncodedContent(collection));
-
-            if (responseMessage.StatusCode != HttpStatusCode.OK)
-            {
-                return null;
-            }
-
-            var refreshTokenResponse = await responseMessage.Content.ReadFromJsonAsync(TokenResponseSourceGenerationContext.Default.TokenResponse);
-
-            if (refreshTokenResponse == null)
-            {
-                return null;
-            }
-
-            await SetAndWriteTokensToFile(refreshTokenResponse);
-
-            return accessToken;
-        }
-
-        return null;
+        (accessToken, expires, refreshToken) = await TokenStorage.Read();
     }
     
     public async Task LogOn(CancellationToken cancellationToken)
@@ -69,7 +33,7 @@ public class DeviceCode
 
         KeyValuePair<string, string>[] collection = [ 
             new KeyValuePair<string, string>("client_id", ClientId),
-            new KeyValuePair<string, string>("scope", "openid offline_access api://77d3d897-f62d-4f69-a3db-5394049156c1/Flextime.User.Read api://77d3d897-f62d-4f69-a3db-5394049156c1/Flextime.User.Write")
+            new KeyValuePair<string, string>("scope", Scope)
         ];
         
         var responseMessage = await httpClient.PostAsync("deviceCode", new FormUrlEncodedContent(collection), cancellationToken);
@@ -113,7 +77,10 @@ public class DeviceCode
                     throw new InvalidOperationException("Device code poll response is null.");
                 }
 
-                await SetAndWriteTokensToFile(pollResponse);
+                await TokenStorage.Write(
+                    pollResponse.access_token,
+                    pollResponse.expires_in,
+                    pollResponse.refresh_token);
                 
                 Console.WriteLine($"Session ends {expires:t}");
                 return;
@@ -124,42 +91,6 @@ public class DeviceCode
                 return;
             }
         } while (deviceCodeExpires > DateTime.Now);
-    }
-
-    private async Task<(string accessToken, DateTimeOffset expires, string refreshToken)> ReadFromFile()
-    {
-        var path = Path.Combine(Constants.MeasurementsFolder, "../user");
-
-        if (!File.Exists(path))
-        {
-            return (string.Empty, DateTimeOffset.MinValue, string.Empty);
-        }
-        
-        var lines = await File.ReadAllLinesAsync(path, Encoding.UTF8);
-
-        return lines.Length < 2 
-            ? (string.Empty, DateTimeOffset.MinValue, string.Empty) 
-            : lines.Length == 2
-                ? (lines[0], DateTimeOffset.Parse(lines[1]), string.Empty)
-                : (lines[0], DateTimeOffset.Parse(lines[1]), lines[2]);
-    }
-
-    private async Task SetAndWriteTokensToFile(TokenResponse tokenResponse)
-    {
-        accessToken = tokenResponse.access_token;
-        refreshToken = tokenResponse.refresh_token;
-        expires = DateTimeOffset.UtcNow.Add(TimeSpan.FromSeconds(tokenResponse.expires_in));
-
-        string[] lines =
-        [
-            accessToken,
-            expires.ToString("O"),
-            refreshToken
-        ];
-        
-        var path = Path.Combine(Constants.MeasurementsFolder, "../user");
-
-        await File.WriteAllLinesAsync(path, lines, Encoding.UTF8);
     }
 }
 
@@ -174,15 +105,7 @@ internal record PollResponse(
     int expires_in,
     string refresh_token,
     string error,
-    string error_description) : TokenResponse(access_token, expires_in, refresh_token);
-
-[SuppressMessage("ReSharper", "InconsistentNaming")]
-[SuppressMessage("ReSharper", "ClassNeverInstantiated.Global")]
-internal record TokenResponse(string access_token, int expires_in, string refresh_token);
-
-[JsonSourceGenerationOptions]
-[JsonSerializable(typeof(TokenResponse))]
-internal partial class TokenResponseSourceGenerationContext : JsonSerializerContext;
+    string error_description);
 
 [JsonSourceGenerationOptions]
 [JsonSerializable(typeof(DeviceCodeResponse))]
