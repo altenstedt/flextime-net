@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
 using Inhill.Flextime.Monitor;
 using Microsoft.Extensions.Options;
@@ -54,10 +53,7 @@ public class Worker(
                 return;
             }
 
-            var uri = new Uri("https://api.mangoground-e628dd34.swedencentral.azurecontainerapps.io/", UriKind.Absolute);
-            var httpClient = new HttpClient { BaseAddress = uri };
-            var accessToken = await deviceCode.GetAccessToken();
-            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            var httpClient = await ApiHttpClient.Create(stoppingToken);
 
             if (onceOptions.Value.Once)
             {

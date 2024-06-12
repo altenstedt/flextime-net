@@ -1,7 +1,5 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -24,6 +22,8 @@ public static class PrintInfo
         var deviceCode = new DeviceCode();
         await deviceCode.Initialize();
 
+        var httpClient = await ApiHttpClient.Create();
+
         var version = VersionHelper.GetVersion();
 
         AnsiConsole.MarkupLine($"Client version     : {version ?? "Unknown"}");
@@ -31,11 +31,7 @@ public static class PrintInfo
         AnsiConsole.MarkupLine($"Computer name      : {computer.Name}");
         AnsiConsole.MarkupLine($"Computer id        : {computer.Id}");
         AnsiConsole.MarkupLine($"Time zone          : {PrintTimeZone()}");
-
-        var uri = new Uri("https://api.mangoground-e628dd34.swedencentral.azurecontainerapps.io/", UriKind.Absolute);
-        var httpClient = new HttpClient { BaseAddress = uri };
-
-        AnsiConsole.MarkupLine($"Server             : {uri}");
+        AnsiConsole.MarkupLine($"Server             : {Constants.ApiUri}");
 
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots2)
@@ -62,26 +58,17 @@ public static class PrintInfo
 
         if (deviceCode.IsAuthenticated)
         {
-            await AnsiConsole.Status()
-                .Spinner(Spinner.Known.Dots2)
-                .SpinnerStyle(Style.Plain) // No colors
-                .StartAsync("Fetching user information",
-                    async _ =>
-                    {
-                        var accessToken = await deviceCode.GetAccessToken();
-                        httpClient.DefaultRequestHeaders.Authorization =
-                            new AuthenticationHeaderValue("Bearer", accessToken);
+            var (accessToken, _, _) = await TokenStorage.Read();
 
-                        if (string.IsNullOrEmpty(accessToken) || !accessToken.Contains('.'))
-                        {
-                            AnsiConsole.MarkupLine("Signed in          : Yes");
-                        }
-                        else
-                        {
-                            var user = GetUserInfo(accessToken);
-                            AnsiConsole.MarkupLine($"Signed in          : {user}");
-                        }
-                    });
+            if (string.IsNullOrEmpty(accessToken) || !accessToken.Contains('.'))
+            {
+                AnsiConsole.MarkupLine("Signed in          : Yes");
+            }
+            else
+            {
+                var user = GetUserInfo(accessToken);
+                AnsiConsole.MarkupLine($"Signed in          : {user}");
+            }
 
             await AnsiConsole.Status()
                 .Spinner(Spinner.Known.Dots2)
@@ -89,9 +76,6 @@ public static class PrintInfo
                 .StartAsync("Fetching server data...",
                     async _ =>
                     {
-                        var accessToken = await deviceCode.GetAccessToken();
-                        httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
                         AnsiConsole.MarkupLine("Server data        :");
                         AnsiConsole.WriteLine();
                         await PrintSummary(httpClient, deviceCode, computer);
