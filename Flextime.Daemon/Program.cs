@@ -113,6 +113,11 @@ var parser = new CommandLineBuilder(rootCommand)
                     formatterOptions.SingleLine = true;
                     formatterOptions.TimestampFormat = "HH:mm:ss ";
                 });
+
+                if (OperatingSystem.IsWindows())
+                {
+                    builder.AddEventLog();
+                }
             });
         });
     })
