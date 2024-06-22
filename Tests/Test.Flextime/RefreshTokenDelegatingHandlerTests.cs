@@ -11,13 +11,18 @@ public class RefreshTokenDelegatingHandlerTests(ITestOutputHelper testOutputHelp
     public async Task Test()
     {
         var tokenHandler = new TokenHandler();
+
+        var handlerOptions = new RefreshTokenDelegatingHandlerOptions
+        {
+            Scope = "scope",
+            ClientId = "client id 1",
+            RefreshToken = string.Empty,
+            WriteToStorage = false
+        };
         
         var handler = new RefreshTokenDelegatingHandler(
-            string.Empty,
-            new HttpClient(tokenHandler) { BaseAddress = new Uri("https://example.com") }, 
-            "client id 1", 
-            "scope",
-            writeToStorage: false)
+            new MockHttpClientFactory(tokenHandler),
+            handlerOptions)
         {
             InnerHandler = new OkHandler()
         };
@@ -36,13 +41,18 @@ public class RefreshTokenDelegatingHandlerTests(ITestOutputHelper testOutputHelp
     public async Task TestInParallel()
     {
         var tokenHandler = new TokenHandler();
-        
+
+        var handlerOptions = new RefreshTokenDelegatingHandlerOptions
+        {
+            Scope = "scope",
+            ClientId = "client id 2",
+            RefreshToken = string.Empty,
+            WriteToStorage = false
+        };
+
         var handler = new RefreshTokenDelegatingHandler(
-            string.Empty,
-            new HttpClient(tokenHandler) { BaseAddress = new Uri("https://example.com") }, 
-            "client id 2", 
-            "scope",
-            writeToStorage: false)
+            new MockHttpClientFactory(tokenHandler),
+            handlerOptions)
         {
             InnerHandler = new OkHandler()
         };
@@ -92,5 +102,13 @@ public class OkHandler : DelegatingHandler
         await Task.Delay(TimeSpan.FromMilliseconds(10), cancellationToken);
 
         return new HttpResponseMessage(HttpStatusCode.OK);
+    }
+}
+
+public class MockHttpClientFactory(TokenHandler tokenHandler) : IHttpClientFactory
+{
+    public HttpClient CreateClient(string name)
+    {
+        return new HttpClient(tokenHandler) { BaseAddress = new Uri("https://example.com") };
     }
 }
