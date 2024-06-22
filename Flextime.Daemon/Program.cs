@@ -12,19 +12,7 @@ using Flextime.Daemon;
 var infoOption = new Option<bool>("--info", "Display information and exit.");
 
 var rootCommand = new RootCommand("Flextime -- tracking working hours") {
-    Handler = CommandHandler.Create(async () =>
-    {
-        // This is too early in the process for any IConfiguration
-        // to be ready, so we just parse the args directly.
-        if (args.Contains("--info"))
-        {
-            await PrintInfo.Invoke();
-
-            return;
-        }
-    
-        Console.WriteLine("No option provided. Use --help for more information.");
-    })
+    Handler = CommandHandler.Create<IHost>(host => host.WaitForShutdown())
 };
 
 rootCommand.AddGlobalOption(infoOption);
@@ -60,12 +48,17 @@ listenCommand.AddOption(logSummaryIntervalOption);
 
 rootCommand.AddCommand(listenCommand);
 
+var (_, _, refreshToken) = await TokenStorage.Read();
+
 var parser = new CommandLineBuilder(rootCommand)
     .UseDefaults()
     .UseHost(host =>
     {
         host.ConfigureServices(services =>
         {
+            services.AddSingleton<PrintInfo>();
+            services.AddApiHttpClient(refreshToken);
+            
             services.AddOptions<TimeZoneOptions>()
                 .Configure<ParseResult>((options, parseResult) => {
                     options.TimeZone = parseResult.GetValueForOption(timeZoneOption);
@@ -95,6 +88,7 @@ var parser = new CommandLineBuilder(rootCommand)
                     options.SyncInvoked = parseResult.CommandResult.Command == syncCommand;
                     options.ListenInvoked = parseResult.CommandResult.Command == listenCommand;
                     options.LogInInvoked = parseResult.CommandResult.Command == logInCommand;
+                    options.InfoInvoked = parseResult.RootCommandResult.GetValueForOption(infoOption);
                 });
 
             services.AddHostedService<Worker>();
@@ -106,6 +100,8 @@ var parser = new CommandLineBuilder(rootCommand)
                         : LogLevel.Information);
 
                 builder.AddFilter("Microsoft.Hosting.Lifetime", LogLevel.Warning);
+                builder.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
+                builder.AddFilter("Polly", LogLevel.Warning);
 
                 builder.AddSystemdConsole();
                 builder.AddSimpleConsole(formatterOptions =>

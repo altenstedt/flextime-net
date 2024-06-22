@@ -7,25 +7,23 @@ using LazyCache;
 namespace Flextime.Daemon;
 
 public class RefreshTokenDelegatingHandler(
-    string refreshToken,
-    HttpClient tokenHttpClient,
-    string clientId,
-    string scope,
-    bool writeToStorage = true) : DelegatingHandler(new HttpClientHandler())
+    IHttpClientFactory httpClientFactory,
+    RefreshTokenDelegatingHandlerOptions options) : DelegatingHandler(new HttpClientHandler())
 {
+    private readonly HttpClient tokenHttpClient = httpClientFactory.CreateClient("TokenHttpClient"); 
     private readonly CachingService cache = new();
     private readonly TimeSpan grace = TimeSpan.FromMinutes(1); // Enough to never use expired access tokens
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        var accessToken = await cache.GetOrAddAsync<string?>(clientId, async entry =>
+        var accessToken = await cache.GetOrAddAsync<string?>(options.ClientId, async entry =>
         {
             // This is guaranteed to be single threaded since we use LazyCache.
             KeyValuePair<string, string>[] collection = [ 
-                new KeyValuePair<string, string>("client_id", clientId),
-                new KeyValuePair<string, string>("scope", scope),
+                new KeyValuePair<string, string>("client_id", options.ClientId),
+                new KeyValuePair<string, string>("scope", options.Scope),
                 new KeyValuePair<string, string>("grant_type", "refresh_token"),
-                new KeyValuePair<string, string>("refresh_token", refreshToken)
+                new KeyValuePair<string, string>("refresh_token", options.RefreshToken)
             ];
         
             var responseMessage = await tokenHttpClient.PostAsync(string.Empty, new FormUrlEncodedContent(collection), cancellationToken);
@@ -42,11 +40,11 @@ public class RefreshTokenDelegatingHandler(
             }
         
             var accessToken = tokenResponse.access_token;
-            refreshToken = tokenResponse.refresh_token;
+            var refreshToken = tokenResponse.refresh_token;
 
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(tokenResponse.expires_in).Subtract(grace);
 
-            if (writeToStorage)
+            if (options.WriteToStorage)
             {
                 await TokenStorage.Write(accessToken, tokenResponse.expires_in, refreshToken);
             }
@@ -58,6 +56,13 @@ public class RefreshTokenDelegatingHandler(
 
         return await base.SendAsync(request, cancellationToken);
     }
+}
+public record RefreshTokenDelegatingHandlerOptions
+{
+    public required string RefreshToken { get; init; }
+    public required string ClientId { get; init; }
+    public required string Scope { get; init; }
+    public required bool WriteToStorage { get; init; }
 }
 
 [SuppressMessage("ReSharper", "InconsistentNaming")]

@@ -7,6 +7,7 @@ using Spectre.Console;
 namespace Flextime.Daemon;
 
 public class Worker(
+    PrintInfo printInfo,
     ILogger<Worker> logger,
     ILogger<UserInputMonitor> monitorLogger,
     IHostApplicationLifetime hostApplicationLifetime,
@@ -15,7 +16,8 @@ public class Worker(
     IOptions<OnceOptions> onceOptions,
     IOptions<IgnoreSessionLockedOptions> ignoreSessionLockedOptions,
     IOptions<LogSummaryIntervalOptions> logSummaryIntervalOptions,
-    IOptions<CommandOptions> command) : BackgroundService
+    IOptions<CommandOptions> command,
+    IHttpClientFactory httpClientFactory) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -23,7 +25,17 @@ public class Worker(
         logger.LogDebug("Sync command {Command}.", command.Value.SyncInvoked);
         logger.LogDebug("Listen command {Command}.", command.Value.ListenInvoked);
         logger.LogDebug("Login command {Command}.", command.Value.LogInInvoked);
+        logger.LogDebug("Info option {Option}.", command.Value.InfoInvoked);
 
+        if (command.Value.InfoInvoked)
+        {
+            await printInfo.Invoke();
+
+            // I want to terminate the host when the worker has completed.
+            hostApplicationLifetime.StopApplication();
+            return;
+        }
+        
         if (command.Value.LogInInvoked)
         {
             logger.LogDebug("Login invoked.");
@@ -53,7 +65,7 @@ public class Worker(
                 return;
             }
 
-            var httpClient = await ApiHttpClient.Create(stoppingToken);
+            var httpClient = httpClientFactory.CreateClient("ApiHttpClient");
 
             if (onceOptions.Value.Once)
             {
@@ -71,15 +83,22 @@ public class Worker(
                 logger.LogInformation("Data is synced every {Every}.", everyOptions.Value.Every.Value);
                 while (!stoppingToken.IsCancellationRequested)
                 {
-                    await Sync.Invoke(httpClient, deviceCode, computer, TimeSpan.Zero, 0, true,
-                        (text, kind) =>
-                        {
-                            if (kind == Sync.PrintDayKind.Synced)
+                    try
+                    {
+                        await Sync.Invoke(httpClient, deviceCode, computer, TimeSpan.Zero, 0, true,
+                            (text, kind) =>
                             {
-                                logger.LogInformation(text);
-                            }
-                        },
-                        text => logger.LogInformation(text));
+                                if (kind == Sync.PrintDayKind.Synced)
+                                {
+                                    logger.LogInformation(text);
+                                }
+                            },
+                            text => logger.LogInformation(text));
+                    }
+                    catch (HttpRequestException exception)
+                    {
+                        logger.LogError(exception, "Sync error: {Message}.", exception.Message);
+                    }
                     
                     await Task.Delay(everyOptions.Value.Every.Value, stoppingToken);
                 }
