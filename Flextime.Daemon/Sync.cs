@@ -1,5 +1,6 @@
 ﻿using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using Polly.Timeout;
 
 namespace Flextime.Daemon;
 
@@ -13,8 +14,30 @@ public static class Sync
         CanSync,
         CannotSync
     }
-    
+
     public static async Task Invoke(
+        HttpClient httpClient,
+        DeviceCode deviceCode,
+        Computer computer,
+        TimeSpan idle,
+        int blocksPerDay,
+        bool syncWithRemote,
+        Action<string, PrintDayKind> printDay,
+        Action<string> printInformation,
+        int limit = int.MaxValue)
+    {
+        try
+        {
+            await InvokeInternal(httpClient, deviceCode, computer, idle, blocksPerDay, syncWithRemote, printDay, printInformation, limit);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
+        {
+            // We really want to ignore all exceptions related to HTTP.  The network might be down,
+            // and we can just try again when we run the next time.
+        }
+    }
+
+    private static async Task InvokeInternal(
         HttpClient httpClient,
         DeviceCode deviceCode,
         Computer computer,
