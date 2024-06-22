@@ -8,10 +8,12 @@ using Spectre.Console;
 
 namespace Flextime.Daemon;
 
-public static class PrintInfo
+public class PrintInfo(IHttpClientFactory httpClientFactory)
 {
-    public static async Task Invoke()
+    public async Task Invoke()
     {
+        var httpClient = httpClientFactory.CreateClient("ApiHttpClient");
+        
         // I want the nice spinners on Windows
         // https://github.com/spectreconsole/spectre.console/issues/391
         Console.OutputEncoding = Encoding.UTF8;
@@ -21,8 +23,6 @@ public static class PrintInfo
 
         var deviceCode = new DeviceCode();
         await deviceCode.Initialize();
-
-        var httpClient = await ApiHttpClient.Create();
 
         var version = VersionHelper.GetVersion();
 
