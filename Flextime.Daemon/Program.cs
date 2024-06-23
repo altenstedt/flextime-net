@@ -50,12 +50,22 @@ rootCommand.AddCommand(listenCommand);
 
 var (_, _, refreshToken) = await TokenStorage.Read();
 
+var deviceCode = new DeviceCode();
+await deviceCode.Initialize();
+
+var computer = new Computer();
+await computer.Initialize();
+
 var parser = new CommandLineBuilder(rootCommand)
     .UseDefaults()
     .UseHost(host =>
     {
         host.ConfigureServices(services =>
         {
+            services.AddSingleton(computer);
+            services.AddSingleton(deviceCode);
+            services.AddSingleton<Sync>();
+            
             services.AddSingleton<PrintInfo>();
             services.AddApiHttpClient(refreshToken);
             
@@ -101,7 +111,7 @@ var parser = new CommandLineBuilder(rootCommand)
 
                 builder.AddFilter("Microsoft.Hosting.Lifetime", LogLevel.Warning);
                 builder.AddFilter("System.Net.Http.HttpClient", LogLevel.Warning);
-                builder.AddFilter("Polly", LogLevel.Warning);
+                builder.AddFilter("Polly", LogLevel.None); // We print manually instead.
 
                 builder.AddSystemdConsole();
                 builder.AddSimpleConsole(formatterOptions =>

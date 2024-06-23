@@ -8,7 +8,7 @@ using Spectre.Console;
 
 namespace Flextime.Daemon;
 
-public class PrintInfo(IHttpClientFactory httpClientFactory)
+public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCode, Computer computer, Sync sync)
 {
     public async Task Invoke()
     {
@@ -17,12 +17,6 @@ public class PrintInfo(IHttpClientFactory httpClientFactory)
         // I want the nice spinners on Windows
         // https://github.com/spectreconsole/spectre.console/issues/391
         Console.OutputEncoding = Encoding.UTF8;
-
-        var computer = new Computer();
-        await computer.Initialize();
-
-        var deviceCode = new DeviceCode();
-        await deviceCode.Initialize();
 
         var version = VersionHelper.GetVersion();
 
@@ -78,7 +72,7 @@ public class PrintInfo(IHttpClientFactory httpClientFactory)
                     {
                         AnsiConsole.MarkupLine("Server data        :");
                         AnsiConsole.WriteLine();
-                        await PrintSummary(httpClient, deviceCode, computer);
+                        await PrintSummary(5);
                     });
         }
         else
@@ -112,10 +106,9 @@ public class PrintInfo(IHttpClientFactory httpClientFactory)
         return $"{name} <{email}>";
     }
     
-    private static async Task PrintSummary(HttpClient httpClient, DeviceCode deviceCode, Computer computer)
+    private async Task PrintSummary(int count)
     {
-        await Sync.Invoke(httpClient, deviceCode, computer, TimeSpan.FromMinutes(10), 0, false,
-            (text, _) => AnsiConsole.WriteLine(text), AnsiConsole.WriteLine, 5);
+        await sync.Print(count);
     }
 
     private static string PrintTimeZone()
