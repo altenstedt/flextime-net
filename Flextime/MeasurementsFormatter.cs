@@ -16,15 +16,17 @@ public class MeasurementsFormatter(TimeSpan idle, bool verbose, int blocksPerDay
             return verbose ? "Single measurement" : string.Empty;
         }
         
-        var start = measurements.First().Timestamp;
-        var end = measurements.Last().Timestamp;
+        var start = measurements[0].Timestamp;
+        var end = measurements[^1].Timestamp;
         var work = TimeSpan.Zero;
 
         for (var i = 1; i < measurements.Length; i++)
         {
-            if (measurements[i].Timestamp - measurements[i - 1].Timestamp < idle)
+            var diff = measurements[i].Timestamp - measurements[i - 1].Timestamp;
+            
+            if (diff < idle)
             {
-                work += measurements[i].Timestamp - measurements[i - 1].Timestamp;
+                work += diff;
             }
         }
 
