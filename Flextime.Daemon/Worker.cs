@@ -1,7 +1,9 @@
 using System.Globalization;
+using System.Net.Http.Json;
 using System.Runtime.InteropServices;
 using Inhill.Flextime.Monitor;
 using Microsoft.Extensions.Options;
+using Polly.Timeout;
 using Spectre.Console;
 
 namespace Flextime.Daemon;
@@ -17,7 +19,10 @@ public class Worker(
     IOptions<IgnoreSessionLockedOptions> ignoreSessionLockedOptions,
     IOptions<LogSummaryIntervalOptions> logSummaryIntervalOptions,
     IOptions<CommandOptions> command,
-    IHttpClientFactory httpClientFactory) : BackgroundService
+    IHttpClientFactory httpClientFactory,
+    DeviceCode deviceCode,
+    Computer computer,
+    Sync sync) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -40,8 +45,6 @@ public class Worker(
         {
             logger.LogDebug("Login invoked.");
             
-            var deviceCode = new DeviceCode();
-            await deviceCode.Initialize();
             await deviceCode.LogOn(stoppingToken);
 
             // I want to terminate the host when the worker has completed.
@@ -53,12 +56,6 @@ public class Worker(
         {
             logger.LogDebug("Sync invoked.");
 
-            var deviceCode = new DeviceCode();
-            await deviceCode.Initialize();
-
-            var computer = new Computer();
-            await computer.Initialize();
-
             if (!deviceCode.IsAuthenticated)
             {
                 AnsiConsole.MarkupLine("You need to log on first.");
@@ -67,37 +64,33 @@ public class Worker(
 
             var httpClient = httpClientFactory.CreateClient("ApiHttpClient");
 
+            if (!string.IsNullOrEmpty(computer.Name))
+            {
+                await httpClient.PatchAsJsonAsync($"/{computer.Id}/name", computer.Name, StringSourceGenerationContext.Default.String, cancellationToken: stoppingToken);
+            }
+            
             if (onceOptions.Value.Once)
             {
-                await Sync.Invoke(httpClient, deviceCode, computer, TimeSpan.Zero, 0, true,
-                    (text, _) =>
-                    {
-                        AnsiConsole.WriteLine(text);
-                    },
-                    AnsiConsole.WriteLine);
-            } else if (everyOptions.Value.Every.HasValue)
+                await sync.SyncAndPrint();
+            } 
+            else if (everyOptions.Value.Every.HasValue)
             {
                 var version = VersionHelper.GetVersion();
 
                 logger.LogInformation("Flextime sync {Version} started.", version);
                 logger.LogInformation("Data is synced every {Every}.", everyOptions.Value.Every.Value);
+
                 while (!stoppingToken.IsCancellationRequested)
                 {
                     try
                     {
-                        await Sync.Invoke(httpClient, deviceCode, computer, TimeSpan.Zero, 0, true,
-                            (text, kind) =>
-                            {
-                                if (kind == Sync.PrintDayKind.Synced)
-                                {
-                                    logger.LogInformation(text);
-                                }
-                            },
-                            text => logger.LogInformation(text));
+                        await sync.SyncAndLog(logger);
                     }
-                    catch (HttpRequestException exception)
+                    catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
                     {
-                        logger.LogError(exception, "Sync error: {Message}.", exception.Message);
+                        // We really want to ignore all exceptions related to HTTP.  The network might be down,
+                        // and we can just try again when we run the next time.
+                        logger.LogWarning(exception, "Sync error: {Message}.", exception.Message);
                     }
                     
                     await Task.Delay(everyOptions.Value.Every.Value, stoppingToken);
