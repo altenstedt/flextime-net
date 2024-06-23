@@ -1,130 +1,179 @@
 ﻿using System.Net.Http.Json;
 using System.Text.Json.Serialization;
-using Polly.Timeout;
+using Spectre.Console;
 
 namespace Flextime.Daemon;
 
-public static class Sync
+public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
 {
-    public enum PrintDayKind
+    private readonly MeasurementsFormatter formatter = new(TimeSpan.FromMinutes(10), false, 0);
+
+    private readonly HttpClient httpClient = httpClientFactory.CreateClient("ApiHttpClient");
+    
+    public async Task SyncAndPrint()
     {
-        Synced,
-        LocalOnly,
-        InSync,
-        CanSync,
-        CannotSync
+        await ActOnRemoteStatus(localOnly: LocalOnly, inSync: InSync, canSync: CanSync, cannotSync: CannotSync);
+
+        return;
+
+        void CannotSync(KeyValuePair<DateOnly, (List<MeasurementWithZone> list, long hash)> pair)
+        {
+            AnsiConsole.WriteLine($"{formatter.SummarizeDay(pair.Value.list.ToArray())} [cannot sync]");
+        }
+
+        async Task CanSync(KeyValuePair<DateOnly, (List<MeasurementWithZone> list, long hash)> pair, List<MeasurementWithZone> mismatch)
+        {
+            var measurements = new MeasurementsDataContract(
+                mismatch.First().Zone, 
+                mismatch
+                    .Select(item => new MeasurementDataContract((int)item.Measurement.Kind, item.Measurement.Timestamp))
+                    .ToArray());
+
+            await httpClient.PatchAsJsonAsync(
+                $"/{computer.Id}", 
+                measurements, 
+                MeasurementsSourceGenerationContext.Default.MeasurementsDataContract);
+
+            AnsiConsole.WriteLine($"{formatter.SummarizeDay(pair.Value.list.ToArray())} [synced]");
+        }
+
+        void InSync(KeyValuePair<DateOnly, (List<MeasurementWithZone> list, long hash)> pair)
+        {
+            AnsiConsole.WriteLine($"{formatter.SummarizeDay(pair.Value.list.ToArray())} [in sync]");
+        }
+
+        async Task LocalOnly(KeyValuePair<DateOnly, (List<MeasurementWithZone> list, long hash)> pair)
+        {
+            var measurements = new MeasurementsDataContract(
+                pair.Value.list.First().Zone, 
+                pair.Value.list
+                    .Select(item => new MeasurementDataContract((int)item.Measurement.Kind, item.Measurement.Timestamp))
+                    .ToArray());
+
+            await httpClient.PatchAsJsonAsync(
+                $"/{computer.Id}", 
+                measurements, 
+                MeasurementsSourceGenerationContext.Default.MeasurementsDataContract);
+
+            AnsiConsole.WriteLine($"{formatter.SummarizeDay(pair.Value.list.ToArray())} [synced]");
+        }
     }
 
-    public static async Task Invoke(
-        HttpClient httpClient,
-        DeviceCode deviceCode,
-        Computer computer,
-        TimeSpan idle,
-        int blocksPerDay,
-        bool syncWithRemote,
-        Action<string, PrintDayKind> printDay,
-        Action<string> printInformation,
-        int limit = int.MaxValue)
+    public async Task SyncAndLog(ILogger logger)
     {
-        try
-        {
-            await InvokeInternal(httpClient, deviceCode, computer, idle, blocksPerDay, syncWithRemote, printDay, printInformation, limit);
-        }
-        catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
-        {
-            // We really want to ignore all exceptions related to HTTP.  The network might be down,
-            // and we can just try again when we run the next time.
-        }
-    }
-
-    private static async Task InvokeInternal(
-        HttpClient httpClient,
-        DeviceCode deviceCode,
-        Computer computer,
-        TimeSpan idle,
-        int blocksPerDay,
-        bool syncWithRemote,
-        Action<string, PrintDayKind> printDay,
-        Action<string> printInformation,
-        int limit = int.MaxValue)
-    {
-        if (!deviceCode.IsAuthenticated)
-        {
-            return;
-        }
-
-        if (!string.IsNullOrEmpty(computer.Name))
-        {
-            await httpClient.PatchAsJsonAsync($"/{computer.Id}/name", computer.Name, StringSourceGenerationContext.Default.String);
-        }
+        await ActOnRemoteStatus(localOnly: LocalOnly, inSync: InSync, canSync: CanSync, cannotSync: CannotSync);
         
-        var remoteSummary = await httpClient.GetFromJsonAsync($"/{computer.Id}/summary", SummarySourceGenerationContext.Default.SummaryDataContract);
+        return;
 
-        var byDates = Reader.ReadFiles(Constants.MeasurementsFolder, TimeSpan.MinValue);
-
-        if (byDates.Count == 0)
+        void CannotSync(KeyValuePair<DateOnly, (List<MeasurementWithZone> list, long hash)> pair)
         {
-            printInformation("No data");
+            logger.LogWarning($"{formatter.SummarizeDay(pair.Value.list.ToArray())} [cannot sync]");
         }
-        else
+
+        async Task CanSync(KeyValuePair<DateOnly, (List<MeasurementWithZone> list, long hash)> pair, List<MeasurementWithZone> mismatch)
         {
-            var formatter = new MeasurementsFormatter(idle, false, blocksPerDay);
+            var measurements = new MeasurementsDataContract(
+                mismatch.First().Zone,
+                mismatch
+                    .Select(item => new MeasurementDataContract((int)item.Measurement.Kind, item.Measurement.Timestamp))
+                    .ToArray());
 
-            foreach (var date in byDates.TakeLast(limit))
+            await httpClient.PatchAsJsonAsync(
+                $"/{computer.Id}", 
+                measurements, 
+                MeasurementsSourceGenerationContext.Default.MeasurementsDataContract);
+
+            logger.LogInformation($"{formatter.SummarizeDay(pair.Value.list.ToArray())} [synced]");
+        }
+
+        void InSync(KeyValuePair<DateOnly, (List<MeasurementWithZone> list, long hash)> pair)
+        {
+        }
+
+        async Task LocalOnly(KeyValuePair<DateOnly, (List<MeasurementWithZone> list, long hash)> pair)
+        {
+            var measurements = new MeasurementsDataContract(
+                pair.Value.list.First().Zone,
+                pair.Value.list
+                    .Select(item => new MeasurementDataContract((int)item.Measurement.Kind, item.Measurement.Timestamp))
+                    .ToArray());
+
+            await httpClient.PatchAsJsonAsync(
+                $"/{computer.Id}", 
+                measurements, 
+                MeasurementsSourceGenerationContext.Default.MeasurementsDataContract);
+
+            logger.LogInformation($"{formatter.SummarizeDay(pair.Value.list.ToArray())} [synced]");
+        }
+    }
+
+    public async Task Print(int count)
+    {
+        await ActOnRemoteStatus(localOnly: LocalOnly, inSync: InSync, canSync: CanSync, cannotSync: CannotSync, limit: count);
+        
+        return;
+
+        void CannotSync(KeyValuePair<DateOnly, (List<MeasurementWithZone> list, long hash)> pair)
+        {
+            AnsiConsole.WriteLine($"{formatter.SummarizeDay(pair.Value.list.ToArray())} [cannot sync]");
+        }
+
+        Task CanSync(KeyValuePair<DateOnly, (List<MeasurementWithZone> list, long hash)> pair, List<MeasurementWithZone> _)
+        {
+            AnsiConsole.WriteLine($"{formatter.SummarizeDay(pair.Value.list.ToArray())} [can sync]");
+
+            return Task.CompletedTask;
+        }
+
+        void InSync(KeyValuePair<DateOnly, (List<MeasurementWithZone> list, long hash)> pair)
+        {
+            AnsiConsole.WriteLine($"{formatter.SummarizeDay(pair.Value.list.ToArray())} [in sync]");
+        }
+
+        Task LocalOnly(KeyValuePair<DateOnly, (List<MeasurementWithZone> list, long hash)> pair)
+        {
+            AnsiConsole.WriteLine($"{formatter.SummarizeDay(pair.Value.list.ToArray())} [local only]");
+
+            return Task.CompletedTask;
+        }
+    }
+    
+    private async Task ActOnRemoteStatus(
+        Func<KeyValuePair<DateOnly, (List<MeasurementWithZone> list, long hash)>, Task> localOnly,
+        Action<KeyValuePair<DateOnly, (List<MeasurementWithZone> list, long hash)>> inSync,
+        Func<KeyValuePair<DateOnly, (List<MeasurementWithZone> list, long hash)>, List<MeasurementWithZone>, Task> canSync,
+        Action<KeyValuePair<DateOnly, (List<MeasurementWithZone> list, long hash)>> cannotSync,
+        int limit = int.MaxValue)
+    {
+        var remoteSummary = await httpClient.GetFromJsonAsync(
+            $"/{computer.Id}/summary",
+            SummarySourceGenerationContext.Default.SummaryDataContract);
+
+        var localByDates = Reader.ReadFiles(Constants.MeasurementsFolder, TimeSpan.MinValue);
+
+        foreach (var date in localByDates.TakeLast(limit))
+        {
+            var match = remoteSummary?.Items.SingleOrDefault(item => item.Date == date.Key);
+
+            if (match == null)
             {
-                var match = remoteSummary?.Items.SingleOrDefault(item => item.Date == date.Key);
+                await localOnly(date);
+            }
+            else if (match.Hash == date.Value.hash)
+            {
+                inSync(date);
+            }
+            else
+            {
+                var mismatch = Reader.ReadFiles(Constants.MeasurementsFolder, TimeSpan.MinValue, date.Key, match.Hash);
 
-                if (match == null)
+                if (mismatch.found)
                 {
-                    if (syncWithRemote)
-                    {
-                        var measurements = new MeasurementsDataContract(
-                            date.Value.list.First().Zone,
-                            date.Value.list
-                                .Select(item => new MeasurementDataContract((int)item.Measurement.Kind, item.Measurement.Timestamp))
-                                .ToArray());
-
-                        await httpClient.PatchAsJsonAsync($"/{computer.Id}", measurements, MeasurementsSourceGenerationContext.Default.MeasurementsDataContract);
-
-                        printDay($"{formatter.SummarizeDay(date.Value.list.ToArray())} [synced]", PrintDayKind.Synced);
-                    }
-                    else
-                    {
-                        printDay($"{formatter.SummarizeDay(date.Value.list.ToArray())} [local only]", PrintDayKind.LocalOnly);
-                    }
-                }
-                else if (match.Hash == date.Value.hash)
-                {
-                    printDay($"{formatter.SummarizeDay(date.Value.list.ToArray())} [in sync]", PrintDayKind.InSync);
+                    await canSync(date, mismatch.list);
                 }
                 else
                 {
-                    var mismatch = Reader.ReadFiles(Constants.MeasurementsFolder, TimeSpan.MinValue, date.Key,
-                        match.Hash);
-
-                    if (mismatch.found)
-                    {
-                        if (syncWithRemote)
-                        {
-                            var measurements = new MeasurementsDataContract(
-                                mismatch.list.First().Zone,
-                                mismatch.list
-                                    .Select(item => new MeasurementDataContract((int)item.Measurement.Kind, item.Measurement.Timestamp))
-                                    .ToArray());
-                            
-                            await httpClient.PatchAsJsonAsync($"/{computer.Id}", measurements, MeasurementsSourceGenerationContext.Default.MeasurementsDataContract);
-                            printDay($"{formatter.SummarizeDay(date.Value.list.ToArray())} [synced]", PrintDayKind.Synced);
-
-                        }
-                        else
-                        {
-                            printDay($"{formatter.SummarizeDay(date.Value.list.ToArray())} [can sync]", PrintDayKind.CanSync);
-                        }
-                    }
-                    else
-                    {
-                        printDay($"{formatter.SummarizeDay(date.Value.list.ToArray())} [cannot sync]", PrintDayKind.CannotSync);
-                    }
+                    cannotSync(date);
                 }
             }
         }
