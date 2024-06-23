@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flextime.Daemon", "Flextime
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flextime.Monitor", "Flextime.Monitor\Flextime.Monitor.csproj", "{5C74DB00-9B79-45A9-82D3-DF3064977A58}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flextime.Benchmarks", "Flextime.Benchmarks\Flextime.Benchmarks.csproj", "{C7995E28-42AA-454F-A0E2-0B48FFCCD864}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -39,6 +41,10 @@ Global
 		{5C74DB00-9B79-45A9-82D3-DF3064977A58}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5C74DB00-9B79-45A9-82D3-DF3064977A58}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5C74DB00-9B79-45A9-82D3-DF3064977A58}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C7995E28-42AA-454F-A0E2-0B48FFCCD864}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C7995E28-42AA-454F-A0E2-0B48FFCCD864}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C7995E28-42AA-454F-A0E2-0B48FFCCD864}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C7995E28-42AA-454F-A0E2-0B48FFCCD864}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
