@@ -90,7 +90,7 @@ public class Worker(
                     {
                         // We really want to ignore all exceptions related to HTTP.  The network might be down,
                         // and we can just try again when we run the next time.
-                        logger.LogWarning(exception, "Sync error: {Message}.", exception.Message);
+                        logger.LogWarning("Network error.");
                     }
                     
                     await Task.Delay(everyOptions.Value.Every.Value, stoppingToken);
