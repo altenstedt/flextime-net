@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace Inhill.Flextime.Monitor;
+namespace Flextime.Monitor;
 
 internal static class LastInputInfo {
     public static long GetIdleTimeSinceLastInputInMilliSeconds()
@@ -23,4 +23,3 @@ internal static class LastInputInfo {
         public uint dwTime;
     }
 }
- 

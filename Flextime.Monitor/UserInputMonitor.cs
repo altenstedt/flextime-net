@@ -1,11 +1,10 @@
 using System.Runtime.InteropServices;
-using Flextime;
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using Tmds.DBus.Protocol;
 
-namespace Inhill.Flextime.Monitor;
+namespace Flextime.Monitor;
 
 public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitorOptions options)
 {
