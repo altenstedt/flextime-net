@@ -19,9 +19,9 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
 
     // https://github.com/tmds/Tmds.DBus
     private IdleMonitor? idleMonitor;
+    private ScreenSaver? screenSaverMonitor;
 
     private bool sessionLocked;
-    private ScreenSaver screenSaverMonitor;
 
     public async Task Initialize()
     {
@@ -68,6 +68,11 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
+                if (screenSaverMonitor == null)
+                {
+                    throw new InvalidOperationException("Screen saver monitory not found.");
+                }
+
                 await screenSaverMonitor.WatchActiveChangedAsync((exception, active) =>
                 {
                     if (exception == null)
