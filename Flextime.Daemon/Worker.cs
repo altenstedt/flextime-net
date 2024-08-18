@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Net.Http.Json;
 using System.Runtime.InteropServices;
-using Inhill.Flextime.Monitor;
+using Flextime.Monitor;
 using Microsoft.Extensions.Options;
 using Polly.Timeout;
 using Spectre.Console;
@@ -40,18 +40,18 @@ public class Worker(
             hostApplicationLifetime.StopApplication();
             return;
         }
-        
+
         if (command.Value.LogInInvoked)
         {
             logger.LogDebug("Login invoked.");
-            
+
             await deviceCode.LogOn(stoppingToken);
 
             // I want to terminate the host when the worker has completed.
             hostApplicationLifetime.StopApplication();
             return;
         }
-        
+
         if (command.Value.SyncInvoked)
         {
             logger.LogDebug("Sync invoked.");
@@ -68,11 +68,11 @@ public class Worker(
             {
                 await httpClient.PatchAsJsonAsync($"/{computer.Id}/name", computer.Name, StringSourceGenerationContext.Default.String, cancellationToken: stoppingToken);
             }
-            
+
             if (onceOptions.Value.Once)
             {
                 await sync.SyncAndPrint();
-            } 
+            }
             else if (everyOptions.Value.Every.HasValue)
             {
                 var version = VersionHelper.GetVersion();
@@ -92,7 +92,7 @@ public class Worker(
                         // and we can just try again when we run the next time.
                         logger.LogWarning("Network error.");
                     }
-                    
+
                     await Task.Delay(everyOptions.Value.Every.Value, stoppingToken);
                 }
             }
@@ -109,7 +109,7 @@ public class Worker(
         if (command.Value.ListenInvoked)
         {
             logger.LogDebug("Listen invoked.");
-            
+
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 // https://learn.microsoft.com/en-us/dotnet/core/extensions/globalization-icu
@@ -161,19 +161,19 @@ public class Worker(
                     }
                 } else {
                     logger.LogCritical("Time zone {Id} not found on this system.", timeZoneOptions.Value.TimeZone);
-                    
+
                     hostApplicationLifetime.StopApplication();
                     return;
                 }
             }
-            
+
             var monitor = new UserInputMonitor(monitorLogger, new UserInputMonitorOptions
             {
                 IgnoreSessionLocked = ignoreSessionLockedOptions.Value.IgnoreSessionLocked,
                 TimeZone = timeZoneOptions.Value.TimeZone,
                 LogSummaryInterval = logSummaryIntervalOptions.Value.Interval
             });
-            
+
             await monitor.Initialize();
 
             var version = VersionHelper.GetVersion();
@@ -200,7 +200,7 @@ public class Worker(
 
             logger.LogDebug("Stop.");
             await monitor.MarkStop();
-            
+
             // I want to terminate the host when the worker has completed.
             hostApplicationLifetime.StopApplication();
         }

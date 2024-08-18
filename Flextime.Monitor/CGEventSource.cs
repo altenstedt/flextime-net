@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace Inhill.Flextime.Monitor;
+namespace Flextime.Monitor;
 
 /// <summary>
 /// Defines an opaque type that represents the source of a Quartz event on macOS
