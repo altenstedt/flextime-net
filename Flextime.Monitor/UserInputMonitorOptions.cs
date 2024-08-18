@@ -1,4 +1,4 @@
-namespace Inhill.Flextime.Monitor;
+namespace Flextime.Monitor;
 
 public struct UserInputMonitorOptions
 {
