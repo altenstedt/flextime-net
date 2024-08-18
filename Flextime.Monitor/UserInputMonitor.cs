@@ -12,16 +12,17 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
     private readonly TimeSpan interval = TimeSpan.FromMinutes(1);
     private readonly TimeSpan fileTimeLimit = TimeSpan.FromHours(1);
     private readonly IList<Measurement> measurements = [];
-    
+
     private DateTimeOffset? lastFlush;
     private string? lastPath;
     private DateTimeOffset lastLogSummary = DateTimeOffset.UtcNow;
     private int lastLogSummaryCount;
-    
+
     // https://github.com/tmds/Tmds.DBus
     private IdleMonitor? idleMonitor;
 
     private bool sessionLocked;
+    private ScreenSaver screenSaverMonitor;
 
     public async Task Initialize()
     {
@@ -32,9 +33,11 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
             await connection.ConnectAsync();
 
             var service = new IdleMonitorService(connection, "org.gnome.Mutter.IdleMonitor");
+
             idleMonitor = service.CreateIdleMonitor("/org/gnome/Mutter/IdleMonitor/Core");
+            screenSaverMonitor = service.CreateScreenSaver("/org/gnome/ScreenSaver");
         }
-        
+
         if (!options.IgnoreSessionLocked) {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
@@ -44,7 +47,7 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
                     {
                         if (e.Reason == SessionSwitchReason.SessionLock) {
 
-                            // A measurement here seems natural, or it will be dropped if 
+                            // A measurement here seems natural, or it will be dropped if
                             // the session is locked for longer than idle.
                             await Mark(Measurement.Types.Kind.Measurement);
 
@@ -64,9 +67,25 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
                     }
                 };
             }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                await screenSaverMonitor.WatchActiveChangedAsync((exception, active) =>
+                {
+                    if (exception == null)
+                    {
+                        sessionLocked = active;
+                        logger.LogTrace(active ? "ScreenSaver switched to active" : "ScreenSaver switched to inactive");
+                    }
+                    else
+                    {
+                        logger.LogError(exception, "ScreenSaver exception.");
+                    }
+                });
+
+            }
         }
     }
-    
+
     public async Task Run(CancellationToken token)
     {
         do
@@ -78,7 +97,7 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
             // to happen /just/ as a new minute on the clock starts.
             var now = DateTime.Now;
             var next = new DateTime(
-                now.Add(interval).Ticks / interval.Ticks // Round to nearest interval 
+                now.Add(interval).Ticks / interval.Ticks // Round to nearest interval
                 * interval.Ticks // Convert back to ticks
                 + TimeSpan.FromMilliseconds(1).Ticks); // Add a small interval to ensure we're in the next minute
 
@@ -93,7 +112,7 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
     {
         return Mark(Measurement.Types.Kind.Start);
     }
-    
+
     public Task MarkStop()
     {
         return Mark(Measurement.Types.Kind.Stop);
@@ -144,7 +163,7 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
         // The time between measurements is not perfect, so be on the safe side,
         // we compare to a somewhat larger value.
         var active = idle < interval * 1.2;
-            
+
         if (active) {
             var measurement = new Measurement
             {
@@ -194,7 +213,7 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
         return zone;
     }
 
-    private void FlushMeasurements() 
+    private void FlushMeasurements()
     {
         if (measurements.Count == 0)
         {
@@ -226,7 +245,7 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
 
             using var stream = File.OpenWrite(path);
             measurement.WriteTo(stream);
-        
+
             logger.LogTrace("Flushed {Path}.", path);
 
             lastPath = path;
@@ -235,7 +254,7 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
             // Write to an existing file
             using var stream = File.OpenWrite(lastPath);
             measurement.WriteTo(stream);
-    
+
             logger.LogTrace("Flushed {Path}.", lastPath);
 
             if (lastFlush < DateTimeOffset.Now.Subtract(fileTimeLimit))
