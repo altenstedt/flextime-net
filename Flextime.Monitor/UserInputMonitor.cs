@@ -21,6 +21,8 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
     private IdleMonitor? idleMonitor;
     private ScreenSaver? screenSaverMonitor;
 
+    private IntPtr sessionScreenIsLockedString = IntPtr.Zero;
+    
     private bool sessionLocked;
 
     public async Task Initialize()
@@ -87,6 +89,15 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
                 });
 
             }
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                // We could use DistributedNotificationCenter, but I do not know
+                // how to P/Invoke that.  Instead, we use CGSession at the time
+                // of measurement below.
+                const string Key = "CGSSessionScreenIsLocked";
+                var pointer = Marshal.StringToHGlobalUni(Key);
+                sessionScreenIsLockedString = CGSession.CFStringCreateWithCharacters(IntPtr.Zero, pointer, Key.Length);
+            }
         }
     }
 
@@ -130,6 +141,13 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
                 CGEventSource.SecondsSinceLastEventType(
                     CGEventSource.CGEventSourceStateID.HidSystemState,
                     CGEventSource.CGEventType.MouseAndKeyboard));
+
+            // Figure out if the screen is locked or not.
+            var dictionary = CGSession.CGSessionCopyCurrentDictionary();
+
+            var sessionScreenIsLocked = CGSession.CFDictionaryGetValue(dictionary, sessionScreenIsLockedString);
+            
+            sessionLocked = sessionScreenIsLocked != IntPtr.Zero;
         } else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) {
             if (idleMonitor == null)
             {
