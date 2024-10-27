@@ -6,7 +6,7 @@
         <Nullable>enable</Nullable>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <LangVersion>default</LangVersion>
-        <VersionPrefix>7.6.4</VersionPrefix>
+        <VersionPrefix>7.7.0</VersionPrefix>
     </PropertyGroup>
 
     <ItemGroup>
