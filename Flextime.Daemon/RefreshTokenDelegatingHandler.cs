@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
@@ -20,15 +21,23 @@ public class RefreshTokenDelegatingHandler(
         {
             // This is guaranteed to be single threaded since we use LazyCache.
             KeyValuePair<string, string>[] collection = [ 
-                new KeyValuePair<string, string>("client_id", options.ClientId),
-                new KeyValuePair<string, string>("scope", options.Scope),
-                new KeyValuePair<string, string>("grant_type", "refresh_token"),
-                new KeyValuePair<string, string>("refresh_token", options.RefreshToken)
+                new("client_id", options.ClientId),
+                new("scope", options.Scope),
+                new("grant_type", "refresh_token"),
+                new("refresh_token", options.RefreshToken)
             ];
         
             var responseMessage = await tokenHttpClient.PostAsync(string.Empty, new FormUrlEncodedContent(collection), cancellationToken);
 
-            responseMessage.EnsureSuccessStatusCode();
+            if (!responseMessage.IsSuccessStatusCode)
+            {
+                if (responseMessage.StatusCode == HttpStatusCode.BadRequest)
+                {
+                    return null;
+                }
+
+                responseMessage.EnsureSuccessStatusCode();
+            }
 
             var tokenResponse = await responseMessage.Content.ReadFromJsonAsync(
                 TokenResponseSourceGenerationContext.Default.TokenResponse, 
@@ -46,7 +55,7 @@ public class RefreshTokenDelegatingHandler(
 
             if (options.WriteToStorage)
             {
-                await TokenStorage.Write(accessToken, tokenResponse.expires_in, refreshToken);
+                await TokenStorage.Write(accessToken, tokenResponse.expires_in, refreshToken, cancellationToken);
             }
 
             return accessToken;
