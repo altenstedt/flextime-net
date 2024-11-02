@@ -37,7 +37,7 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                     var pingResult = await httpClient.GetFromJsonAsync("/ping", PingSourceGenerationContext.Default.PingDataContract);
 
                     AnsiConsole.MarkupLine(
-                        $"Server version     : {pingResult?.Version} {pingResult?.Details} {pingResult?.Runtime} {pingResult?.InstanceId}");
+                        $"Server version     : {pingResult?.Version}");
                 }
                 catch (HttpRequestException exception)
                 {
@@ -139,11 +139,7 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
     }
 }
 
-internal record PingDataContract(
-    string Version,
-    string? Details,
-    string Runtime,
-    string InstanceId);
+internal record PingDataContract(string Version);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(PingDataContract))]
