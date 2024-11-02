@@ -18,11 +18,11 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
     private int lastLogSummaryCount;
 
     // https://github.com/tmds/Tmds.DBus
-    private IdleMonitor? idleMonitor;
-    private ScreenSaver? screenSaverMonitor;
+    private IdleMonitor.DBus.IdleMonitor? idleMonitor;
+    private IdleMonitor.DBus.ScreenSaver? screenSaverMonitor;
 
     private IntPtr sessionScreenIsLockedString = IntPtr.Zero;
-    
+
     private bool sessionLocked;
 
     public async Task Initialize()
@@ -33,7 +33,7 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
 
             await connection.ConnectAsync();
 
-            var service = new IdleMonitorService(connection, "org.gnome.Mutter.IdleMonitor");
+            var service = new IdleMonitor.DBus.IdleMonitorService(connection, "org.gnome.Mutter.IdleMonitor");
 
             idleMonitor = service.CreateIdleMonitor("/org/gnome/Mutter/IdleMonitor/Core");
             screenSaverMonitor = service.CreateScreenSaver("/org/gnome/ScreenSaver");
@@ -146,7 +146,7 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
             var dictionary = CGSession.CGSessionCopyCurrentDictionary();
 
             var sessionScreenIsLocked = CGSession.CFDictionaryGetValue(dictionary, sessionScreenIsLockedString);
-            
+
             sessionLocked = sessionScreenIsLocked != IntPtr.Zero;
         } else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) {
             if (idleMonitor == null)
