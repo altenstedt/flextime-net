@@ -2,7 +2,7 @@ namespace Flextime.Client;
 
 public struct Options()
 {
-    public string MeasurementsFolder { get; set; }
+    public required string MeasurementsFolder { get; set; }
     
     public bool Verbose { get; set; }
     
