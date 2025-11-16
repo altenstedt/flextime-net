@@ -11,7 +11,7 @@ namespace IdleMonitor.DBus
         private const string __Interface = "org.gtk.Notifications";
         public Notifications(IdleMonitorService service, ObjectPath path) : base(service, path)
         { }
-        public Task AddNotificationAsync(string appId, string id, Dictionary<string, Variant> notification)
+        public Task AddNotificationAsync(string appId, string id, Dictionary<string, VariantValue> notification)
         {
             return this.Connection.CallMethodAsync(CreateMessage());
             MessageBuffer CreateMessage()
@@ -136,7 +136,7 @@ namespace IdleMonitor.DBus
         private const string __Interface = "org.gnome.Sysprof3.Profiler";
         public Profiler(IdleMonitorService service, ObjectPath path) : base(service, path)
         { }
-        public Task StartAsync(Dictionary<string, Variant> options, System.Runtime.InteropServices.SafeHandle fd)
+        public Task StartAsync(Dictionary<string, VariantValue> options, System.Runtime.InteropServices.SafeHandle fd)
         {
             return this.Connection.CallMethodAsync(CreateMessage());
             MessageBuffer CreateMessage()
@@ -167,7 +167,7 @@ namespace IdleMonitor.DBus
                 return writer.CreateMessage();
             }
         }
-        public Task SetCapabilitiesAsync(Dictionary<string, Variant> value)
+        public Task SetCapabilitiesAsync(Dictionary<string, VariantValue> value)
         {
             return this.Connection.CallMethodAsync(CreateMessage());
             MessageBuffer CreateMessage()
@@ -286,7 +286,7 @@ namespace IdleMonitor.DBus
                 return writer.CreateMessage();
             }
         }
-        public Task ShowOSDAsync(Dictionary<string, Variant> @params)
+        public Task ShowOSDAsync(Dictionary<string, VariantValue> @params)
         {
             return this.Connection.CallMethodAsync(CreateMessage());
             MessageBuffer CreateMessage()
@@ -302,7 +302,7 @@ namespace IdleMonitor.DBus
                 return writer.CreateMessage();
             }
         }
-        public Task ShowMonitorLabelsAsync(Dictionary<string, Variant> @params)
+        public Task ShowMonitorLabelsAsync(Dictionary<string, VariantValue> @params)
         {
             return this.Connection.CallMethodAsync(CreateMessage());
             MessageBuffer CreateMessage()
@@ -728,7 +728,7 @@ namespace IdleMonitor.DBus
                 return writer.CreateMessage();
             }
         }
-        public Task OpenExtensionPrefsAsync(string uuid, string parentWindow, Dictionary<string, Variant> options)
+        public Task OpenExtensionPrefsAsync(string uuid, string parentWindow, Dictionary<string, VariantValue> options)
         {
             return this.Connection.CallMethodAsync(CreateMessage());
             MessageBuffer CreateMessage()
@@ -1278,7 +1278,7 @@ namespace IdleMonitor.DBus
                 return writer.CreateMessage();
             }
         }
-        public Task ApplyConfigurationAsync(uint serial, bool persistent, (uint, int, int, int, uint, uint[], Dictionary<string, Variant>)[] crtcs, (uint, Dictionary<string, Variant>)[] outputs)
+        public Task ApplyConfigurationAsync(uint serial, bool persistent, (uint, int, int, int, uint, uint[], Dictionary<string, VariantValue>)[] crtcs, (uint, Dictionary<string, VariantValue>)[] outputs)
         {
             return this.Connection.CallMethodAsync(CreateMessage());
             MessageBuffer CreateMessage()
@@ -1366,7 +1366,7 @@ namespace IdleMonitor.DBus
                 return writer.CreateMessage();
             }
         }
-        public Task ApplyMonitorsConfigAsync(uint serial, uint @method, (int, int, double, uint, bool, (string, string, Dictionary<string, Variant>)[])[] logicalMonitors, Dictionary<string, Variant> properties)
+        public Task ApplyMonitorsConfigAsync(uint serial, uint @method, (int, int, double, uint, bool, (string, string, Dictionary<string, VariantValue>)[])[] logicalMonitors, Dictionary<string, VariantValue> properties)
         {
             return this.Connection.CallMethodAsync(CreateMessage());
             MessageBuffer CreateMessage()
@@ -1805,7 +1805,7 @@ namespace IdleMonitor.DBus
         private const string __Interface = "org.gnome.Mutter.ScreenCast";
         public ScreenCast(IdleMonitorService service, ObjectPath path) : base(service, path)
         { }
-        public Task<ObjectPath> CreateSessionAsync(Dictionary<string, Variant> properties)
+        public Task<ObjectPath> CreateSessionAsync(Dictionary<string, VariantValue> properties)
         {
             return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_o(m, (IdleMonitorObject)s!), this);
             MessageBuffer CreateMessage()
@@ -2165,7 +2165,7 @@ namespace IdleMonitor.DBus
                 return writer.CreateMessage();
             }
         }
-        public Task PerformPromptAsync(ObjectPath callback, string @type, Dictionary<string, Variant> properties, string exchange)
+        public Task PerformPromptAsync(ObjectPath callback, string @type, Dictionary<string, VariantValue> properties, string exchange)
         {
             return this.Connection.CallMethodAsync(CreateMessage());
             MessageBuffer CreateMessage()
@@ -2206,7 +2206,7 @@ namespace IdleMonitor.DBus
         private const string __Interface = "org.freedesktop.impl.portal.Access";
         public Access(IdleMonitorService service, ObjectPath path) : base(service, path)
         { }
-        public Task<(uint Response, Dictionary<string, VariantValue> Results)> AccessDialogAsync(ObjectPath handle, string appId, string parentWindow, string title, string subtitle, string body, Dictionary<string, Variant> options)
+        public Task<(uint Response, Dictionary<string, VariantValue> Results)> AccessDialogAsync(ObjectPath handle, string appId, string parentWindow, string title, string subtitle, string body, Dictionary<string, VariantValue> options)
         {
             return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_uaesv(m, (IdleMonitorObject)s!), this);
             MessageBuffer CreateMessage()
@@ -2234,7 +2234,7 @@ namespace IdleMonitor.DBus
         private const string __Interface = "org.freedesktop.Notifications";
         public Notifications0(IdleMonitorService service, ObjectPath path) : base(service, path)
         { }
-        public Task<uint> NotifyAsync(string arg0, uint arg1, string arg2, string arg3, string arg4, string[] arg5, Dictionary<string, Variant> arg6, int arg7)
+        public Task<uint> NotifyAsync(string arg0, uint arg1, string arg2, string arg3, string arg4, string[] arg5, Dictionary<string, VariantValue> arg6, int arg7)
         {
             return this.Connection.CallMethodAsync(CreateMessage(), (Message m, object? s) => ReadMessage_u(m, (IdleMonitorObject)s!), this);
             MessageBuffer CreateMessage()
@@ -2784,7 +2784,7 @@ namespace IdleMonitor.DBus
             writer.WriteInt32(value.Item1);
             writer.WriteInt32(value.Item2);
         }
-        protected static void WriteType_aruiiiuauaesvz(ref MessageWriter writer, (uint, int, int, int, uint, uint[], Dictionary<string, Variant>)[] value)
+        protected static void WriteType_aruiiiuauaesvz(ref MessageWriter writer, (uint, int, int, int, uint, uint[], Dictionary<string, VariantValue>)[] value)
         {
             ArrayStart arrayStart = writer.WriteArrayStart(DBusType.Struct);
             foreach (var item in value)
@@ -2793,7 +2793,7 @@ namespace IdleMonitor.DBus
             }
             writer.WriteArrayEnd(arrayStart);
         }
-        protected static void WriteType_ruiiiuauaesvz(ref MessageWriter writer, (uint, int, int, int, uint, uint[], Dictionary<string, Variant>) value)
+        protected static void WriteType_ruiiiuauaesvz(ref MessageWriter writer, (uint, int, int, int, uint, uint[], Dictionary<string, VariantValue>) value)
         {
             writer.WriteStructureStart();
             writer.WriteUInt32(value.Item1);
@@ -2804,7 +2804,7 @@ namespace IdleMonitor.DBus
             writer.WriteArray(value.Item6);
             writer.WriteDictionary(value.Item7);
         }
-        protected static void WriteType_aruaesvz(ref MessageWriter writer, (uint, Dictionary<string, Variant>)[] value)
+        protected static void WriteType_aruaesvz(ref MessageWriter writer, (uint, Dictionary<string, VariantValue>)[] value)
         {
             ArrayStart arrayStart = writer.WriteArrayStart(DBusType.Struct);
             foreach (var item in value)
@@ -2813,13 +2813,13 @@ namespace IdleMonitor.DBus
             }
             writer.WriteArrayEnd(arrayStart);
         }
-        protected static void WriteType_ruaesvz(ref MessageWriter writer, (uint, Dictionary<string, Variant>) value)
+        protected static void WriteType_ruaesvz(ref MessageWriter writer, (uint, Dictionary<string, VariantValue>) value)
         {
             writer.WriteStructureStart();
             writer.WriteUInt32(value.Item1);
             writer.WriteDictionary(value.Item2);
         }
-        protected static void WriteType_ariidubarssaesvzz(ref MessageWriter writer, (int, int, double, uint, bool, (string, string, Dictionary<string, Variant>)[])[] value)
+        protected static void WriteType_ariidubarssaesvzz(ref MessageWriter writer, (int, int, double, uint, bool, (string, string, Dictionary<string, VariantValue>)[])[] value)
         {
             ArrayStart arrayStart = writer.WriteArrayStart(DBusType.Struct);
             foreach (var item in value)
@@ -2828,7 +2828,7 @@ namespace IdleMonitor.DBus
             }
             writer.WriteArrayEnd(arrayStart);
         }
-        protected static void WriteType_riidubarssaesvzz(ref MessageWriter writer, (int, int, double, uint, bool, (string, string, Dictionary<string, Variant>)[]) value)
+        protected static void WriteType_riidubarssaesvzz(ref MessageWriter writer, (int, int, double, uint, bool, (string, string, Dictionary<string, VariantValue>)[]) value)
         {
             writer.WriteStructureStart();
             writer.WriteInt32(value.Item1);
@@ -2838,7 +2838,7 @@ namespace IdleMonitor.DBus
             writer.WriteBool(value.Item5);
             WriteType_arssaesvz(ref writer, value.Item6);
         }
-        protected static void WriteType_arssaesvz(ref MessageWriter writer, (string, string, Dictionary<string, Variant>)[] value)
+        protected static void WriteType_arssaesvz(ref MessageWriter writer, (string, string, Dictionary<string, VariantValue>)[] value)
         {
             ArrayStart arrayStart = writer.WriteArrayStart(DBusType.Struct);
             foreach (var item in value)
@@ -2847,7 +2847,7 @@ namespace IdleMonitor.DBus
             }
             writer.WriteArrayEnd(arrayStart);
         }
-        protected static void WriteType_rssaesvz(ref MessageWriter writer, (string, string, Dictionary<string, Variant>) value)
+        protected static void WriteType_rssaesvz(ref MessageWriter writer, (string, string, Dictionary<string, VariantValue>) value)
         {
             writer.WriteStructureStart();
             writer.WriteString(value.Item1);
