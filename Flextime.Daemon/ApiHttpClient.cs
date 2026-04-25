@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection;
+
 namespace Flextime.Daemon;
 
 public static class ApiHttpClient
