@@ -5,7 +5,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <VersionPrefix>7.7.1</VersionPrefix>
+    <VersionPrefix>7.7.2</VersionPrefix>
     <LangVersion>default</LangVersion>
   </PropertyGroup>
 
