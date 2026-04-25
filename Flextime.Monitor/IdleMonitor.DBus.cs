@@ -2310,9 +2310,9 @@ namespace IdleMonitor.DBus
     }
     partial class IdleMonitorService
     {
-        public Tmds.DBus.Protocol.Connection Connection { get; }
+        public Tmds.DBus.Protocol.DBusConnection Connection { get; }
         public string Destination { get; }
-        public IdleMonitorService(Tmds.DBus.Protocol.Connection connection, string destination)
+        public IdleMonitorService(Tmds.DBus.Protocol.DBusConnection connection, string destination)
             => (Connection, Destination) = (connection, destination);
         public Notifications CreateNotifications(string path) => new Notifications(this, path);
         public MountOperationHandler CreateMountOperationHandler(string path) => new MountOperationHandler(this, path);
@@ -2341,7 +2341,7 @@ namespace IdleMonitor.DBus
     {
         public IdleMonitorService Service { get; }
         public ObjectPath Path { get; }
-        protected Tmds.DBus.Protocol.Connection Connection => Service.Connection;
+        protected Tmds.DBus.Protocol.DBusConnection Connection => Service.Connection;
         protected IdleMonitorObject(IdleMonitorService service, ObjectPath path)
             => (Service, Path) = (service, path);
         protected MessageBuffer CreateGetPropertyMessage(string @interface, string property)

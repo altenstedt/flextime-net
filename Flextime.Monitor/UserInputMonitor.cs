@@ -27,9 +27,9 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
 
     public async Task Initialize()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && !string.IsNullOrEmpty(Address.Session))
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && !string.IsNullOrEmpty(DBusAddress.Session))
         {
-            var connection = new Connection(Address.Session);
+            var connection = new DBusConnection(DBusAddress.Session);
 
             await connection.ConnectAsync();
 
