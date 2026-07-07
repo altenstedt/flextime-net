@@ -50,40 +50,54 @@ public class DaemonCommands(
 
         var httpClient = httpClientFactory.CreateClient("ApiHttpClient");
 
-        if (!string.IsNullOrEmpty(computer.Name))
+        try
         {
-            await httpClient.PatchAsJsonAsync($"/{computer.Id}/name", computer.Name, StringSourceGenerationContext.Default.String, cancellationToken: cancellationToken);
-        }
-
-        if (once)
-        {
-            await sync.SyncAndPrint();
-        }
-        else if (every.HasValue)
-        {
-            var version = VersionHelper.GetVersion();
-
-            logger.LogInformation("Flextime sync {Version} started.", version);
-            logger.LogInformation("Data is synced every {Every}.", every.Value);
-
-            while (!cancellationToken.IsCancellationRequested)
+            if (!string.IsNullOrEmpty(computer.Name))
             {
-                try
-                {
-                    await sync.SyncAndLog(logger);
-                }
-                catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
-                {
-                    // Network might be down — try again next interval.
-                    logger.LogWarning("Network error.");
-                }
+                var response = await httpClient.PatchAsJsonAsync($"/{computer.Id}/name", computer.Name, StringSourceGenerationContext.Default.String, cancellationToken: cancellationToken);
 
-                await Task.Delay(every.Value, cancellationToken);
+                response.EnsureSuccessStatusCode();
+            }
+
+            if (once)
+            {
+                await sync.SyncAndPrint();
+            }
+            else if (every.HasValue)
+            {
+                var version = VersionHelper.GetVersion();
+
+                logger.LogInformation("Flextime sync {Version} started.", version);
+                logger.LogInformation("Data is synced every {Every}.", every.Value);
+
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    try
+                    {
+                        await sync.SyncAndLog(logger);
+                    }
+                    catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
+                    {
+                        // Network might be down — try again next interval.
+                        logger.LogWarning("Network error.");
+                    }
+
+                    await Task.Delay(every.Value, cancellationToken);
+                }
+            }
+            else
+            {
+                AnsiConsole.MarkupLine("--once or --every must be provided.");
             }
         }
-        else
+        catch (TokenRefreshException exception)
         {
-            AnsiConsole.MarkupLine("--once or --every must be provided.");
+            // Retrying will not help until the user logs in again.
+            AnsiConsole.WriteLine(exception.Message);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
+        {
+            AnsiConsole.WriteLine($"Network error: {exception.Message}");
         }
     }
 

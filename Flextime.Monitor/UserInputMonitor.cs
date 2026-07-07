@@ -12,6 +12,10 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
     private readonly TimeSpan fileTimeLimit = TimeSpan.FromHours(1);
     private readonly IList<Measurement> measurements = [];
 
+    // Mark is called both from the Run loop and from session switch events,
+    // which arrive on other threads.
+    private readonly SemaphoreSlim markSemaphore = new(1, 1);
+
     private DateTimeOffset? lastFlush;
     private string? lastPath;
     private DateTimeOffset lastLogSummary = DateTimeOffset.UtcNow;
@@ -44,7 +48,14 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
             {
                 SystemEvents.SessionSwitch += async (_, e) =>
                 {
-                    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                    if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                    {
+                        return;
+                    }
+
+                    // The handler is async void; an unhandled exception here
+                    // would crash the process.
+                    try
                     {
                         if (e.Reason == SessionSwitchReason.SessionLock) {
 
@@ -65,6 +76,10 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
                         }
 
                         logger.LogTrace("Session switch: {Reason}", e.Reason);
+                    }
+                    catch (Exception exception)
+                    {
+                        logger.LogError(exception, "Session switch handling failed.");
                     }
                 };
             }
@@ -134,6 +149,20 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
     }
 
     private async Task Mark(Measurement.Types.Kind kind)
+    {
+        await markSemaphore.WaitAsync();
+
+        try
+        {
+            await MarkCore(kind);
+        }
+        finally
+        {
+            markSemaphore.Release();
+        }
+    }
+
+    private async Task MarkCore(Measurement.Types.Kind kind)
     {
         TimeSpan idle;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) {
@@ -265,7 +294,7 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
                 logger.LogDebug("Created directories for {Path}.", path);
             }
 
-            using var stream = File.OpenWrite(path);
+            using var stream = File.Create(path);
             measurement.WriteTo(stream);
 
             logger.LogTrace("Flushed {Path}.", path);
@@ -273,8 +302,9 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
             lastPath = path;
             lastFlush = DateTimeOffset.Now;
         } else {
-            // Write to an existing file
-            using var stream = File.OpenWrite(lastPath);
+            // Rewrite the existing file with all measurements collected so far.
+            // Truncate, or shorter serializations would leave trailing bytes.
+            using var stream = File.Create(lastPath);
             measurement.WriteTo(stream);
 
             logger.LogTrace("Flushed {Path}.", lastPath);

@@ -25,22 +25,22 @@ public static class Reader
             list.AddRange(measurements.Measurements_.Select(item => new MeasurementWithZone(item, measurements.Zone, measurements.Interval)));
         }
 
-        list.Sort((left, right) => left.Timestamp < right.Timestamp ? -1 : 1);
+        list.Sort((left, right) => left.Timestamp.CompareTo(right.Timestamp));
 
         return list;
     }
 
-    private static Dictionary<DateOnly, (List<MeasurementWithZone> list, long hash)> GroupAndHash(List<MeasurementWithZone> list, TimeSpan since)
+    private static SortedDictionary<DateOnly, (List<MeasurementWithZone> list, long hash)> GroupAndHash(List<MeasurementWithZone> list, TimeSpan since)
     {
         var byDates = list
             .GroupBy(item => DateOnly.FromDateTime(item.Timestamp.Date))
             .Where(date => date.Key > DateOnly.FromDateTime(since > TimeSpan.Zero ? DateTime.Now - since : DateTime.MinValue))
             .ToDictionary(item => item.Key, item => (item.ToList(), HashMeasurements(item)));
 
-        return byDates;
+        return new SortedDictionary<DateOnly, (List<MeasurementWithZone> list, long hash)>(byDates);
     }
 
-    public static async Task<Dictionary<DateOnly, (List<MeasurementWithZone> list, long hash)>> ReadRemote(HttpClient httpClient, TimeSpan since, string computerId)
+    public static async Task<SortedDictionary<DateOnly, (List<MeasurementWithZone> list, long hash)>> ReadRemote(HttpClient httpClient, TimeSpan since, string computerId)
     {
         PagedMeasurementsDataContract? pagedMeasurements = null;
 
@@ -65,7 +65,7 @@ public static class Reader
         return byDates;
     }
 
-    public static Dictionary<DateOnly, (List<MeasurementWithZone> list, long hash)> ReadFiles(string folder, TimeSpan since)
+    public static SortedDictionary<DateOnly, (List<MeasurementWithZone> list, long hash)> ReadFiles(string folder, TimeSpan since)
     {
         var list = ReadFiles(folder);
 

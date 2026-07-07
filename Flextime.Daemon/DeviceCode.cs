@@ -81,7 +81,11 @@ public class DeviceCode
                     pollResponse.access_token,
                     pollResponse.expires_in,
                     pollResponse.refresh_token);
-                
+
+                accessToken = pollResponse.access_token;
+                refreshToken = pollResponse.refresh_token;
+                expires = DateTimeOffset.Now.AddSeconds(pollResponse.expires_in);
+
                 Console.WriteLine($"Session ends {expires:t}");
                 return;
             }

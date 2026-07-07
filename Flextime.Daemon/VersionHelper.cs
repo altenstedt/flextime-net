@@ -19,6 +19,9 @@ public static class VersionHelper
         
         var semanticVersion = SemVersion.Parse(version);
 
-        return semanticVersion.WithMetadataParsedFrom(semanticVersion.Metadata[..7]).ToString();
+        // Shorten a full commit hash in the build metadata, if present.
+        return semanticVersion.Metadata.Length > 7
+            ? semanticVersion.WithMetadataParsedFrom(semanticVersion.Metadata[..7]).ToString()
+            : semanticVersion.ToString();
     }
 }

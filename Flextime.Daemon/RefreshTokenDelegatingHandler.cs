@@ -17,23 +17,23 @@ public class RefreshTokenDelegatingHandler(
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        var accessToken = await cache.GetOrAddAsync<string?>(options.ClientId, async entry =>
+        var accessToken = await cache.GetOrAddAsync<string>(options.ClientId, async entry =>
         {
             // This is guaranteed to be single threaded since we use LazyCache.
-            KeyValuePair<string, string>[] collection = [ 
+            KeyValuePair<string, string>[] collection = [
                 new("client_id", options.ClientId),
                 new("scope", options.Scope),
                 new("grant_type", "refresh_token"),
                 new("refresh_token", options.RefreshToken)
             ];
-        
+
             var responseMessage = await tokenHttpClient.PostAsync(string.Empty, new FormUrlEncodedContent(collection), cancellationToken);
 
             if (!responseMessage.IsSuccessStatusCode)
             {
                 if (responseMessage.StatusCode == HttpStatusCode.BadRequest)
                 {
-                    return null;
+                    throw new TokenRefreshException("The sign-in has expired. Use the login command to log in again.");
                 }
 
                 responseMessage.EnsureSuccessStatusCode();
@@ -50,6 +50,13 @@ public class RefreshTokenDelegatingHandler(
         
             var accessToken = tokenResponse.access_token;
             var refreshToken = tokenResponse.refresh_token;
+
+            // The token endpoint rotates the refresh token; use the new one
+            // from now on or refreshes will eventually stop working.
+            if (!string.IsNullOrEmpty(refreshToken))
+            {
+                options.RefreshToken = refreshToken;
+            }
 
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(tokenResponse.expires_in).Subtract(grace);
 
@@ -68,11 +75,13 @@ public class RefreshTokenDelegatingHandler(
 }
 public record RefreshTokenDelegatingHandlerOptions
 {
-    public required string RefreshToken { get; init; }
+    public required string RefreshToken { get; set; }
     public required string ClientId { get; init; }
     public required string Scope { get; init; }
     public required bool WriteToStorage { get; init; }
 }
+
+public class TokenRefreshException(string message) : Exception(message);
 
 [SuppressMessage("ReSharper", "InconsistentNaming")]
 [SuppressMessage("ReSharper", "ClassNeverInstantiated.Global")]

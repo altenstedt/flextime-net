@@ -30,7 +30,7 @@ public class MeasurementsFormatter(TimeSpan idle, bool verbose, int blocksPerDay
             }
         }
 
-        var @base = $@"{start:yyyy-MM-dd} {start:HH:mm} – {end:HH:mm} {end - start:hh\:mm} | {work:hh\:mm} w/{ISOWeek.GetWeekOfYear(start.LocalDateTime):00} {start:ddd}";
+        var @base = $@"{start:yyyy-MM-dd} {start:HH:mm} – {end:HH:mm} {end - start:hh\:mm} | {work:hh\:mm} w/{ISOWeek.GetWeekOfYear(start.DateTime):00} {start:ddd}";
 
         if (blocksPerDay > 0)
         {
@@ -56,13 +56,7 @@ public class MeasurementsFormatter(TimeSpan idle, bool verbose, int blocksPerDay
                     .Range(2, Math.Min(blocksPerDay, blocks.Count - 1))
                     .Select(i => $@"{blocks[^i].stop:HH:mm}/{blocks[^i].stop - start:hh\:mm}"));
 
-            if (string.IsNullOrEmpty(suffix))
-            {
-                return @base;
-            }
-            
-            return
-                $@"{@base} [{string.Join(", ", Enumerable.Range(2, Math.Min(blocksPerDay, blocks.Count - 1)).Select(i => $@"{blocks[^i].stop:HH:mm}/{blocks[^i].stop - start:hh\:mm}"))}]";
+            return string.IsNullOrEmpty(suffix) ? @base : $"{@base} [{suffix}]";
         }
 
         return @base;

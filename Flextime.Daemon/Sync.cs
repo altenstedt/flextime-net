@@ -25,15 +25,17 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         async Task CanSync(KeyValuePair<DateOnly, (List<MeasurementWithZone> list, long hash)> pair, List<MeasurementWithZone> mismatch)
         {
             var measurements = new MeasurementsDataContract(
-                mismatch.First().Zone, 
+                mismatch.First().Zone,
                 mismatch
                     .Select(item => new MeasurementDataContract((int)item.Measurement.Kind, item.Measurement.Timestamp))
                     .ToArray());
 
-            await httpClient.PatchAsJsonAsync(
-                $"/{computer.Id}", 
-                measurements, 
+            var response = await httpClient.PatchAsJsonAsync(
+                $"/{computer.Id}",
+                measurements,
                 MeasurementsSourceGenerationContext.Default.MeasurementsDataContract);
+
+            response.EnsureSuccessStatusCode();
 
             AnsiConsole.WriteLine($"{formatter.SummarizeDay(pair.Value.list.ToArray())} [synced]");
         }
@@ -46,15 +48,17 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         async Task LocalOnly(KeyValuePair<DateOnly, (List<MeasurementWithZone> list, long hash)> pair)
         {
             var measurements = new MeasurementsDataContract(
-                pair.Value.list.First().Zone, 
+                pair.Value.list.First().Zone,
                 pair.Value.list
                     .Select(item => new MeasurementDataContract((int)item.Measurement.Kind, item.Measurement.Timestamp))
                     .ToArray());
 
-            await httpClient.PatchAsJsonAsync(
-                $"/{computer.Id}", 
-                measurements, 
+            var response = await httpClient.PatchAsJsonAsync(
+                $"/{computer.Id}",
+                measurements,
                 MeasurementsSourceGenerationContext.Default.MeasurementsDataContract);
+
+            response.EnsureSuccessStatusCode();
 
             AnsiConsole.WriteLine($"{formatter.SummarizeDay(pair.Value.list.ToArray())} [synced]");
         }
@@ -79,10 +83,12 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
                     .Select(item => new MeasurementDataContract((int)item.Measurement.Kind, item.Measurement.Timestamp))
                     .ToArray());
 
-            await httpClient.PatchAsJsonAsync(
-                $"/{computer.Id}", 
-                measurements, 
+            var response = await httpClient.PatchAsJsonAsync(
+                $"/{computer.Id}",
+                measurements,
                 MeasurementsSourceGenerationContext.Default.MeasurementsDataContract);
+
+            response.EnsureSuccessStatusCode();
 
             logger.LogInformation($"{formatter.SummarizeDay(pair.Value.list.ToArray())} [synced]");
         }
@@ -99,10 +105,12 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
                     .Select(item => new MeasurementDataContract((int)item.Measurement.Kind, item.Measurement.Timestamp))
                     .ToArray());
 
-            await httpClient.PatchAsJsonAsync(
-                $"/{computer.Id}", 
-                measurements, 
+            var response = await httpClient.PatchAsJsonAsync(
+                $"/{computer.Id}",
+                measurements,
                 MeasurementsSourceGenerationContext.Default.MeasurementsDataContract);
+
+            response.EnsureSuccessStatusCode();
 
             logger.LogInformation($"{formatter.SummarizeDay(pair.Value.list.ToArray())} [synced]");
         }

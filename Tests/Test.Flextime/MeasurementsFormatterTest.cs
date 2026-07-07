@@ -145,10 +145,11 @@ public class MeasurementsFormatterTest
 
             Add(
                 [
-                    CreateWithZone(DateTimeOffset.Parse("2024-02-01T17:17:00-05:00"), TimeSpan.FromMinutes(10), "America/New_York"),
                     CreateWithZone(DateTimeOffset.Parse("2024-02-01T11:18:00+00:00"), TimeSpan.FromMinutes(10), "Europe/London"),
+                    CreateWithZone(DateTimeOffset.Parse("2024-02-01T17:17:00-05:00"), TimeSpan.FromMinutes(10), "America/New_York"),
                 ],
-                "2024-02-01 17:17 – 11:18 05:59 | 05:59 w/05 Thu", // Maybe counter intuitive, but each time should be in local time
+                // Each time is displayed in its own zone, but durations use the real elapsed time.
+                "2024-02-01 11:18 – 17:17 10:59 | 00:00 w/05 Thu [11:18/00:00]",
                 TimeSpan.FromMinutes(10),
                 false,
                 1);
@@ -158,7 +159,8 @@ public class MeasurementsFormatterTest
                     CreateWithZone(DateTimeOffset.Parse("2024-02-01T11:13:00+01:00"), TimeSpan.FromMinutes(10), "Europe/Stockholm"),
                     CreateWithZone(DateTimeOffset.Parse("2024-02-01T11:14:00+00:00"), TimeSpan.FromMinutes(10), "Europe/London"),
                 ],
-                "2024-02-01 11:13 – 11:14 00:01 | 00:01 w/05 Thu", // Maybe counter intuitive, but each time should be in local time
+                // Each time is displayed in its own zone, but durations use the real elapsed time.
+                "2024-02-01 11:13 – 11:14 01:01 | 00:00 w/05 Thu [11:13/00:00]",
                 TimeSpan.FromMinutes(10),
                 false,
                 1);
