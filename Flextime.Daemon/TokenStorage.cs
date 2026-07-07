@@ -5,9 +5,11 @@ namespace Flextime.Daemon;
 
 public static class TokenStorage
 {
-    public static async Task<(string accessToken, DateTimeOffset expires, string refreshToken)> Read(CancellationToken cancellationToken = default)
+    private static string DefaultPath => Path.Combine(Constants.MeasurementsFolder, "../user");
+
+    public static async Task<(string accessToken, DateTimeOffset expires, string refreshToken)> Read(string? path = null, CancellationToken cancellationToken = default)
     {
-        var path = Path.Combine(Constants.MeasurementsFolder, "../user");
+        path ??= DefaultPath;
 
         if (!File.Exists(path))
         {
@@ -26,8 +28,10 @@ public static class TokenStorage
             DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
     }
 
-    public static async Task Write(string accessToken, int expiresInSeconds, string refreshToken, CancellationToken cancellationToken = default)
+    public static async Task Write(string accessToken, int expiresInSeconds, string refreshToken, string? path = null, CancellationToken cancellationToken = default)
     {
+        path ??= DefaultPath;
+
         var expires = DateTimeOffset.UtcNow.Add(TimeSpan.FromSeconds(expiresInSeconds));
 
         string[] lines =
@@ -37,8 +41,6 @@ public static class TokenStorage
             refreshToken
         ];
         
-        var path = Path.Combine(Constants.MeasurementsFolder, "../user");
-
         await File.WriteAllLinesAsync(path, lines, Encoding.UTF8, cancellationToken);
 
         if (!OperatingSystem.IsWindows())

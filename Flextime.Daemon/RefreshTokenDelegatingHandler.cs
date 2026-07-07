@@ -62,7 +62,7 @@ public class RefreshTokenDelegatingHandler(
 
             if (options.WriteToStorage)
             {
-                await TokenStorage.Write(accessToken, tokenResponse.expires_in, refreshToken, cancellationToken);
+                await TokenStorage.Write(accessToken, tokenResponse.expires_in, refreshToken, cancellationToken: cancellationToken);
             }
 
             return accessToken;
