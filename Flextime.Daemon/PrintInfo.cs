@@ -1,9 +1,9 @@
-using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Json;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json.Serialization;
+using Polly.Timeout;
 using Spectre.Console;
 
 namespace Flextime.Daemon;
@@ -39,7 +39,11 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                     AnsiConsole.MarkupLine(
                         $"Server version     : {pingResult?.Version}");
                 }
-                catch (HttpRequestException exception)
+                catch (TokenRefreshException exception)
+                {
+                    AnsiConsole.WriteLine(exception.Message);
+                }
+                catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
                 {
                     AnsiConsole.MarkupLine($"Error contacting backend: {exception.Message}.");
 
@@ -72,7 +76,19 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                     {
                         AnsiConsole.MarkupLine("Server data        :");
                         AnsiConsole.WriteLine();
-                        await PrintSummary(5);
+
+                        try
+                        {
+                            await PrintSummary(5);
+                        }
+                        catch (TokenRefreshException exception)
+                        {
+                            AnsiConsole.WriteLine(exception.Message);
+                        }
+                        catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
+                        {
+                            AnsiConsole.MarkupLine($"Error contacting backend: {exception.Message}.");
+                        }
                     });
         }
         else
@@ -115,13 +131,7 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            // https://learn.microsoft.com/en-us/dotnet/core/extensions/globalization-icu
-            var sortVersion = CultureInfo.InvariantCulture.CompareInfo.Version;
-            var bytes = sortVersion.SortId.ToByteArray();
-            var tmp = bytes[3] << 24 | bytes[2] << 16 | bytes[1] << 8 | bytes[0];
-            var isUsingIcu = tmp != 0 && tmp == sortVersion.FullVersion;
-
-            if (isUsingIcu)
+            if (Icu.IsInUse())
             {
                 if (TimeZoneInfo.TryConvertWindowsIdToIanaId(TimeZoneInfo.Local.Id, out var ianaId))
                 {

@@ -19,8 +19,7 @@ public static class ApiHttpClient
 
         services.AddHttpClient("TokenHttpClient", client =>
             {
-                client.BaseAddress =
-                    new Uri($"https://login.microsoftonline.com/{Constants.TenantId}/oauth2/v2.0/token");
+                client.BaseAddress = Constants.TokenUri;
             })
             .AddStandardResilienceHandler();
 

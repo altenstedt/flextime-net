@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net.Http.Json;
 using System.Runtime.InteropServices;
 using ConsoleAppFramework;
@@ -117,13 +116,7 @@ public class DaemonCommands(
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            // https://learn.microsoft.com/en-us/dotnet/core/extensions/globalization-icu
-            var sortVersion = CultureInfo.InvariantCulture.CompareInfo.Version;
-            var bytes = sortVersion.SortId.ToByteArray();
-            var tmp = bytes[3] << 24 | bytes[2] << 16 | bytes[1] << 8 | bytes[0];
-            var isUsingIcu = tmp != 0 && tmp == sortVersion.FullVersion;
-
-            if (isUsingIcu)
+            if (Icu.IsInUse())
             {
                 if (TimeZoneInfo.TryConvertWindowsIdToIanaId(TimeZoneInfo.Local.Id, out var ianaId))
                 {
