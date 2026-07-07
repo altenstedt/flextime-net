@@ -2,11 +2,7 @@
 
     <PropertyGroup>
         <TargetFramework>net10.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-        <LangVersion>default</LangVersion>
-        <VersionPrefix>7.7.2</VersionPrefix>
     </PropertyGroup>
 
     <ItemGroup>

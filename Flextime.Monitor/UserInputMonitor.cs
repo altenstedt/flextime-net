@@ -31,8 +31,14 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
 
     public async Task Initialize()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) && !string.IsNullOrEmpty(DBusAddress.Session))
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
+            if (string.IsNullOrEmpty(DBusAddress.Session))
+            {
+                throw new InvalidOperationException(
+                    "No D-Bus session bus address found. The monitor needs a desktop session to measure idle time.");
+            }
+
             var connection = new DBusConnection(DBusAddress.Session);
 
             await connection.ConnectAsync();
@@ -87,7 +93,7 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
             {
                 if (screenSaverMonitor == null)
                 {
-                    throw new InvalidOperationException("Screen saver monitory not found.");
+                    throw new InvalidOperationException("Screen saver monitor not found.");
                 }
 
                 await screenSaverMonitor.WatchActiveChangedAsync((exception, active) =>

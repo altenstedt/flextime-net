@@ -1,0 +1,10 @@
+<Project>
+
+  <PropertyGroup>
+    <VersionPrefix>7.7.2</VersionPrefix>
+    <LangVersion>default</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

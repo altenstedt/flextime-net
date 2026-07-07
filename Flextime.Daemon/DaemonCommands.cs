@@ -178,7 +178,15 @@ public class DaemonCommands(
             LogSummaryInterval = interval
         });
 
-        await monitor.Initialize();
+        try
+        {
+            await monitor.Initialize();
+        }
+        catch (InvalidOperationException exception)
+        {
+            logger.LogCritical("{Message}", exception.Message);
+            return;
+        }
 
         var version = VersionHelper.GetVersion();
 

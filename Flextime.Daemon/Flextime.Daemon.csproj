@@ -3,11 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-Flextime.Daemon-6a3a48d2-d125-445d-9e48-1dc5f2faae52</UserSecretsId>
-    <VersionPrefix>7.7.2</VersionPrefix>
-    <LangVersion>default</LangVersion>
   </PropertyGroup>
 
   <PropertyGroup>

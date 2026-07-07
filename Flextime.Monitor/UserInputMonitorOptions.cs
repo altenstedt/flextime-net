@@ -1,6 +1,6 @@
 namespace Flextime.Monitor;
 
-public struct UserInputMonitorOptions
+public record UserInputMonitorOptions
 {
     public TimeSpan LogSummaryInterval { get; init; }
 

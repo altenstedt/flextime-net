@@ -1,16 +1,16 @@
 namespace Flextime.Client;
 
-public struct Options()
+public record Options
 {
-    public required string MeasurementsFolder { get; set; }
-    
-    public bool Verbose { get; set; }
-    
-    public bool SplitWeek { get; set; }
+    public required string MeasurementsFolder { get; init; }
 
-    public TimeSpan Since { get; set; }
+    public bool Verbose { get; init; }
 
-    public int BlocksPerDay { get; set; }
-    
-    public TimeSpan Idle { get; set; }
+    public bool SplitWeek { get; init; }
+
+    public TimeSpan Since { get; init; }
+
+    public int BlocksPerDay { get; init; }
+
+    public TimeSpan Idle { get; init; }
 }
