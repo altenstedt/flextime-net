@@ -43,10 +43,8 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
 
             await connection.ConnectAsync();
 
-            var service = new IdleMonitor.DBus.IdleMonitorService(connection, "org.gnome.Mutter.IdleMonitor");
-
-            idleMonitor = service.CreateIdleMonitor("/org/gnome/Mutter/IdleMonitor/Core");
-            screenSaverMonitor = service.CreateScreenSaver("/org/gnome/ScreenSaver");
+            idleMonitor = new IdleMonitor.DBus.IdleMonitor(connection, "org.gnome.Mutter.IdleMonitor", "/org/gnome/Mutter/IdleMonitor/Core");
+            screenSaverMonitor = new IdleMonitor.DBus.ScreenSaver(connection, "org.gnome.Mutter.IdleMonitor", "/org/gnome/ScreenSaver");
         }
 
         if (!options.IgnoreSessionLocked) {
@@ -96,18 +94,20 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
                     throw new InvalidOperationException("Screen saver monitor not found.");
                 }
 
-                await screenSaverMonitor.WatchActiveChangedAsync((exception, active) =>
+                await screenSaverMonitor.WatchActiveChangedAsync((Notification<bool> notification) =>
                 {
-                    if (exception == null)
+                    if (notification.Exception == null)
                     {
+                        var active = notification.Value;
+
                         sessionLocked = active;
                         logger.LogTrace(active ? "ScreenSaver switched to active" : "ScreenSaver switched to inactive");
                     }
                     else
                     {
-                        logger.LogError(exception, "ScreenSaver exception.");
+                        logger.LogError(notification.Exception, "ScreenSaver exception.");
                     }
-                });
+                }, ObserverFlags.None);
 
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
