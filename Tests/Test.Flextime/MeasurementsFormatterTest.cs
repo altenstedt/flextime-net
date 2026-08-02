@@ -61,7 +61,9 @@ public class MeasurementsFormatterTest
                     Create(DateTimeOffset.Parse("2023-12-01T07:10:01+01:00"), TimeSpan.FromMinutes(10)),
                     Create(DateTimeOffset.Parse("2023-12-01T08:23:49+01:00"), TimeSpan.FromMinutes(10))
                 ],
-                "2023-12-01 07:00 – 08:23 01:23 | 00:00 w/48 Fri",
+                // A gap of exactly the idle limit counts as active —
+                // inclusive, matching the web client.
+                "2023-12-01 07:00 – 08:23 01:23 | 00:10 w/48 Fri",
                 TimeSpan.FromMinutes(10),
                 false,
                 0);
