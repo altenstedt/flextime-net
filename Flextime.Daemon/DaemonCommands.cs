@@ -10,6 +10,7 @@ namespace Flextime.Daemon;
 
 public class DaemonCommands(
     PrintInfo printInfo,
+    PrintData printData,
     ILogger<DaemonCommands> logger,
     ILogger<UserInputMonitor> monitorLogger,
     IHttpClientFactory httpClientFactory,
@@ -98,6 +99,26 @@ public class DaemonCommands(
         {
             AnsiConsole.WriteLine($"Network error: {exception.Message}");
         }
+    }
+
+    /// <summary>Show activity data stored on the server</summary>
+    /// <param name="days">-d, Number of days to show.</param>
+    /// <param name="computer">-c, Computer id to show, comma separated for multiple. Defaults to this computer.</param>
+    /// <param name="allComputers">Show all computers.</param>
+    /// <param name="idle">-i, Idle limit in minutes. Gaps no longer than this count as active time.</param>
+    /// <param name="timestamps">Include raw timestamps (Unix seconds) in JSON output.</param>
+    /// <param name="json">Write JSON to standard out.</param>
+    public Task<int> Data(
+        int days = 30,
+        string[]? computer = null,
+        bool allComputers = false,
+        int idle = 10,
+        bool timestamps = false,
+        bool json = false)
+    {
+        logger.LogDebug("Data invoked.");
+
+        return printData.Invoke(days, computer ?? [], allComputers, idle, timestamps, json);
     }
 
     /// <summary>Listen to events on device</summary>

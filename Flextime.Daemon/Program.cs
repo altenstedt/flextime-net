@@ -18,6 +18,7 @@ builder.Services.AddSingleton(computer);
 builder.Services.AddSingleton(deviceCode);
 builder.Services.AddSingleton<Sync>();
 builder.Services.AddSingleton<PrintInfo>();
+builder.Services.AddSingleton<PrintData>();
 builder.Services.AddApiHttpClient(refreshToken);
 
 builder.Logging.AddFilter("Flextime",
