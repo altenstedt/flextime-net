@@ -53,6 +53,30 @@ public class SingleInstanceTests : IDisposable
     }
 
     [Fact]
+    public void IsHeldReflectsLockState()
+    {
+        var path = Path.Combine(folder, "listen.lock");
+
+        Assert.False(SingleInstance.IsHeld(path));
+
+        using var held = SingleInstance.TryAcquire(path);
+
+        Assert.True(SingleInstance.IsHeld(path));
+    }
+
+    [Fact]
+    public void ProbeDoesNotHoldTheLock()
+    {
+        var path = Path.Combine(folder, "listen.lock");
+
+        Assert.False(SingleInstance.IsHeld(path));
+
+        using var held = SingleInstance.TryAcquire(path);
+
+        Assert.NotNull(held);
+    }
+
+    [Fact]
     public void CreatesMissingDirectory()
     {
         using var held = SingleInstance.TryAcquire(Path.Combine(folder, "missing", "listen.lock"));

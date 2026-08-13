@@ -8,6 +8,24 @@ namespace Flextime.Daemon;
 /// </summary>
 public static class SingleInstance
 {
+    public static readonly string ListenLockPath = Path.Combine(Constants.MeasurementsFolder, "..", "listen.lock");
+    public static readonly string SyncLockPath = Path.Combine(Constants.MeasurementsFolder, "..", "sync.lock");
+
+    /// <summary>Whether another process currently holds the lock.</summary>
+    public static bool IsHeld(string path)
+    {
+        var held = TryAcquire(path);
+
+        if (held == null)
+        {
+            return true;
+        }
+
+        held.Dispose();
+
+        return false;
+    }
+
     /// <summary>Returns null when another instance holds the lock.</summary>
     public static IDisposable? TryAcquire(string path)
     {

@@ -25,6 +25,8 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
         AnsiConsole.MarkupLine($"Computer name      : {computer.Name}");
         AnsiConsole.MarkupLine($"Computer id        : {computer.Id}");
         AnsiConsole.MarkupLine($"Time zone          : {PrintTimeZone()}");
+        AnsiConsole.MarkupLine($"Listen             : {(SingleInstance.IsHeld(SingleInstance.ListenLockPath) ? "Running" : "Not running")}");
+        AnsiConsole.MarkupLine($"Recurring sync     : {(SingleInstance.IsHeld(SingleInstance.SyncLockPath) ? "Running" : "Not running")}");
         AnsiConsole.MarkupLine($"Server             : {Constants.ApiUri}");
 
         await AnsiConsole.Status()

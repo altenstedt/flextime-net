@@ -66,7 +66,7 @@ public class DaemonCommands(
             }
             else if (every.HasValue)
             {
-                using var singleInstance = SingleInstance.TryAcquire(Path.Combine(computer.MeasurementsFolder, "..", "sync.lock"));
+                using var singleInstance = SingleInstance.TryAcquire(SingleInstance.SyncLockPath);
 
                 if (singleInstance == null)
                 {
@@ -142,7 +142,7 @@ public class DaemonCommands(
     {
         logger.LogDebug("Listen invoked.");
 
-        using var singleInstance = SingleInstance.TryAcquire(Path.Combine(computer.MeasurementsFolder, "..", "listen.lock"));
+        using var singleInstance = SingleInstance.TryAcquire(SingleInstance.ListenLockPath);
 
         if (singleInstance == null)
         {
