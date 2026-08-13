@@ -30,17 +30,20 @@ public static class Reader
         return list;
     }
 
-    private static SortedDictionary<DateOnly, (List<MeasurementWithZone> list, long hash)> GroupAndHash(List<MeasurementWithZone> list, TimeSpan since)
+    private static SortedDictionary<DateOnly, (List<MeasurementWithZone> list, long hash)> GroupAndHash(List<MeasurementWithZone> list, TimeSpan since, DateTimeOffset now)
     {
         var byDates = list
             .GroupBy(item => DateOnly.FromDateTime(item.Timestamp.Date))
-            .Where(date => date.Key > DateOnly.FromDateTime(since > TimeSpan.Zero ? DateTime.Now - since : DateTime.MinValue))
+            // The cutoff date is computed in the zone the day was recorded
+            // in, so that a day in a zone ahead of or behind this machine
+            // is kept or dropped as a whole.
+            .Where(group => since <= TimeSpan.Zero || group.Key > TimeZones.DateAt(now - since, group.First().Zone))
             .ToDictionary(item => item.Key, item => (item.ToList(), HashMeasurements(item)));
 
         return new SortedDictionary<DateOnly, (List<MeasurementWithZone> list, long hash)>(byDates);
     }
 
-    public static async Task<SortedDictionary<DateOnly, (List<MeasurementWithZone> list, long hash)>> ReadRemote(HttpClient httpClient, TimeSpan since, string computerId)
+    public static async Task<SortedDictionary<DateOnly, (List<MeasurementWithZone> list, long hash)>> ReadRemote(HttpClient httpClient, TimeSpan since, string computerId, DateTimeOffset? now = null)
     {
         PagedMeasurementsDataContract? pagedMeasurements = null;
 
@@ -60,16 +63,16 @@ public static class Reader
 
         var measurements = pagedMeasurements.Items.SelectMany(item => item.Items.Select(x => new MeasurementWithZone(new Measurement { Idle = x.Idle, Kind = Measurement.Types.Kind.None, Timestamp = x.Timestamp}, item.Zone, item.Interval))).ToList();
 
-        var byDates = GroupAndHash(measurements, since);
+        var byDates = GroupAndHash(measurements, since, now ?? DateTimeOffset.UtcNow);
 
         return byDates;
     }
 
-    public static SortedDictionary<DateOnly, (List<MeasurementWithZone> list, long hash)> ReadFiles(string folder, TimeSpan since)
+    public static SortedDictionary<DateOnly, (List<MeasurementWithZone> list, long hash)> ReadFiles(string folder, TimeSpan since, DateTimeOffset? now = null)
     {
         var list = ReadFiles(folder);
 
-        var byDates = GroupAndHash(list, since);
+        var byDates = GroupAndHash(list, since, now ?? DateTimeOffset.UtcNow);
 
         return byDates;
     }

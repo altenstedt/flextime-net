@@ -101,6 +101,24 @@ public class ReaderTests : IDisposable
     }
 
     [Fact]
+    public void SinceCutoffFollowsMeasurementZone()
+    {
+        // At 2024-01-10 20:00 UTC, one day back is 2024-01-09 20:00 UTC,
+        // which is already January 10 in Tokyo.  Only Tokyo dates after
+        // January 10 remain.
+        var now = DateTimeOffset.Parse("2024-01-10T20:00:00+00:00");
+
+        WriteFile(folder, "Asia/Tokyo", DateTimeOffset.Parse("2024-01-09T02:00:00+00:00")); // January 9 in Tokyo
+        WriteFile(folder, "Asia/Tokyo", DateTimeOffset.Parse("2024-01-10T02:00:00+00:00")); // January 10 in Tokyo
+        WriteFile(folder, "Asia/Tokyo", DateTimeOffset.Parse("2024-01-10T18:00:00+00:00")); // January 11 in Tokyo
+
+        var byDates = Reader.ReadFiles(folder, TimeSpan.FromDays(1), now);
+
+        var day = Assert.Single(byDates);
+        Assert.Equal(new DateOnly(2024, 1, 11), day.Key);
+    }
+
+    [Fact]
     public void RemainderAfterSyncedPrefixIsFound()
     {
         var timestamps = Timestamps("2024-01-01T10:00:00+00:00", count: 5);

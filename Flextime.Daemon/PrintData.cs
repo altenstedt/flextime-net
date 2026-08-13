@@ -53,8 +53,6 @@ public class PrintData(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                     ?? new ComputerDataContract(computer.Id!, computer.Name));
             }
 
-            var firstDate = DateOnly.FromDateTime(DateTime.Now).AddDays(-days);
-
             var result = new List<ComputerActivityDataContract>();
 
             foreach (var target in targets)
@@ -69,16 +67,10 @@ public class PrintData(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                     PrintDataSourceGenerationContext.Default.ZonesDataContract);
 
                 var byDate = (zones?.Items ?? [])
-                    .SelectMany(item =>
-                    {
-                        var zoneInfo = TimeZoneInfo.FindSystemTimeZoneById(item.Zone);
-
-                        return item.Timestamps.Select(timestamp => (
-                            Timestamp: TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeSeconds(timestamp), zoneInfo),
-                            item.Zone));
-                    })
+                    .SelectMany(item => item.Timestamps.Select(timestamp => (
+                        Timestamp: TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeSeconds(timestamp), TimeZones.Get(item.Zone)),
+                        item.Zone)))
                     .GroupBy(item => DateOnly.FromDateTime(item.Timestamp.Date))
-                    .Where(group => group.Key > firstDate)
                     .OrderBy(group => group.Key);
 
                 var dayActivities = new List<DayActivityDataContract>();
@@ -86,6 +78,15 @@ public class PrintData(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                 foreach (var group in byDate)
                 {
                     var ordered = group.OrderBy(item => item.Timestamp).ToArray();
+
+                    // Days back count from today in the zone the day was
+                    // recorded in, so that today on a computer ahead of or
+                    // behind this machine is not cut off.
+                    if (group.Key <= TimeZones.DateAt(DateTimeOffset.UtcNow, ordered[0].Zone).AddDays(-days))
+                    {
+                        continue;
+                    }
+
                     var day = formatter.ComputeDay(ordered.Select(item => item.Timestamp).ToArray());
 
                     if (day == null)
