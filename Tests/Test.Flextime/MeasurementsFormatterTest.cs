@@ -169,6 +169,45 @@ public class MeasurementsFormatterTest
 
             Add(
                 [
+                    Create(DateTimeOffset.Parse("2024-03-31T01:55:00+01:00"), TimeSpan.FromMinutes(10)),
+                    Create(DateTimeOffset.Parse("2024-03-31T03:05:00+02:00"), TimeSpan.FromMinutes(10)),
+                ],
+                // Spring forward in Stockholm: the wall clock jumps from 02:00
+                // to 03:00, so times display 01:55 – 03:05 but only 10 real
+                // minutes pass, and durations use the real elapsed time.
+                "2024-03-31 01:55 – 03:05 00:10 | 00:10 w/13 Sun",
+                TimeSpan.FromMinutes(10),
+                false,
+                0);
+
+            Add(
+                [
+                    Create(DateTimeOffset.Parse("2024-10-27T02:30:00+02:00"), TimeSpan.FromMinutes(10)),
+                    Create(DateTimeOffset.Parse("2024-10-27T02:30:00+01:00"), TimeSpan.FromMinutes(10)),
+                ],
+                // Fall back in Stockholm: 02:30 occurs twice, one real hour
+                // apart, so the span is 01:00 and the gap exceeds the idle
+                // limit.
+                "2024-10-27 02:30 – 02:30 01:00 | 00:00 w/43 Sun",
+                TimeSpan.FromMinutes(10),
+                false,
+                0);
+
+            Add(
+                [
+                    CreateWithZone(DateTimeOffset.Parse("2024-12-31T23:30:00+00:00"), TimeSpan.FromMinutes(10), "Asia/Tokyo"),
+                    CreateWithZone(DateTimeOffset.Parse("2024-12-31T23:39:00+00:00"), TimeSpan.FromMinutes(10), "Asia/Tokyo"),
+                ],
+                // Still December 31 in UTC, but January 1 in Tokyo: the date,
+                // ISO week, and weekday follow the measurement zone, not the
+                // zone of the machine running this test.
+                "2025-01-01 08:30 – 08:39 00:09 | 00:09 w/01 Wed",
+                TimeSpan.FromMinutes(10),
+                false,
+                0);
+
+            Add(
+                [
                     Create(DateTimeOffset.Parse("2023-12-01T07:00:00+01:00"), TimeSpan.FromMinutes(10)),
                 ],
                 string.Empty,
