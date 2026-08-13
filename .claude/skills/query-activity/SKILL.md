@@ -67,9 +67,12 @@ PATH, use it directly instead — it starts faster.)
 
 ## Daemon status and services
 
-- The bare command (no arguments) prints installation info, including a
-  `Listen : Running | Not running` line — whether this machine is recording
-  measurements right now. Check it when data seems to be missing.
+- The bare command (no arguments) prints installation info, including
+  `Listen : Running (<zone>) | Not running` — whether this machine is
+  recording right now and in which time zone — and
+  `Sync : Every <interval> (installed <date>) | Running (every <interval>) |
+  Not scheduled` for the sync schedule. Check these when data seems to be
+  missing.
 - The daemon can be installed as per-user services with
   `install [-t <zone>] [--every <interval>]`: `listen` plus a periodic
   `sync --once` (launchd agents on macOS, systemd user units on Linux,

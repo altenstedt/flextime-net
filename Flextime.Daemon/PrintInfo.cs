@@ -25,7 +25,8 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
         AnsiConsole.MarkupLine($"Computer name      : {computer.Name}");
         AnsiConsole.MarkupLine($"Computer id        : {computer.Id}");
         AnsiConsole.MarkupLine($"Time zone          : {PrintTimeZone()}");
-        AnsiConsole.MarkupLine($"Listen             : {(SingleInstance.IsHeld(SingleInstance.ListenLockPath) ? "Running" : "Not running")}");
+        AnsiConsole.MarkupLine($"Listen             : {ListenStatus()}");
+        AnsiConsole.MarkupLine($"Sync               : {SyncStatus()}");
         AnsiConsole.MarkupLine($"Server             : {Constants.ApiUri}");
 
         await AnsiConsole.Status()
@@ -126,6 +127,35 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
     private async Task PrintSummary(int count)
     {
         await sync.Print(count);
+    }
+
+    private static string ListenStatus()
+    {
+        if (!SingleInstance.IsHeld(SingleInstance.ListenLockPath))
+        {
+            return "Not running";
+        }
+
+        // Written by the running listen process, which holds the lock.
+        return StateFiles.TryRead(StateFiles.ListenPath) is [var zone, ..]
+            ? $"Running ({zone})"
+            : "Running";
+    }
+
+    private static string SyncStatus()
+    {
+        if (SingleInstance.IsHeld(SingleInstance.SyncLockPath))
+        {
+            // A sync --every loop is running and published its interval.
+            return StateFiles.TryRead(StateFiles.SyncPath) is [var every, ..]
+                ? $"Running (every {every})"
+                : "Running";
+        }
+
+        // No loop; the install command may have registered a schedule.
+        return StateFiles.TryRead(StateFiles.InstallPath) is [var interval, var date, ..]
+            ? $"Every {interval} (installed {date})"
+            : "Not scheduled";
     }
 
     private static string PrintTimeZone()

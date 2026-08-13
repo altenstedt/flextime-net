@@ -74,6 +74,10 @@ public class DaemonCommands(
                     return;
                 }
 
+                // Publish the interval for the info command.  Trusted only
+                // while this process holds the sync lock.
+                StateFiles.Write(StateFiles.SyncPath, every.Value.ToString());
+
                 var version = VersionHelper.GetVersion();
 
                 logger.LogInformation("Flextime sync {Version} started.", version);
@@ -208,6 +212,10 @@ public class DaemonCommands(
                 return;
             }
         }
+
+        // Publish the effective zone for the info command.  Trusted only
+        // while this process holds the listen lock.
+        StateFiles.Write(StateFiles.ListenPath, timeZone ?? UserInputMonitor.GetTimeZoneInfo());
 
         var monitor = new UserInputMonitor(monitorLogger, new UserInputMonitorOptions
         {

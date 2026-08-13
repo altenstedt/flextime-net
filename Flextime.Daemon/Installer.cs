@@ -84,9 +84,18 @@ public class Installer(DeviceCode deviceCode)
             return 1;
         }
 
-        if (result == 0 && !deviceCode.IsAuthenticated)
+        if (result == 0)
         {
-            Console.WriteLine("You are not logged on. Sync will not upload data until you use the login command.");
+            // Manifest for the info command; removed by uninstall.
+            StateFiles.Write(
+                StateFiles.InstallPath,
+                every.ToString(),
+                DateOnly.FromDateTime(DateTime.Now).ToString("O"));
+
+            if (!deviceCode.IsAuthenticated)
+            {
+                Console.WriteLine("You are not logged on. Sync will not upload data until you use the login command.");
+            }
         }
 
         return result;
@@ -94,23 +103,32 @@ public class Installer(DeviceCode deviceCode)
 
     public async Task<int> Uninstall()
     {
+        int result;
+
         if (OperatingSystem.IsMacOS())
         {
-            return await UninstallMacOS();
+            result = await UninstallMacOS();
         }
-
-        if (OperatingSystem.IsLinux())
+        else if (OperatingSystem.IsLinux())
         {
-            return await UninstallLinux();
+            result = await UninstallLinux();
         }
-
-        if (OperatingSystem.IsWindows())
+        else if (OperatingSystem.IsWindows())
         {
-            return await UninstallWindows();
+            result = await UninstallWindows();
+        }
+        else
+        {
+            Console.Error.WriteLine($"OS {RuntimeInformation.OSDescription} is not supported.");
+            return 1;
         }
 
-        Console.Error.WriteLine($"OS {RuntimeInformation.OSDescription} is not supported.");
-        return 1;
+        if (result == 0)
+        {
+            StateFiles.Delete(StateFiles.InstallPath);
+        }
+
+        return result;
     }
 
     private static async Task<int> InstallMacOS(List<string> listenCommand, List<string> syncCommand, TimeSpan every)
