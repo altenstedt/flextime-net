@@ -10,7 +10,7 @@ namespace Flextime.Daemon;
 /// systemd user units on Linux, and scheduled tasks on Windows.  Everything
 /// is per user; no elevation is needed.
 /// </summary>
-public class Installer
+public class Installer(DeviceCode deviceCode)
 {
     private const string ListenLabel = "se.flextime.listen";
     private const string SyncLabel = "se.flextime.sync";
@@ -64,23 +64,32 @@ public class Installer
 
         List<string> syncCommand = [executable, "sync", "--once"];
 
+        int result;
+
         if (OperatingSystem.IsMacOS())
         {
-            return await InstallMacOS(listenCommand, syncCommand, every);
+            result = await InstallMacOS(listenCommand, syncCommand, every);
         }
-
-        if (OperatingSystem.IsLinux())
+        else if (OperatingSystem.IsLinux())
         {
-            return await InstallLinux(listenCommand, syncCommand, every);
+            result = await InstallLinux(listenCommand, syncCommand, every);
         }
-
-        if (OperatingSystem.IsWindows())
+        else if (OperatingSystem.IsWindows())
         {
-            return await InstallWindows(listenCommand, syncCommand, every);
+            result = await InstallWindows(listenCommand, syncCommand, every);
+        }
+        else
+        {
+            Console.Error.WriteLine($"OS {RuntimeInformation.OSDescription} is not supported.");
+            return 1;
         }
 
-        Console.Error.WriteLine($"OS {RuntimeInformation.OSDescription} is not supported.");
-        return 1;
+        if (result == 0 && !deviceCode.IsAuthenticated)
+        {
+            Console.WriteLine("You are not logged on. Sync will not upload data until you use the login command.");
+        }
+
+        return result;
     }
 
     public async Task<int> Uninstall()
