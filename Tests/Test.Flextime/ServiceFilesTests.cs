@@ -17,6 +17,8 @@ public class ServiceFilesTests
         Assert.Contains("<string>Europe/Stockholm</string>", plist);
         Assert.Contains("<string>/Users/x/Library/Logs/Flextime/listen.log</string>", plist);
         Assert.Contains("<key>KeepAlive</key>", plist);
+        // Restart on crash only, so that a clean exit does not loop.
+        Assert.Contains("<key>SuccessfulExit</key>", plist);
         Assert.DoesNotContain("<key>StartInterval</key>", plist);
     }
 

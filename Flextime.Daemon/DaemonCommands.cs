@@ -66,6 +66,14 @@ public class DaemonCommands(
             }
             else if (every.HasValue)
             {
+                using var singleInstance = SingleInstance.TryAcquire(Path.Combine(computer.MeasurementsFolder, "..", "sync.lock"));
+
+                if (singleInstance == null)
+                {
+                    logger.LogCritical("Another recurring sync instance is already running.");
+                    return;
+                }
+
                 var version = VersionHelper.GetVersion();
 
                 logger.LogInformation("Flextime sync {Version} started.", version);
@@ -133,6 +141,14 @@ public class DaemonCommands(
         CancellationToken cancellationToken = default)
     {
         logger.LogDebug("Listen invoked.");
+
+        using var singleInstance = SingleInstance.TryAcquire(Path.Combine(computer.MeasurementsFolder, "..", "listen.lock"));
+
+        if (singleInstance == null)
+        {
+            logger.LogCritical("Another listen instance is already running.");
+            return;
+        }
 
         var interval = logSummaryInterval ?? TimeSpan.FromHours(1);
 

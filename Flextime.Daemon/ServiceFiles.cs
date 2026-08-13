@@ -34,8 +34,13 @@ public static class ServiceFiles
 
         if (keepAlive)
         {
+            // Restart on crash only.  A clean exit, like the single instance
+            // guard declining to start, must not restart-loop.
             builder.AppendLine("    <key>KeepAlive</key>");
-            builder.AppendLine("    <true/>");
+            builder.AppendLine("    <dict>");
+            builder.AppendLine("        <key>SuccessfulExit</key>");
+            builder.AppendLine("        <false/>");
+            builder.AppendLine("    </dict>");
         }
 
         if (startInterval.HasValue)
