@@ -16,7 +16,8 @@ public class DaemonCommands(
     IHttpClientFactory httpClientFactory,
     DeviceCode deviceCode,
     Computer computer,
-    Sync sync)
+    Sync sync,
+    Installer installer)
 {
     /// <summary>Flextime -- tracking working hours. With no command, displays information about the installation and exits.</summary>
     [Command("")]
@@ -230,5 +231,23 @@ public class DaemonCommands(
 
         logger.LogDebug("Stop.");
         await monitor.MarkStop();
+    }
+
+    /// <summary>Install listen and sync as user services that start at logon</summary>
+    /// <param name="timeZone">-t, Time zone used. Required on Windows.</param>
+    /// <param name="every">Sync interval (default: 20 minutes).</param>
+    public async Task<int> Install(string? timeZone = null, TimeSpan? every = null)
+    {
+        logger.LogDebug("Install invoked.");
+
+        return await installer.Install(timeZone, every ?? TimeSpan.FromMinutes(20));
+    }
+
+    /// <summary>Uninstall the user services. Measurements and tokens are kept.</summary>
+    public async Task<int> Uninstall()
+    {
+        logger.LogDebug("Uninstall invoked.");
+
+        return await installer.Uninstall();
     }
 }
