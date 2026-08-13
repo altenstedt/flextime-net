@@ -14,4 +14,17 @@ public class TimeZonesTests
 
         Assert.Equal(DateOnly.Parse(expected), TimeZones.DateAt(instant, zone));
     }
+
+    [Fact]
+    public void TryGetKnownZone()
+    {
+        Assert.True(TimeZones.TryGet("Europe/Stockholm", out var zone));
+        Assert.Equal("Europe/Stockholm", zone.Id);
+    }
+
+    [Fact]
+    public void TryGetUnknownZone()
+    {
+        Assert.False(TimeZones.TryGet("Not/AZone", out _));
+    }
 }

@@ -66,7 +66,23 @@ public class PrintData(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                     $"/ids?api-version=1.2&id={target.Id}",
                     PrintDataSourceGenerationContext.Default.ZonesDataContract);
 
-                var byDate = (zones?.Items ?? [])
+                var items = new List<ZoneDataContract>();
+
+                foreach (var item in zones?.Items ?? [])
+                {
+                    if (TimeZones.TryGet(item.Zone, out _))
+                    {
+                        items.Add(item);
+                    }
+                    else
+                    {
+                        // A zone the server knows but this machine cannot
+                        // resolve, for example on Windows without ICU.
+                        Console.Error.WriteLine($"Skipping measurements in unknown time zone {item.Zone}.");
+                    }
+                }
+
+                var byDate = items
                     .SelectMany(item => item.Timestamps.Select(timestamp => (
                         Timestamp: TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeSeconds(timestamp), TimeZones.Get(item.Zone)),
                         item.Zone)))
