@@ -65,6 +65,21 @@ PATH, use it directly instead — it starts faster.)
   for them.
 - `1` — network error or unknown computer id; message on stderr.
 
+## Daemon status and services
+
+- The bare command (no arguments) prints installation info, including a
+  `Listen : Running | Not running` line — whether this machine is recording
+  measurements right now. Check it when data seems to be missing.
+- The daemon can be installed as per-user services with
+  `install [-t <zone>] [--every <interval>]`: `listen` plus a periodic
+  `sync --once` (launchd agents on macOS, systemd user units on Linux,
+  scheduled tasks on Windows). `uninstall` removes the services and keeps
+  all data. Both modify system state — only run them when the user
+  explicitly asks.
+- With the sync service installed, server data for this machine is at most
+  one sync interval (default 20 minutes) old, so a manual `sync --once` is
+  rarely needed.
+
 ## Caveats
 
 - The command is read-only and shows **server-side data only**. This machine's
