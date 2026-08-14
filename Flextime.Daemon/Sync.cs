@@ -13,7 +13,7 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         LocalOnly,
         CanSync,
         InSync,
-        CannotSync,
+        ServerHasMore,
     }
 
     private readonly MeasurementsFormatter formatter = new(TimeSpan.FromMinutes(10), false, 0);
@@ -35,7 +35,7 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
                     // Logging every day as in sync on every pass would be noise.
                     break;
 
-                case DayStatus.CannotSync:
+                case DayStatus.ServerHasMore:
                     logger.LogWarning(line);
                     break;
 
@@ -54,57 +54,97 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
     private async Task ActOnRemoteStatus(bool upload, Action<string, DayStatus> output, int limit = int.MaxValue)
     {
         var remoteSummary = await httpClient.GetFromJsonAsync(
-            $"/{computer.Id}/summary",
+            $"/{computer.Id}/summary?api-version=1.3",
             SummarySourceGenerationContext.Default.SummaryDataContract);
 
         var localByDates = Reader.ReadFiles(Constants.MeasurementsFolder, TimeSpan.MinValue);
 
+        // (Date, Zone) is unique in the response — the server stores one
+        // row per day and zone — so a dictionary probes each group in
+        // constant time.
+        var remoteByKey = remoteSummary?.Items.ToDictionary(item => (item.Date, item.Zone)) ?? new();
+
         foreach (var date in localByDates.TakeLast(limit))
         {
             var summary = formatter.SummarizeDay(date.Value.list.ToArray());
-            var match = remoteSummary?.Items.SingleOrDefault(item => item.Date == date.Key);
 
-            if (match == null)
+            // Compared per zone, mirroring the storage rows.  A matching
+            // watermark — the same number of distinct timestamps, the
+            // same last one, and the same sum — is taken to mean the
+            // server holds the day.  Sets agreeing on all three can
+            // still differ in principle, but only by trading multiple
+            // timestamps that cancel out exactly.
+            var stale = new List<IGrouping<string, MeasurementWithZone>>();
+            var serverHasMore = false;
+            var known = false;
+
+            foreach (var byZone in date.Value.list.GroupBy(item => item.Zone))
             {
-                if (upload)
+                var timestamps = byZone
+                    .Select(item => item.Measurement.Timestamp)
+                    .Distinct()
+                    .Order()
+                    .ToArray();
+
+                var match = remoteByKey.GetValueOrDefault((date.Key, byZone.Key));
+
+                known |= match != null;
+
+                if (match != null && match.Count == timestamps.Length && match.Last == timestamps[^1]
+                    && match.Sum == timestamps.Sum(item => (long)item))
                 {
-                    await Upload(date.Value.list);
-                    output($"{summary} [synced]", DayStatus.Synced);
+                    continue;
                 }
-                else
+
+                if (match != null && match.Count > timestamps.Length && match.Last >= timestamps[^1])
                 {
-                    output($"{summary} [local only]", DayStatus.LocalOnly);
+                    // The server holds more than this machine: local
+                    // files restored from an older backup, a reused
+                    // computer id, or rows the old client uploaded with
+                    // the whole day under one zone.  Uploading cannot
+                    // reconcile that — the merge only adds — so say so
+                    // instead of re-uploading forever.
+                    serverHasMore = true;
+                    continue;
                 }
+
+                stale.Add(byZone);
             }
-            else if (match.Hash == date.Value.hash)
+
+            if (stale.Count == 0)
             {
-                output($"{summary} [in sync]", DayStatus.InSync);
+                output(
+                    serverHasMore
+                        ? $"{summary} [server has more]"
+                        : $"{summary} [in sync]",
+                    serverHasMore ? DayStatus.ServerHasMore : DayStatus.InSync);
+            }
+            else if (upload)
+            {
+                // The whole day is sent; the server merge is idempotent,
+                // so anything it already holds is deduplicated there.
+                foreach (var byZone in stale)
+                {
+                    await Upload(byZone.Key, [.. byZone]);
+                }
+
+                output($"{summary} [synced]", DayStatus.Synced);
+            }
+            else if (known)
+            {
+                output($"{summary} [can sync]", DayStatus.CanSync);
             }
             else
             {
-                var mismatch = Reader.ReadFiles(Constants.MeasurementsFolder, TimeSpan.MinValue, date.Key, match.Hash);
-
-                if (!mismatch.found)
-                {
-                    output($"{summary} [cannot sync]", DayStatus.CannotSync);
-                }
-                else if (upload)
-                {
-                    await Upload(mismatch.list);
-                    output($"{summary} [synced]", DayStatus.Synced);
-                }
-                else
-                {
-                    output($"{summary} [can sync]", DayStatus.CanSync);
-                }
+                output($"{summary} [local only]", DayStatus.LocalOnly);
             }
         }
     }
 
-    private async Task Upload(List<MeasurementWithZone> measurements)
+    private async Task Upload(string zone, List<MeasurementWithZone> measurements)
     {
         var payload = new MeasurementsDataContract(
-            measurements.First().Zone,
+            zone,
             measurements
                 .Select(item => new MeasurementDataContract((int)item.Measurement.Kind, item.Measurement.Timestamp))
                 .ToArray());
@@ -118,8 +158,8 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
     }
 }
 
-internal record DayDataContract(DateOnly Date, long Hash);
-internal record SummaryDataContract(DayDataContract[] Items);
+internal record SummaryItemDataContract(DateOnly Date, string Zone, int Count, long Last, long Sum);
+internal record SummaryDataContract(SummaryItemDataContract[] Items);
 
 internal record MeasurementDataContract(int Kind, long Timestamp);
 internal record MeasurementsDataContract(string Zone, MeasurementDataContract[] Items);

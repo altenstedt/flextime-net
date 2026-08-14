@@ -91,8 +91,10 @@ public class DaemonCommands(
                     }
                     catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
                     {
-                        // Network might be down — try again next interval.
-                        logger.LogWarning("Network error.");
+                        // Network might be down — or the API too old for
+                        // this client; the message says which.  Try
+                        // again next interval either way.
+                        logger.LogWarning("Sync failed: {Message}", exception.Message);
                     }
 
                     await Task.Delay(every.Value, cancellationToken);
