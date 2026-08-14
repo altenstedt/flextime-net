@@ -1,3 +1,4 @@
+using Humanizer;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Json;
 using System.Runtime.InteropServices;
@@ -151,14 +152,23 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
         {
             // A sync --every loop is running and published its interval.
             return StateFiles.TryRead(StateFiles.SyncPath) is [var every, ..]
-                ? $"Running (every {every})"
+                ? $"Running (every {HumanizeInterval(every)})"
                 : "Running";
         }
 
         // No loop; the install command may have registered a schedule.
         return StateFiles.TryRead(StateFiles.InstallPath) is [var interval, var date, ..]
-            ? $"Every {interval} (installed {date})"
+            ? $"Every {HumanizeInterval(interval)} (installed {date})"
             : "Not scheduled";
+    }
+
+    // The state files hold TimeSpan round-trip strings like 00:10:00;
+    // shown as "10 minutes".  Anything unparsable is shown as written.
+    private static string HumanizeInterval(string value)
+    {
+        return TimeSpan.TryParse(value, out var interval)
+            ? interval.Humanize(precision: 2)
+            : value;
     }
 
     private static string PrintTimeZone()
