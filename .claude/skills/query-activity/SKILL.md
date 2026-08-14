@@ -77,8 +77,10 @@ PATH, use it directly instead — it starts faster.)
   `install [-t <zone>] [--every <interval>]`: `listen` plus a periodic
   `sync --once` (launchd agents on macOS, systemd user units on Linux,
   scheduled tasks on Windows). `uninstall` removes the services and keeps
-  all data. Both modify system state — only run them when the user
-  explicitly asks.
+  all data. `stop` disables the listen service without uninstalling
+  (persists across logons; sync keeps running and uploads any remaining
+  data); `start` enables and starts it again. All of these modify system
+  state — only run them when the user explicitly asks.
 - With the sync service installed, server data for this machine is at most
   one sync interval (default 20 minutes) old, so a manual `sync --once` is
   rarely needed.

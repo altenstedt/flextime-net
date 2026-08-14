@@ -274,4 +274,20 @@ public class DaemonCommands(
 
         return await installer.Uninstall();
     }
+
+    /// <summary>Stop the listen service without uninstalling. It stays stopped across logons until started again. Sync keeps running.</summary>
+    public async Task<int> Stop()
+    {
+        logger.LogDebug("Stop invoked.");
+
+        return await installer.Stop();
+    }
+
+    /// <summary>Start the listen service after a stop</summary>
+    public async Task<int> Start()
+    {
+        logger.LogDebug("Start invoked.");
+
+        return await installer.Start();
+    }
 }

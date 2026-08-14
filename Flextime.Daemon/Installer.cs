@@ -86,11 +86,13 @@ public class Installer(DeviceCode deviceCode)
 
         if (result == 0)
         {
-            // Manifest for the info command; removed by uninstall.
+            // Manifest for the info command; removed by uninstall.  A
+            // fresh install starts the services, clearing any earlier stop.
             StateFiles.Write(
                 StateFiles.InstallPath,
                 every.ToString(),
                 DateOnly.FromDateTime(DateTime.Now).ToString("O"));
+            StateFiles.Delete(StateFiles.StopPath);
 
             if (!deviceCode.IsAuthenticated)
             {
@@ -126,6 +128,81 @@ public class Installer(DeviceCode deviceCode)
         if (result == 0)
         {
             StateFiles.Delete(StateFiles.InstallPath);
+            StateFiles.Delete(StateFiles.StopPath);
+        }
+
+        return result;
+    }
+
+    public async Task<int> Stop()
+    {
+        if (StateFiles.TryRead(StateFiles.InstallPath) == null)
+        {
+            Console.Error.WriteLine("The user services are not installed.");
+            return 1;
+        }
+
+        int result;
+
+        if (OperatingSystem.IsMacOS())
+        {
+            result = await StopMacOS();
+        }
+        else if (OperatingSystem.IsLinux())
+        {
+            result = await StopLinux();
+        }
+        else if (OperatingSystem.IsWindows())
+        {
+            result = await StopWindows();
+        }
+        else
+        {
+            Console.Error.WriteLine($"OS {RuntimeInformation.OSDescription} is not supported.");
+            return 1;
+        }
+
+        if (result == 0)
+        {
+            // Marker for the info command; removed by start, install,
+            // and uninstall.
+            StateFiles.Write(StateFiles.StopPath, DateOnly.FromDateTime(DateTime.Now).ToString("O"));
+        }
+
+        return result;
+    }
+
+    public async Task<int> Start()
+    {
+        if (StateFiles.TryRead(StateFiles.InstallPath) == null)
+        {
+            Console.Error.WriteLine("The user services are not installed.");
+            return 1;
+        }
+
+        int result;
+
+        if (OperatingSystem.IsMacOS())
+        {
+            result = await StartMacOS();
+        }
+        else if (OperatingSystem.IsLinux())
+        {
+            result = await StartLinux();
+        }
+        else if (OperatingSystem.IsWindows())
+        {
+            result = await StartWindows();
+        }
+        else
+        {
+            Console.Error.WriteLine($"OS {RuntimeInformation.OSDescription} is not supported.");
+            return 1;
+        }
+
+        if (result == 0)
+        {
+            StateFiles.Delete(StateFiles.StopPath);
         }
 
         return result;
@@ -155,8 +232,11 @@ public class Installer(DeviceCode deviceCode)
             Console.WriteLine($"Wrote {path}");
 
             // Unload a previous installation first so that install doubles
-            // as upgrade.  Fails harmlessly when nothing is loaded.
+            // as upgrade.  Fails harmlessly when nothing is loaded.  The
+            // enable clears a persisted stop, without which bootstrap
+            // refuses the label.
             await Run("launchctl", "bootout", $"{domain}/{label}");
+            await Run("launchctl", "enable", $"{domain}/{label}");
 
             var (code, error) = await Run("launchctl", "bootstrap", domain, path);
 
@@ -192,6 +272,44 @@ public class Installer(DeviceCode deviceCode)
         }
 
         Console.WriteLine("Measurements, tokens, and logs are kept.");
+        return 0;
+    }
+
+    private static async Task<int> StopMacOS()
+    {
+        var domain = $"gui/{getuid()}";
+
+        // The disable persists across logons; launchd stores it outside
+        // the plist, which stays in place.  Bootout fails harmlessly
+        // when nothing is loaded.
+        await Run("launchctl", "disable", $"{domain}/{ListenLabel}");
+        await Run("launchctl", "bootout", $"{domain}/{ListenLabel}");
+
+        Console.WriteLine("Stopped listening. Sync keeps running and uploads any remaining data.");
+        return 0;
+    }
+
+    private static async Task<int> StartMacOS()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var agents = Path.Combine(home, "Library", "LaunchAgents");
+        var domain = $"gui/{getuid()}";
+
+        await Run("launchctl", "enable", $"{domain}/{ListenLabel}");
+
+        // Unload first so that start doubles as restart.  Fails
+        // harmlessly when nothing is loaded.
+        await Run("launchctl", "bootout", $"{domain}/{ListenLabel}");
+
+        var (code, error) = await Run("launchctl", "bootstrap", domain, Path.Combine(agents, $"{ListenLabel}.plist"));
+
+        if (code != 0)
+        {
+            Console.Error.WriteLine($"launchctl bootstrap failed: {error}");
+            return 1;
+        }
+
+        Console.WriteLine("Started.");
         return 0;
     }
 
@@ -259,6 +377,34 @@ public class Installer(DeviceCode deviceCode)
         return 0;
     }
 
+    private static async Task<int> StopLinux()
+    {
+        var (code, error) = await Run("systemctl", "--user", "disable", "--now", ListenUnit);
+
+        if (code != 0)
+        {
+            Console.Error.WriteLine($"systemctl disable failed: {error}");
+            return 1;
+        }
+
+        Console.WriteLine("Stopped listening. Sync keeps running and uploads any remaining data.");
+        return 0;
+    }
+
+    private static async Task<int> StartLinux()
+    {
+        var (code, error) = await Run("systemctl", "--user", "enable", "--now", ListenUnit);
+
+        if (code != 0)
+        {
+            Console.Error.WriteLine($"systemctl enable failed: {error}");
+            return 1;
+        }
+
+        Console.WriteLine("Started.");
+        return 0;
+    }
+
     private static async Task<int> InstallWindows(List<string> listenCommand, List<string> syncCommand, TimeSpan every)
     {
         var user = $"{Environment.UserDomainName}\\{Environment.UserName}";
@@ -315,6 +461,38 @@ public class Installer(DeviceCode deviceCode)
         }
 
         Console.WriteLine("Measurements and tokens are kept.");
+        return 0;
+    }
+
+    private static async Task<int> StopWindows()
+    {
+        var (code, error) = await Run("schtasks", "/Change", "/TN", ListenTask, "/DISABLE");
+
+        if (code != 0)
+        {
+            Console.Error.WriteLine($"schtasks /Change failed for {ListenTask}: {error}");
+            return 1;
+        }
+
+        await Run("schtasks", "/End", "/TN", ListenTask);
+
+        Console.WriteLine("Stopped listening. Sync keeps running and uploads any remaining data.");
+        return 0;
+    }
+
+    private static async Task<int> StartWindows()
+    {
+        var (code, error) = await Run("schtasks", "/Change", "/TN", ListenTask, "/ENABLE");
+
+        if (code != 0)
+        {
+            Console.Error.WriteLine($"schtasks /Change failed for {ListenTask}: {error}");
+            return 1;
+        }
+
+        await Run("schtasks", "/Run", "/TN", ListenTask);
+
+        Console.WriteLine("Started.");
         return 0;
     }
 

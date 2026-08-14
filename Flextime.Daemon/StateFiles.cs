@@ -6,7 +6,8 @@ namespace Flextime.Daemon;
 /// SingleInstance locks: the files are only trusted while the matching
 /// lock is held, so stale content cannot lie.  The install manifest records
 /// the schedule registered by the install command and is removed by
-/// uninstall.
+/// uninstall.  The stop marker records that the stop command disabled the
+/// listen service and is removed by start, install, and uninstall.
 /// </summary>
 public static class StateFiles
 {
@@ -15,6 +16,7 @@ public static class StateFiles
     public static readonly string ListenPath = Path.Combine(Folder, "listen.txt");
     public static readonly string SyncPath = Path.Combine(Folder, "sync.txt");
     public static readonly string InstallPath = Path.Combine(Folder, "install.txt");
+    public static readonly string StopPath = Path.Combine(Folder, "stop.txt");
 
     public static void Write(string path, params string[] lines)
     {

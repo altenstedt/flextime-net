@@ -131,15 +131,18 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
 
     private static string ListenStatus()
     {
-        if (!SingleInstance.IsHeld(SingleInstance.ListenLockPath))
+        if (SingleInstance.IsHeld(SingleInstance.ListenLockPath))
         {
-            return "Not running";
+            // Written by the running listen process, which holds the lock.
+            return StateFiles.TryRead(StateFiles.ListenPath) is [var zone, ..]
+                ? $"Running ({zone})"
+                : "Running";
         }
 
-        // Written by the running listen process, which holds the lock.
-        return StateFiles.TryRead(StateFiles.ListenPath) is [var zone, ..]
-            ? $"Running ({zone})"
-            : "Running";
+        // Written by the stop command; removed by start.
+        return StateFiles.TryRead(StateFiles.StopPath) is [var date, ..]
+            ? $"Stopped {date}. Use start command to start again."
+            : "Not running";
     }
 
     private static string SyncStatus()
