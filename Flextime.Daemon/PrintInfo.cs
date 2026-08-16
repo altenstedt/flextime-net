@@ -21,14 +21,23 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
 
         var version = VersionHelper.GetVersion();
 
-        AnsiConsole.MarkupLine($"Client version     : {version ?? "Unknown"}");
-        AnsiConsole.MarkupLine($"Measurement folder : {Path.GetFullPath(computer.MeasurementsFolder)}");
-        AnsiConsole.MarkupLine($"Computer name      : {computer.Name}");
-        AnsiConsole.MarkupLine($"Computer id        : {computer.Id}");
-        AnsiConsole.MarkupLine($"Time zone          : {PrintTimeZone()}");
-        AnsiConsole.MarkupLine($"Listen             : {ListenStatus()}");
-        AnsiConsole.MarkupLine($"Sync               : {SyncStatus()}");
-        AnsiConsole.MarkupLine($"Server             : {Constants.ApiUri}");
+        AnsiConsole.MarkupLine($"Client version  :  {version ?? "Unknown"}");
+        AnsiConsole.MarkupLine($"Computer name   :  {computer.Name}");
+        AnsiConsole.MarkupLine($"Computer id     :  {computer.Id}");
+        AnsiConsole.MarkupLine($"Time zone       :  {PrintTimeZone()}");
+        AnsiConsole.MarkupLine($"Measurements    :  {Path.GetFullPath(computer.MeasurementsFolder)}");
+
+        var logs = LogsStatus();
+
+        if (logs != null)
+        {
+            AnsiConsole.MarkupLine($"Logs            :  {logs}");
+        }
+
+        AnsiConsole.MarkupLine($"Local data      :  {LocalDataStatus()}");
+        AnsiConsole.MarkupLine($"Listen process  :  {ListenStatus()}");
+        AnsiConsole.MarkupLine($"Sync schedule   :  {SyncStatus()}");
+        AnsiConsole.MarkupLine($"Server URL      :  {Constants.ApiUri}");
 
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots2)
@@ -39,8 +48,7 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                 {
                     var pingResult = await httpClient.GetFromJsonAsync("/ping", PingSourceGenerationContext.Default.PingDataContract);
 
-                    AnsiConsole.MarkupLine(
-                        $"Server version     : {pingResult?.Version}");
+                    AnsiConsole.MarkupLine($"Server version  :  {pingResult?.Version}");
                 }
                 catch (TokenRefreshException exception)
                 {
@@ -63,12 +71,12 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
 
             if (string.IsNullOrEmpty(accessToken) || !accessToken.Contains('.'))
             {
-                AnsiConsole.MarkupLine("Signed in          : Yes");
+                AnsiConsole.MarkupLine("Signed in       :  Yes");
             }
             else
             {
                 var user = GetUserInfo(accessToken);
-                AnsiConsole.MarkupLine($"Signed in          : {user}");
+                AnsiConsole.MarkupLine($"Signed in       :  {user}");
             }
 
             await AnsiConsole.Status()
@@ -77,7 +85,7 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                 .StartAsync("Fetching server data...",
                     async _ =>
                     {
-                        AnsiConsole.MarkupLine("Server data        :");
+                        AnsiConsole.MarkupLine("Last 5 days     :");
                         AnsiConsole.WriteLine();
 
                         try
@@ -96,7 +104,7 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
         }
         else
         {
-            AnsiConsole.MarkupLine("Logged in          : No. Use login command to log in.");
+            AnsiConsole.MarkupLine("Logged in       :  No. Use login command to log in.");
         }
     }
 
@@ -161,6 +169,50 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
             ? $"Every {HumanizeInterval(interval)} (installed {date})"
             : "Not scheduled";
     }
+
+    // How far the local record reaches, and what it costs on disk.
+    private static string LocalDataStatus()
+    {
+        var byDates = Reader.ReadFiles(Constants.MeasurementsFolder, TimeSpan.MinValue);
+
+        if (byDates.Count == 0)
+        {
+            return "None";
+        }
+
+        long bytes;
+
+        try
+        {
+            bytes = Directory.EnumerateFiles(Constants.MeasurementsFolder, "*.bin")
+                .Sum(file => new FileInfo(file).Length);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // The days are worth showing even when the size is not.
+            return $"{byDates.Count} days, {byDates.Keys.First():yyyy-MM-dd} – {byDates.Keys.Last():yyyy-MM-dd}";
+        }
+
+        return $"{byDates.Count} days, {byDates.Keys.First():yyyy-MM-dd} – {byDates.Keys.Last():yyyy-MM-dd}, {FormatBytes(bytes)}";
+    }
+
+    // Where install points the services' output on this platform.  The
+    // other platforms leave the log to the service manager itself —
+    // journalctl, Event Viewer — so there is no folder to name.
+    private static string? LogsStatus()
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return null;
+        }
+
+        var folder = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Library", "Logs", "Flextime");
+
+        return Directory.Exists(folder) ? folder : null;
+    }
+
+    private static string FormatBytes(long bytes) => bytes.Bytes().Humanize("0.#");
 
     // The state files hold TimeSpan round-trip strings like 00:10:00;
     // shown as "10 minutes".  Anything unparsable is shown as written.
