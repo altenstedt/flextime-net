@@ -88,9 +88,27 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
             ? parsed
             : DateTimeOffset.MinValue;
 
-        return DateTimeOffset.UtcNow - last >= ReconcileInterval
-            ? null
-            : DateOnly.FromDateTime(DateTime.Today).AddDays(-WindowDays);
+        return DueWindow(last, DateTimeOffset.UtcNow, DateOnly.FromDateTime(DateTime.Today));
+    }
+
+    /// <summary>
+    /// Split from reading the stamp so the decision can be tested without
+    /// a file.  A missing stamp reads as <see cref="DateTimeOffset.MinValue"/>,
+    /// which is always due.
+    /// </summary>
+    public static DateOnly? DueWindow(DateTimeOffset last, DateTimeOffset now, DateOnly today)
+    {
+        // A stamp ahead of now was written by a clock that was wrong at
+        // the time.  Left to age it never becomes due again, so the full
+        // compare would stop for as long as the stamp stays ahead — and
+        // windowed passes would keep succeeding, so nothing would look
+        // broken.  Treat it as due instead.
+        if (last > now || now - last >= ReconcileInterval)
+        {
+            return null;
+        }
+
+        return today.AddDays(-WindowDays);
     }
 
     public Task Print(int count)
