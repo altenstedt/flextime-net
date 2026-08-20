@@ -9,7 +9,11 @@ namespace Flextime.Daemon;
 
 public class RefreshTokenDelegatingHandler(
     IHttpClientFactory httpClientFactory,
-    RefreshTokenDelegatingHandlerOptions options) : DelegatingHandler(new HttpClientHandler())
+    RefreshTokenDelegatingHandlerOptions options)
+    // The API compresses responses, but only for a request that asks.
+    // A default handler never sends Accept-Encoding, so without this the
+    // summary arrives as plain text on every pass.
+    : DelegatingHandler(new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All })
 {
     private readonly HttpClient tokenHttpClient = httpClientFactory.CreateClient("TokenHttpClient"); 
     private readonly CachingService cache = new();
