@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
@@ -16,12 +17,22 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         ServerHasMore,
     }
 
+    // A day this old cannot change on this machine any more, so a pass
+    // that only wants to notice new local data needs no more than this.
+    private const int WindowDays = 7;
+
+    // Only a compare against every day can notice rows the server holds
+    // and this machine does not, so the full history is still checked —
+    // just not once a minute.
+    private static readonly TimeSpan ReconcileInterval = TimeSpan.FromDays(1);
+
     private readonly MeasurementsFormatter formatter = new(TimeSpan.FromMinutes(10), false, 0);
 
     private readonly HttpClient httpClient = httpClientFactory.CreateClient("ApiHttpClient");
 
     public async Task SyncAndPrint()
     {
+        var since = DueWindow();
         var inSync = 0;
 
         await ActOnRemoteStatus(upload: true, (line, status) =>
@@ -37,9 +48,13 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
             }
 
             AnsiConsole.WriteLine(line);
-        });
+        }, since: since);
 
-        AnsiConsole.WriteLine(inSync == 1 ? "1 day in sync." : $"{inSync} days in sync.");
+        AnsiConsole.WriteLine(since.HasValue
+            ? $"{inSync} days in sync since {since.Value:yyyy-MM-dd}."
+            : inSync == 1
+                ? "1 day in sync."
+                : $"{inSync} days in sync.");
     }
 
     public Task SyncAndLog(ILogger logger)
@@ -60,7 +75,22 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
                     logger.LogInformation(line);
                     break;
             }
-        });
+        }, since: DueWindow());
+    }
+
+    // Null when the whole history is due to be compared again, otherwise
+    // the first day the next pass needs to look at.
+    private static DateOnly? DueWindow()
+    {
+        var last = StateFiles.TryRead(StateFiles.ReconcilePath) is [var text, ..]
+                   && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind,
+                       out var parsed)
+            ? parsed
+            : DateTimeOffset.MinValue;
+
+        return DateTimeOffset.UtcNow - last >= ReconcileInterval
+            ? null
+            : DateOnly.FromDateTime(DateTime.Today).AddDays(-WindowDays);
     }
 
     public Task Print(int count)
@@ -68,11 +98,27 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         return ActOnRemoteStatus(upload: false, (line, _) => AnsiConsole.WriteLine(line), limit: count);
     }
 
-    private async Task ActOnRemoteStatus(bool upload, Action<string, DayStatus> output, int limit = int.MaxValue)
+    private async Task ActOnRemoteStatus(bool upload, Action<string, DayStatus> output, int limit = int.MaxValue,
+        DateOnly? since = null)
     {
         var remoteSummary = await httpClient.GetFromJsonAsync(
-            $"/{computer.Id}/summary?api-version=1.3",
+            since.HasValue
+                ? $"/{computer.Id}/summary?api-version=1.4&since={since.Value:yyyy-MM-dd}"
+                : $"/{computer.Id}/summary?api-version=1.4",
             SummarySourceGenerationContext.Default.SummaryDataContract);
+
+        if (upload && !string.IsNullOrEmpty(computer.Name) && remoteSummary?.Name != computer.Name)
+        {
+            // The name comes back with the summary, so it is written
+            // only when the server holds something else — once after a
+            // rename, instead of on every pass.
+            var response = await httpClient.PatchAsJsonAsync(
+                $"/{computer.Id}/name",
+                computer.Name,
+                StringSourceGenerationContext.Default.String);
+
+            response.EnsureSuccessStatusCode();
+        }
 
         var localByDates = Reader.ReadFiles(Constants.MeasurementsFolder, TimeSpan.MinValue);
 
@@ -81,7 +127,14 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         // constant time.
         var remoteByKey = remoteSummary?.Items.ToDictionary(item => (item.Date, item.Zone)) ?? new();
 
-        foreach (var date in localByDates.TakeLast(limit))
+        // A windowed summary knows nothing about days before it, so those
+        // days must not be compared against it: every one of them would
+        // look missing and be uploaded again on every pass.
+        var dates = localByDates
+            .Where(item => !since.HasValue || item.Key >= since.Value)
+            .TakeLast(limit);
+
+        foreach (var date in dates)
         {
             var summary = formatter.SummarizeDay(date.Value.list.ToArray());
 
@@ -156,6 +209,13 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
                 output($"{summary} [local only]", DayStatus.LocalOnly);
             }
         }
+
+        if (upload && since is null)
+        {
+            // Only a pass over every day proves the whole history was
+            // compared, so only that one moves the reconcile stamp.
+            StateFiles.Write(StateFiles.ReconcilePath, DateTimeOffset.UtcNow.ToString("O"));
+        }
     }
 
     private async Task Upload(string zone, List<MeasurementWithZone> measurements)
@@ -176,7 +236,7 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
 }
 
 internal record SummaryItemDataContract(DateOnly Date, string Zone, int Count, long Last, long Sum);
-internal record SummaryDataContract(SummaryItemDataContract[] Items);
+internal record SummaryDataContract(string? Name, SummaryItemDataContract[] Items);
 
 internal record MeasurementDataContract(int Kind, long Timestamp);
 internal record MeasurementsDataContract(string Zone, MeasurementDataContract[] Items);

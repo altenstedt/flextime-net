@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using System.Runtime.InteropServices;
 using ConsoleAppFramework;
 using Flextime.Monitor;
@@ -13,9 +12,7 @@ public class DaemonCommands(
     PrintData printData,
     ILogger<DaemonCommands> logger,
     ILogger<UserInputMonitor> monitorLogger,
-    IHttpClientFactory httpClientFactory,
     DeviceCode deviceCode,
-    Computer computer,
     Sync sync,
     Installer installer)
 {
@@ -49,17 +46,11 @@ public class DaemonCommands(
             return;
         }
 
-        var httpClient = httpClientFactory.CreateClient("ApiHttpClient");
-
         try
         {
-            if (!string.IsNullOrEmpty(computer.Name))
-            {
-                var response = await httpClient.PatchAsJsonAsync($"/{computer.Id}/name", computer.Name, StringSourceGenerationContext.Default.String, cancellationToken: cancellationToken);
-
-                response.EnsureSuccessStatusCode();
-            }
-
+            // The name is no longer written here: the summary carries
+            // what the server holds, so sync writes it only when it
+            // differs.
             if (once)
             {
                 await sync.SyncAndPrint();

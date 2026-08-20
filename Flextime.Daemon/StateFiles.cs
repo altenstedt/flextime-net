@@ -18,6 +18,9 @@ public static class StateFiles
     public static readonly string InstallPath = Path.Combine(Folder, "install.txt");
     public static readonly string StopPath = Path.Combine(Folder, "stop.txt");
 
+    /// <summary>When sync last compared every day against the server.</summary>
+    public static readonly string ReconcilePath = Path.Combine(Folder, "reconcile.txt");
+
     public static void Write(string path, params string[] lines)
     {
         var directory = Path.GetDirectoryName(path);
