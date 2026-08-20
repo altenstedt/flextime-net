@@ -20,9 +20,26 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
 
     private readonly HttpClient httpClient = httpClientFactory.CreateClient("ApiHttpClient");
 
-    public Task SyncAndPrint()
+    public async Task SyncAndPrint()
     {
-        return ActOnRemoteStatus(upload: true, (line, _) => AnsiConsole.WriteLine(line));
+        var inSync = 0;
+
+        await ActOnRemoteStatus(upload: true, (line, status) =>
+        {
+            if (status == DayStatus.InSync)
+            {
+                // A recurring install runs this once a minute, and by
+                // then almost every day is in sync.  Printing them all
+                // every pass is what fills the sync log; the count below
+                // says they were still checked.
+                inSync++;
+                return;
+            }
+
+            AnsiConsole.WriteLine(line);
+        });
+
+        AnsiConsole.WriteLine(inSync == 1 ? "1 day in sync." : $"{inSync} days in sync.");
     }
 
     public Task SyncAndLog(ILogger logger)
