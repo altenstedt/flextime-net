@@ -20,6 +20,20 @@ public class RefreshTokenDelegatingHandler(
         var accessToken = await cache.GetOrAddAsync<string>(options.ClientId, async entry =>
         {
             // This is guaranteed to be single threaded since we use LazyCache.
+
+            // This cache belongs to the handler, which the client factory
+            // rebuilds on its own rotation schedule, and `sync --once` is a
+            // fresh process on every pass.  The options singleton — seeded
+            // from the token file at startup — is what carries a token
+            // across both boundaries, so spend a round trip only when what
+            // it holds is missing or too close to expiry.
+            if (!string.IsNullOrEmpty(options.AccessToken) && options.Expires > DateTimeOffset.UtcNow.Add(grace))
+            {
+                entry.AbsoluteExpiration = options.Expires.Subtract(grace);
+
+                return options.AccessToken;
+            }
+
             KeyValuePair<string, string>[] collection = [
                 new("client_id", options.ClientId),
                 new("scope", options.Scope),
@@ -51,6 +65,12 @@ public class RefreshTokenDelegatingHandler(
             var accessToken = tokenResponse.access_token;
             var refreshToken = tokenResponse.refresh_token;
 
+            // Kept on the singleton so the next handler — or, once written
+            // below, the next process — starts from a token instead of
+            // another grant.
+            options.AccessToken = accessToken;
+            options.Expires = DateTimeOffset.UtcNow.AddSeconds(tokenResponse.expires_in);
+
             // The token endpoint rotates the refresh token; use the new one
             // from now on or refreshes will eventually stop working.
             if (!string.IsNullOrEmpty(refreshToken))
@@ -76,6 +96,8 @@ public class RefreshTokenDelegatingHandler(
 public record RefreshTokenDelegatingHandlerOptions
 {
     public required string RefreshToken { get; set; }
+    public string AccessToken { get; set; } = string.Empty;
+    public DateTimeOffset Expires { get; set; } = DateTimeOffset.MinValue;
     public required string ClientId { get; init; }
     public required string Scope { get; init; }
     public required bool WriteToStorage { get; init; }

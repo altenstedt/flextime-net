@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-var (_, _, refreshToken) = await TokenStorage.Read();
+var (accessToken, expires, refreshToken) = await TokenStorage.Read();
 
 var deviceCode = new DeviceCode();
 await deviceCode.Initialize();
@@ -20,7 +20,7 @@ builder.Services.AddSingleton<Sync>();
 builder.Services.AddSingleton<PrintInfo>();
 builder.Services.AddSingleton<PrintData>();
 builder.Services.AddSingleton<Installer>();
-builder.Services.AddApiHttpClient(refreshToken);
+builder.Services.AddApiHttpClient(accessToken, expires, refreshToken);
 
 builder.Logging.AddFilter("Flextime",
     Enum.TryParse<LogLevel>(Environment.GetEnvironmentVariable("FLEXTIME_LOG_LEVEL"), out var logLevel)
