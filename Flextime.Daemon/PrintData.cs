@@ -128,7 +128,7 @@ public class PrintData(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
             {
                 Console.WriteLine(JsonSerializer.Serialize(
                     new ActivityDataContract(result.ToArray()),
-                    PrintDataSourceGenerationContext.Default.ActivityDataContract));
+                    ActivitySourceGenerationContext.Default.ActivityDataContract));
             }
             else
             {
@@ -186,22 +186,7 @@ internal record ComputersDataContract(ComputerDataContract[] Items);
 internal record ZoneDataContract(string Zone, long[] Timestamps);
 internal record ZonesDataContract(ZoneDataContract[] Items);
 
-internal record DayActivityDataContract(
-    DateOnly Date,
-    string Zone,
-    DateTimeOffset Start,
-    DateTimeOffset End,
-    TimeSpan Span,
-    TimeSpan Work,
-    int Measurements,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    long[]? Timestamps);
-
-internal record ComputerActivityDataContract(string Id, string? Name, DayActivityDataContract[] Days);
-internal record ActivityDataContract(ComputerActivityDataContract[] Items);
-
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(ComputersDataContract))]
 [JsonSerializable(typeof(ZonesDataContract))]
-[JsonSerializable(typeof(ActivityDataContract))]
 internal partial class PrintDataSourceGenerationContext : JsonSerializerContext;
