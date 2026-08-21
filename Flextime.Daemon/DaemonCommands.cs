@@ -32,13 +32,18 @@ public class DaemonCommands(
 
     /// <summary>Synchronize data with remote</summary>
     /// <param name="once">Sync data once with remote.</param>
-    /// <param name="every">Sync data recurring with remote.</param>
+    /// <param name="every">Sync data recurring with remote, for example 20m, 1h30m, "2 hours" or 00:20:00.</param>
     public async Task Sync(
         bool once = false,
-        TimeSpan? every = null,
+        string? every = null,
         CancellationToken cancellationToken = default)
     {
         logger.LogDebug("Sync invoked.");
+
+        if (!TryReadInterval(every, out var everyValue))
+        {
+            return;
+        }
 
         if (!deviceCode.IsAuthenticated)
         {
@@ -55,7 +60,7 @@ public class DaemonCommands(
             {
                 await sync.SyncAndPrint();
             }
-            else if (every.HasValue)
+            else if (everyValue.HasValue)
             {
                 using var singleInstance = SingleInstance.TryAcquire(SingleInstance.SyncLockPath);
 
@@ -67,12 +72,12 @@ public class DaemonCommands(
 
                 // Publish the interval for the info command.  Trusted only
                 // while this process holds the sync lock.
-                StateFiles.Write(StateFiles.SyncPath, every.Value.ToString());
+                StateFiles.Write(StateFiles.SyncPath, everyValue.Value.ToString());
 
                 var version = VersionHelper.GetVersion();
 
                 logger.LogInformation("Flextime sync {Version} started.", version);
-                logger.LogInformation("Data is synced every {Every}.", every.Value);
+                logger.LogInformation("Data is synced every {Every}.", everyValue.Value);
 
                 while (!cancellationToken.IsCancellationRequested)
                 {
@@ -88,7 +93,7 @@ public class DaemonCommands(
                         logger.LogWarning("Sync failed: {Message}", exception.Message);
                     }
 
-                    await Task.Delay(every.Value, cancellationToken);
+                    await Task.Delay(everyValue.Value, cancellationToken);
                 }
             }
             else
@@ -130,14 +135,19 @@ public class DaemonCommands(
     /// <summary>Listen to events on device</summary>
     /// <param name="timeZone">-t, Time zone used.</param>
     /// <param name="ignoreSessionLocked">Keep tracking measurements when the computer is locked</param>
-    /// <param name="logSummaryInterval">Log summary interval (default: 1 hour)</param>
+    /// <param name="logSummaryInterval">Log summary interval, for example 30m or 01:00:00 (default: 1 hour)</param>
     public async Task Listen(
         string? timeZone = null,
         bool ignoreSessionLocked = false,
-        TimeSpan? logSummaryInterval = null,
+        string? logSummaryInterval = null,
         CancellationToken cancellationToken = default)
     {
         logger.LogDebug("Listen invoked.");
+
+        if (!TryReadInterval(logSummaryInterval, out var logSummaryIntervalValue))
+        {
+            return;
+        }
 
         using var singleInstance = SingleInstance.TryAcquire(SingleInstance.ListenLockPath);
 
@@ -147,7 +157,7 @@ public class DaemonCommands(
             return;
         }
 
-        var interval = logSummaryInterval ?? TimeSpan.FromHours(1);
+        var interval = logSummaryIntervalValue ?? TimeSpan.FromHours(1);
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
@@ -252,12 +262,41 @@ public class DaemonCommands(
 
     /// <summary>Install listen and sync as user services that start at logon</summary>
     /// <param name="timeZone">-t, Time zone used. Required on Windows.</param>
-    /// <param name="every">Sync interval (default: 20 minutes).</param>
-    public async Task<int> Install(string? timeZone = null, TimeSpan? every = null)
+    /// <param name="every">Sync interval, for example 20m or 00:20:00 (default: 20 minutes).</param>
+    public async Task<int> Install(string? timeZone = null, string? every = null)
     {
         logger.LogDebug("Install invoked.");
 
-        return await installer.Install(timeZone, every ?? TimeSpan.FromMinutes(20));
+        if (!TryReadInterval(every, out var everyValue))
+        {
+            return 1;
+        }
+
+        return await installer.Install(timeZone, everyValue ?? TimeSpan.FromMinutes(20));
+    }
+
+    // Left null when nothing was written, so each caller keeps its own
+    // default.  Reports the failure itself, the way the other bad-input
+    // paths in this class do.
+    private bool TryReadInterval(string? text, out TimeSpan? value)
+    {
+        value = null;
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return true;
+        }
+
+        if (!DurationParser.TryParseInterval(text, out var parsed))
+        {
+            logger.LogCritical("Cannot read {Text} as an interval. Try 20m, 1h30m, \"2 hours\" or 00:20:00.", text);
+
+            return false;
+        }
+
+        value = parsed;
+
+        return true;
     }
 
     /// <summary>Uninstall the user services. Measurements and tokens are kept.</summary>

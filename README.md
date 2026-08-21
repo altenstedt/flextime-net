@@ -33,6 +33,10 @@ English:
 | ISO 8601 duration | `P3D`, `P2W`, `PT90M`, `P1DT12H` |
 | Keywords | `today`, `yesterday`, `this week`, `last week` |
 
+The interval options on the daemon — `sync --every`, `install --every`
+and `listen --log-summary-interval` — read the same lengths, except the
+keywords: they name one particular day, and a day cannot repeat.
+
 A trailing `ago` is accepted and ignored; there is only one direction
 to look.  `this week` and `last week` are ISO weeks, starting Monday,
 matching the week numbers in the day lines.  Whole days are all this

@@ -12,6 +12,7 @@ namespace Flextime;
 /// </summary>
 public static partial class DurationParser
 {
+    /// <summary>How far back to look.</summary>
     /// <param name="now">
     /// The instant the words are relative to.  Passed in rather than read
     /// here so the keywords can be tested.
@@ -34,13 +35,33 @@ public static partial class DurationParser
             trimmed = trimmed[..^" ago".Length].TrimEnd();
         }
 
-        return TryParseKeyword(trimmed, now, out value)
-               || TryParseIso8601(trimmed, out value)
-               || TryParseUnits(trimmed, out value)
-               // Last, so that the colon forms keep the meaning they have
-               // always had here — 36:00:00 is 36 days, not 36 hours.
-               || TimeSpan.TryParse(trimmed, CultureInfo.InvariantCulture, out value);
+        return TryParseKeyword(trimmed, now, out value) || TryParseLength(trimmed, out value);
     }
+
+    /// <summary>
+    /// How long to wait between repeats.  The same lengths as
+    /// <see cref="TryParse"/>, but a keyword names one particular day and
+    /// a day cannot repeat, so the keywords are not offered here — and
+    /// nothing may repeat every no time at all.
+    /// </summary>
+    public static bool TryParseInterval(string? text, out TimeSpan value)
+    {
+        value = default;
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        return TryParseLength(text.Trim(), out value) && value > TimeSpan.Zero;
+    }
+
+    private static bool TryParseLength(string text, out TimeSpan value) =>
+        TryParseIso8601(text, out value)
+        || TryParseUnits(text, out value)
+        // Last, so that the colon forms keep the meaning they have always
+        // had here — 36:00:00 is 36 days, not 36 hours.
+        || TimeSpan.TryParse(text, CultureInfo.InvariantCulture, out value);
 
     private static bool TryParseKeyword(string text, DateTimeOffset now, out TimeSpan value)
     {

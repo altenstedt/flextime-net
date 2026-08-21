@@ -90,4 +90,35 @@ public class DurationParserTests
         // Monday is the start of its own week, so only that day is kept.
         Assert.Equal(new DateOnly(2026, 8, 16), DateOnly.FromDateTime((monday - value).Date));
     }
+
+    [Theory]
+    [InlineData("20m", 0, 20)]
+    [InlineData("1h30m", 1, 30)]
+    [InlineData("2 hours", 2, 0)]
+    [InlineData("00:20:00", 0, 20)]
+    [InlineData("PT20M", 0, 20)]
+    [InlineData("2h", 2, 0)]
+    public void ReadsAnInterval(string text, int hours, int minutes)
+    {
+        Assert.True(DurationParser.TryParseInterval(text, out var value));
+        Assert.Equal(new TimeSpan(hours, minutes, 0), value);
+    }
+
+    [Theory]
+    // A keyword names one day, and a day cannot repeat.
+    [InlineData("today")]
+    [InlineData("yesterday")]
+    [InlineData("this week")]
+    [InlineData("last week")]
+    // Nothing repeats every no time at all.
+    [InlineData("0")]
+    [InlineData("0m")]
+    [InlineData("00:00:00")]
+    [InlineData("PT0S")]
+    [InlineData(null)]
+    [InlineData("every other tuesday")]
+    public void RefusesWhatCannotBeAnInterval(string? text)
+    {
+        Assert.False(DurationParser.TryParseInterval(text, out _));
+    }
 }
