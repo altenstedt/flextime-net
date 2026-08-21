@@ -16,6 +16,30 @@ active on the computer.  For example:
 If your working day starts and ends on the computer, this list
 effectively represents your working hours.
 
+The flextime program only reads the files on this computer; it never
+uses the network and needs no account.  It shows the last 30 days by
+default; `--days 0` shows every day on disk, `--idle` sets the idle
+limit in minutes, and `--json` writes the same shape as
+`flextimed data --json`, so a script can read either one.
+
+`--since` takes a length of time written any of the usual ways, in
+English:
+
+| Form | Examples |
+| --- | --- |
+| .NET TimeSpan | `3`, `3.00:00:00`, `12:00:00` |
+| Compact units | `3d`, `2w`, `1h30m`, `1d12h`, `90m` |
+| Words | `3 days`, `2 weeks ago`, `90 minutes`, `1 hour` |
+| ISO 8601 duration | `P3D`, `P2W`, `PT90M`, `P1DT12H` |
+| Keywords | `today`, `yesterday`, `this week`, `last week` |
+
+A trailing `ago` is accepted and ignored; there is only one direction
+to look.  `this week` and `last week` are ISO weeks, starting Monday,
+matching the week numbers in the day lines.  Whole days are all this
+prints, so anything shorter than a day means today, and the colon
+forms keep their .NET meaning — `36:00:00` is 36 days, `36h` is 36
+hours.  Months and years are not accepted: neither has a fixed length.
+
 Just make sure that the Flextime daemon, is started every time you
 log in.
 

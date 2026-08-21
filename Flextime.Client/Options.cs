@@ -13,4 +13,8 @@ public record Options
     public int BlocksPerDay { get; init; }
 
     public TimeSpan Idle { get; init; }
+
+    public bool Timestamps { get; init; }
+
+    public bool Json { get; init; }
 }

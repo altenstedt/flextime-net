@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Flextime.Client\Flextime.Client.csproj" />
     <ProjectReference Include="..\..\Flextime.Daemon\Flextime.Daemon.csproj" />
     <ProjectReference Include="..\..\Flextime\Flextime.csproj" />
   </ItemGroup>
