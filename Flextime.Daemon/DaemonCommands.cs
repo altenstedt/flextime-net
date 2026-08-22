@@ -152,7 +152,7 @@ public class DaemonCommands(
         return printData.Invoke(days, computer ?? [], allComputers, idle, noProfile, timestamps, json);
     }
 
-    /// <summary>Compare the hours you reported against the activity measured, and show where they disagree</summary>
+    /// <summary>Compare the hours you reported — a timesheet file you supply — against the activity measured, and show where they disagree</summary>
     /// <param name="timesheet">-t, Path to a JSON file holding the hours you reported — the side this checks the measurements against. The file holds a list of {"date": "2026-06-26", "tag": "ClientA", "minutes": 540}, tag optional, written by whatever you report your time from. Read from a pipe when omitted, or with -.</param>
     /// <param name="since">-s, How far back to reconcile, for example 1w, 3d, "2 weeks ago" or P7D. Ignored when --week is given.</param>
     /// <param name="week">-w, Reconcile whole ISO weeks instead: this, last, 34, 32-34, 2026-W34 or 2026-W32-34.</param>

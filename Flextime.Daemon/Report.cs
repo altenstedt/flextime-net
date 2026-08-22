@@ -57,11 +57,33 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
 
         // With nothing named and something on the other end of a pipe,
         // the pipe is what was meant.  Naming neither is the one case
-        // that cannot be guessed at.
+        // that cannot be guessed at — and the case a first run lands
+        // in, so it gets a primer rather than a reproach.
         if (timesheet == null && !Console.IsInputRedirected)
         {
             Console.Error.WriteLine(
-                "Give the hours you reported with --timesheet <file>, or pipe them in.");
+                """
+                Compare the hours you reported against the activity Flextime measured,
+                and show where they disagree.
+
+                The reported side is yours to provide: a JSON file with one entry per
+                day and tag, written by hand or exported from whatever you report your
+                time in.  Flextime has no opinion on where the numbers come from.
+
+                    [
+                      { "date": "2026-08-17", "tag": "ClientA", "minutes": 480 },
+                      { "date": "2026-08-18", "tag": "ClientA", "minutes": 510 },
+                      { "date": "2026-08-18", "minutes": 30 }
+                    ]
+
+                The tag is optional and means whatever your reporting means by it — a
+                client, a project.  Then:
+
+                    flextimed report --timesheet hours.json --month this
+
+                A timesheet can also be piped in.  See report --help for the window,
+                machine and layout options.
+                """);
 
             return 1;
         }
@@ -77,6 +99,8 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
             Console.Error.WriteLine(timesheet == null
                 ? $"Cannot read the piped timesheet: {exception.Message}"
                 : $"Cannot read {timesheet}: {exception.Message}");
+            Console.Error.WriteLine(
+                """A timesheet is a JSON list of { "date": "2026-08-18", "tag": "ClientA", "minutes": 510 }, tag optional.""");
 
             return 1;
         }

@@ -57,6 +57,37 @@ Publish:
 dotnet publish -c Release --use-current-runtime --self-contained
 ```
 
+# Reconciling reported hours
+
+The daemon's `report` command compares the hours you reported — to a
+client, an employer, an invoicing system — against the activity the
+server measured, and shows where they disagree.
+
+The reported side is yours to provide: a JSON file with one entry per
+day and tag, written by hand or exported from whatever you report your
+time in.  The format is deliberately small so that anything can
+produce it:
+
+```json
+[
+  { "date": "2026-08-17", "tag": "ClientA", "minutes": 480 },
+  { "date": "2026-08-18", "tag": "ClientA", "minutes": 510 },
+  { "date": "2026-08-18", "minutes": 30 }
+]
+```
+
+The tag is optional and means whatever your reporting means by it — a
+client, a project.  Then:
+
+    flextimed report --timesheet hours.json --month this
+
+or pipe the timesheet in.  The command needs a logged-in daemon, since
+the measured side comes from the server, and it applies your stored
+idle profiles so the numbers match what the web client showed when you
+wrote the hours down.  `report --help` describes the window, machine
+and layout options; running `flextimed report` with no timesheet
+prints a primer much like this section.
+
 # protobuf
 
 We use Google's protobuf implementation.
