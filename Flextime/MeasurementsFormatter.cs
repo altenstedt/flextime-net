@@ -38,6 +38,37 @@ public class MeasurementsFormatter(TimeSpan idle, bool verbose, int blocksPerDay
         return new DaySummary(DateOnly.FromDateTime(start.Date), start, end, end - start, work, timestamps.Count);
     }
 
+    /// <summary>
+    /// The same day, computed against a curve rather than one limit.
+    /// The limit that decides a gap is the one in force at the second
+    /// the gap starts — not its end, not its middle — because that is
+    /// what the web client does, and a day straddling a step in the
+    /// curve is exactly where the two would otherwise disagree.
+    /// </summary>
+    public static DaySummary? ComputeDay(IReadOnlyList<DateTimeOffset> timestamps, IdleProfile profile)
+    {
+        if (timestamps.Count < 2)
+        {
+            return null;
+        }
+
+        var start = timestamps[0];
+        var end = timestamps[^1];
+        var work = TimeSpan.Zero;
+
+        for (var i = 1; i < timestamps.Count; i++)
+        {
+            var diff = timestamps[i] - timestamps[i - 1];
+
+            if (diff <= profile.LimitAt(timestamps[i - 1].TimeOfDay))
+            {
+                work += diff;
+            }
+        }
+
+        return new DaySummary(DateOnly.FromDateTime(start.Date), start, end, end - start, work, timestamps.Count);
+    }
+
     public string FormatDay(DaySummary day) =>
         $@"{day.Start:yyyy-MM-dd} {day.Start:HH:mm} – {day.End:HH:mm} {day.Span:hh\:mm} | {day.Work:hh\:mm} w/{ISOWeek.GetWeekOfYear(day.Start.DateTime):00} {day.Start:ddd}";
 

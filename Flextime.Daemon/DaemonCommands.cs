@@ -10,6 +10,7 @@ namespace Flextime.Daemon;
 public class DaemonCommands(
     PrintInfo printInfo,
     PrintData printData,
+    Report report,
     ILogger<DaemonCommands> logger,
     ILogger<UserInputMonitor> monitorLogger,
     DeviceCode deviceCode,
@@ -112,24 +113,116 @@ public class DaemonCommands(
         }
     }
 
-    /// <summary>Show activity data stored on the server</summary>
+    /// <summary>Show the computers on this account, with the ids the report command takes</summary>
+    /// <param name="json">Write JSON to standard out.</param>
+    public Task<int> Computers(bool json = false)
+    {
+        logger.LogDebug("Computers invoked.");
+
+        return printData.InvokeComputers(json);
+    }
+
+    /// <summary>
+    /// Show activity data stored on the server.
+    ///
+    /// Note that these numbers are not the web client's, even with idle
+    /// profiles applied: days are grouped here rather than on the
+    /// server, so a day can begin and end differently near midnight.
+    /// The report command is the one that reproduces what the web
+    /// client shows.
+    /// </summary>
     /// <param name="days">-d, Number of days to show.</param>
     /// <param name="computer">-c, Computer id to show, comma separated for multiple. Defaults to this computer.</param>
     /// <param name="allComputers">Show all computers.</param>
-    /// <param name="idle">-i, Idle limit in minutes. Gaps no longer than this count as active time.</param>
+    /// <param name="idle">-i, Idle limit in minutes. Overrides any stored idle profiles.</param>
+    /// <param name="noProfile">Ignore stored idle profiles and use the flat idle limit.</param>
     /// <param name="timestamps">Include raw timestamps (Unix seconds) in JSON output.</param>
     /// <param name="json">Write JSON to standard out.</param>
     public Task<int> Data(
         int days = 30,
         string[]? computer = null,
         bool allComputers = false,
-        int idle = 10,
+        int? idle = null,
+        bool noProfile = false,
         bool timestamps = false,
         bool json = false)
     {
         logger.LogDebug("Data invoked.");
 
-        return printData.Invoke(days, computer ?? [], allComputers, idle, timestamps, json);
+        return printData.Invoke(days, computer ?? [], allComputers, idle, noProfile, timestamps, json);
+    }
+
+    /// <summary>Compare the hours you reported against the activity measured, and show where they disagree</summary>
+    /// <param name="timesheet">-t, Path to a JSON file holding the hours you reported — the side this checks the measurements against. The file holds a list of {"date": "2026-06-26", "tag": "ClientA", "minutes": 540}, tag optional, written by whatever you report your time from. Read from a pipe when omitted, or with -.</param>
+    /// <param name="since">-s, How far back to reconcile, for example 1w, 3d, "2 weeks ago" or P7D. Ignored when --week is given.</param>
+    /// <param name="week">-w, Reconcile whole ISO weeks instead: this, last, 34, 32-34, 2026-W34 or 2026-W32-34.</param>
+    /// <param name="month">Reconcile whole calendar months instead, which is what invoicing follows: this, last, aug, jun-aug, 8, 6-8, 2026-08 or 2026-jun-aug.</param>
+    /// <param name="machines">-m, Computer id(s) whose activity counts, comma separated. Defaults to every computer you have, which is rarely what you want if some of them are personal.</param>
+    /// <param name="idle">-i, Flat idle limit in minutes, for a user with no stored idle profiles.</param>
+    /// <param name="noProfile">Ignore stored idle profiles and marks, and use the flat idle limit.</param>
+    /// <param name="threshold">How many minutes a day may differ by before it is worth mentioning.</param>
+    /// <param name="verbose">-v, Also list the machines counted, the sections that found nothing, and the activity not counted as findings.</param>
+    /// <param name="json">Write JSON to standard out.</param>
+    public async Task<int> Report(
+        string? timesheet = null,
+        string since = "1w",
+        string? week = null,
+        string? month = null,
+        string[]? machines = null,
+        int? idle = null,
+        bool noProfile = false,
+        int threshold = Daemon.Report.DefaultThreshold,
+        bool verbose = false,
+        bool json = false,
+        CancellationToken cancellationToken = default)
+    {
+        logger.LogDebug("Report invoked.");
+
+        DateOnly from;
+        DateOnly to;
+
+        if (week != null && month != null)
+        {
+            Console.Error.WriteLine("Give either --week or --month, not both.");
+
+            return 1;
+        }
+
+        if (month != null)
+        {
+            if (!Months.TryParse(month, DateTimeOffset.Now, out from, out to))
+            {
+                Console.Error.WriteLine($"Cannot read \"{month}\" as a month.");
+                Console.Error.WriteLine("Try this, last, aug, jun-aug, 8, 6-8, 2026-08 or 2026-jun-aug.");
+
+                return 1;
+            }
+        }
+        else if (week != null)
+        {
+            if (!IsoWeeks.TryParse(week, DateTimeOffset.Now, out from, out to))
+            {
+                Console.Error.WriteLine($"Cannot read \"{week}\" as an ISO week.");
+                Console.Error.WriteLine("Try this, last, 34, 32-34, 2026-W34 or 2026-W32-34.");
+
+                return 1;
+            }
+        }
+        else
+        {
+            if (!DurationParser.TryParse(since, DateTimeOffset.Now, out var sinceValue))
+            {
+                Console.Error.WriteLine($"Cannot read \"{since}\" as a length of time.");
+                Console.Error.WriteLine("Try 3d, 1w, \"2 weeks ago\", yesterday, \"last week\", P7D or 7.00:00:00.");
+
+                return 1;
+            }
+
+            from = DateOnly.FromDateTime((DateTimeOffset.Now - sinceValue).Date);
+            to = DateOnly.FromDateTime(DateTimeOffset.Now.Date);
+        }
+
+        return await report.Invoke(timesheet, from, to, machines ?? [], idle, noProfile, threshold, verbose, json, cancellationToken);
     }
 
     /// <summary>Listen to events on device</summary>

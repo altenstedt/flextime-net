@@ -5,13 +5,87 @@ using Polly.Timeout;
 
 namespace Flextime.Daemon;
 
-public class PrintData(IHttpClientFactory httpClientFactory, DeviceCode deviceCode, Computer computer)
+public class PrintData(
+    IHttpClientFactory httpClientFactory,
+    DeviceCode deviceCode,
+    Computer computer,
+    PolicyClient policyClient)
 {
     private readonly HttpClient httpClient = httpClientFactory.CreateClient("ApiHttpClient");
 
-    public async Task<int> Invoke(int days, string[] computers, bool allComputers, int idle, bool timestamps, bool json)
+    /// <summary>
+    /// Lists the computers this account has, name and id.  The ids are
+    /// what the report command's --machines option takes, and they are
+    /// otherwise only visible as headings above activity data.
+    /// </summary>
+    public async Task<int> InvokeComputers(bool json)
     {
-        var formatter = new MeasurementsFormatter(TimeSpan.FromMinutes(idle), false, 0);
+        if (!deviceCode.IsAuthenticated)
+        {
+            Console.Error.WriteLine("You need to log on first. Use the login command to log in.");
+
+            return 2;
+        }
+
+        try
+        {
+            var known = await httpClient.GetFromJsonAsync(
+                "/computers?api-version=1.1",
+                PrintDataSourceGenerationContext.Default.ComputersDataContract);
+
+            var items = known?.Items ?? [];
+
+            if (json)
+            {
+                Console.WriteLine(JsonSerializer.Serialize(
+                    new ComputersDataContract(items),
+                    PrintDataSourceGenerationContext.Default.ComputersDataContract));
+
+                return 0;
+            }
+
+            if (items.Length == 0)
+            {
+                Console.WriteLine("No computers.");
+
+                return 0;
+            }
+
+            foreach (var item in items)
+            {
+                // The computer running this is worth pointing out: it
+                // is the one whose id is hardest to look up elsewhere.
+                var here = item.Id == computer.Id ? " *" : string.Empty;
+
+                Console.WriteLine($"{item.Id}  {item.Name}{here}");
+            }
+
+            return 0;
+        }
+        catch (TokenRefreshException exception)
+        {
+            Console.Error.WriteLine(exception.Message);
+
+            return 2;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
+        {
+            Console.Error.WriteLine($"Network error: {exception.Message}");
+
+            return 1;
+        }
+    }
+
+    public async Task<int> Invoke(
+        int days,
+        string[] computers,
+        bool allComputers,
+        int? idle,
+        bool noProfile,
+        bool timestamps,
+        bool json)
+    {
+        var formatter = new MeasurementsFormatter(TimeSpan.FromMinutes(idle ?? Report.DefaultIdle), false, 0);
 
         if (!deviceCode.IsAuthenticated)
         {
@@ -21,6 +95,18 @@ public class PrintData(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
 
         try
         {
+            // An idle limit typed on the command line wins here, unlike
+            // in the report command.  This one has existing callers:
+            // a script passing --idle asked a precise question and must
+            // keep getting the same answer after an upgrade.  Only a
+            // caller who named no limit gets their stored profiles.
+            IdlePolicy? policy = null;
+
+            if (!noProfile && !idle.HasValue)
+            {
+                policy = (await policyClient.GetProfiles(CancellationToken.None)).Value;
+            }
+
             var known = await httpClient.GetFromJsonAsync(
                 "/computers?api-version=1.1",
                 PrintDataSourceGenerationContext.Default.ComputersDataContract);
@@ -103,7 +189,12 @@ public class PrintData(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                         continue;
                     }
 
-                    var day = formatter.ComputeDay(ordered.Select(item => item.Timestamp).ToArray());
+                    var moments = ordered.Select(item => item.Timestamp).ToArray();
+
+                    var day = policy == null
+                        ? formatter.ComputeDay(moments)
+                        : MeasurementsFormatter.ComputeDay(
+                            moments, policy.For(group.Key, moments[0].DayOfWeek));
 
                     if (day == null)
                     {
