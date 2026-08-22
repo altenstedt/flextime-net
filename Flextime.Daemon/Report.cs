@@ -43,6 +43,7 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
         int? idle,
         bool noProfile,
         int threshold,
+        TagLayout tags,
         bool verbose,
         bool json,
         CancellationToken cancellationToken)
@@ -147,7 +148,7 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
             }
             else
             {
-                Print(result, verbose);
+                Print(result, tags, verbose);
             }
 
             return 0;
@@ -409,7 +410,13 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
 
         var rollup = entries
             .GroupBy(item => item.Tag ?? string.Empty)
-            .Select(item => new RollupDataContract(item.Key, item.Sum(x => x.Minutes)))
+            .Select(item => new RollupDataContract(
+                item.Key,
+                item.Sum(x => x.Minutes),
+                item.GroupBy(x => x.Date)
+                    .Select(day => new TagDayDataContract(day.Key, day.Sum(x => x.Minutes)))
+                    .OrderBy(day => day.Date)
+                    .ToArray()))
             .OrderByDescending(item => item.Minutes)
             .ToArray();
 
@@ -442,7 +449,7 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
     private static string Week(DateOnly date) =>
         $"w/{ISOWeek.GetWeekOfYear(date.ToDateTime(TimeOnly.MinValue)):00} {date:ddd}";
 
-    private static void Print(ReportDataContract report, bool verbose)
+    private static void Print(ReportDataContract report, TagLayout tags, bool verbose)
     {
         var limit = report.Idle == "profile" ? "your idle profiles" : $"idle {report.Idle} min";
         var marked = report.MarkedDays > 0 ? $", {report.MarkedDays} marked" : string.Empty;
@@ -472,12 +479,7 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
             Console.WriteLine();
             Console.WriteLine("Tags:");
 
-            foreach (var item in report.Rollup)
-            {
-                var tag = string.IsNullOrEmpty(item.Tag) ? "(untagged)" : item.Tag;
-
-                Console.WriteLine($"{tag,-24} {Format(TimeSpan.FromMinutes(item.Minutes)),8}");
-            }
+            PrintTags(report, tags);
         }
 
         if (report.Findings.Length > 0)
@@ -559,6 +561,155 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
         }
     }
 
+    // Tag names are held to a fixed width so that one long name cannot
+    // shift every column in the report.
+    private const int TagWidth = 18;
+
+    private static string Fit(string tag)
+    {
+        var name = string.IsNullOrEmpty(tag) ? "(untagged)" : tag;
+
+        return name.Length <= TagWidth ? name : name[..(TagWidth - 1)] + "\u2026";
+    }
+
+    private static string Cell(int minutes) =>
+        minutes == 0 ? "    \u2014" : Format(TimeSpan.FromMinutes(minutes));
+
+    private static void Totals(ReportDataContract report)
+    {
+        foreach (var item in report.Rollup)
+        {
+            Console.WriteLine($"{Fit(item.Tag),-TagWidth} {Format(TimeSpan.FromMinutes(item.Minutes)),8}");
+        }
+    }
+
+    private static void PrintTags(ReportDataContract report, TagLayout layout)
+    {
+        switch (layout)
+        {
+            case TagLayout.Matrix:
+                PrintMatrix(report);
+
+                break;
+
+            case TagLayout.Days:
+                foreach (var item in report.Rollup)
+                {
+                    Console.WriteLine($"{Fit(item.Tag),-TagWidth} {Format(TimeSpan.FromMinutes(item.Minutes)),8}");
+
+                    foreach (var day in item.Days)
+                    {
+                        Console.WriteLine(
+                            $"  {day.Date:yyyy-MM-dd} {Format(TimeSpan.FromMinutes(day.Minutes))} | {Week(day.Date)}");
+                    }
+                }
+
+                break;
+
+            case TagLayout.Weeks:
+                PrintWeeks(report);
+
+                break;
+
+            default:
+                Totals(report);
+
+                break;
+        }
+    }
+
+    private static void PrintMatrix(ReportDataContract report)
+    {
+        var days = report.Rollup
+            .SelectMany(tag => tag.Days.Select(day => day.Date))
+            .Distinct()
+            .OrderBy(date => date)
+            .ToArray();
+
+        var weeks = days
+            .Select(date => ISOWeek.GetWeekOfYear(date.ToDateTime(TimeOnly.MinValue)))
+            .Distinct()
+            .Count();
+
+        // The grid stops being readable well before it stops fitting,
+        // and a layout that was asked for by name should say why it
+        // declined rather than wrap into nonsense.
+        if (weeks > 1 || report.Rollup.Length > 5)
+        {
+            Console.WriteLine(
+                $"(A matrix needs one week and at most five tags; this range has {weeks} week(s) "
+                + $"and {report.Rollup.Length} tag(s). Showing totals.)");
+
+            Totals(report);
+
+            return;
+        }
+
+        Console.WriteLine(
+            new string(' ', 10)
+            + string.Concat(report.Rollup.Select(tag => $"{Fit(tag.Tag),9}"))
+            + $"{"total",9}");
+
+        foreach (var date in days)
+        {
+            var cells = report.Rollup
+                .Select(tag => tag.Days.FirstOrDefault(day => day.Date == date)?.Minutes ?? 0)
+                .ToArray();
+
+            Console.WriteLine(
+                $"{date:yyyy-MM-dd}"
+                + string.Concat(cells.Select(minutes => $"{Cell(minutes),9}"))
+                + $"{Format(TimeSpan.FromMinutes(cells.Sum())),9}  {Week(date)}");
+        }
+
+        Console.WriteLine(
+            new string(' ', 10)
+            + string.Concat(report.Rollup.Select(tag => $"{Format(TimeSpan.FromMinutes(tag.Minutes)),9}"))
+            + $"{Format(TimeSpan.FromMinutes(report.Rollup.Sum(tag => tag.Minutes))),9}");
+    }
+
+    private static void PrintWeeks(ReportDataContract report)
+    {
+        var weeks = report.Rollup
+            .SelectMany(tag => tag.Days.Select(day => (tag.Tag, day.Date, day.Minutes)))
+            .GroupBy(item => ISOWeek.GetWeekOfYear(item.Date.ToDateTime(TimeOnly.MinValue)))
+            .OrderBy(group => group.Key)
+            .ToArray();
+
+        // The columns are positional, so they need naming once.
+        Console.WriteLine(
+            new string(' ', TagWidth + 9)
+            + string.Concat(new[] { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" }.Select(day => $"{day,6}")));
+
+        foreach (var week in weeks)
+        {
+            var earliest = week.Min(item => item.Date);
+            var monday = earliest.AddDays(-(((int)earliest.DayOfWeek + 6) % 7));
+
+            Console.WriteLine($"{monday:yyyy-MM-dd} w/{week.Key:00}");
+
+            foreach (var tag in week
+                .GroupBy(item => item.Tag)
+                .OrderByDescending(group => group.Sum(item => item.Minutes)))
+            {
+                var cells = Enumerable.Range(0, 7)
+                    .Select(offset => tag
+                        .Where(item => item.Date == monday.AddDays(offset))
+                        .Sum(item => item.Minutes));
+
+                // A blank rather than a dash: with a row per tag per
+                // week, the days a tag was not touched are the majority
+                // of the grid, and filling them draws the eye to
+                // nothing.  What is left is the shape of the week.
+                Console.WriteLine((
+                    $"  {Fit(tag.Key),-TagWidth}{Format(TimeSpan.FromMinutes(tag.Sum(item => item.Minutes))),7}"
+                    + string.Concat(cells.Select(minutes =>
+                        $"{(minutes == 0 ? string.Empty : Format(TimeSpan.FromMinutes(minutes))),6}")))
+                    .TrimEnd());
+            }
+        }
+    }
+
     private static string Name(MachineDataContract machine) =>
         string.IsNullOrEmpty(machine.Name) ? machine.Id : $"{machine.Name} ({machine.Id})";
 }
@@ -566,7 +717,24 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
 public record ReportedEntry(DateOnly Date, string? Tag, int Minutes);
 
 public record MachineDataContract(string Id, string? Name);
-public record RollupDataContract(string Tag, int Minutes);
+public record TagDayDataContract(DateOnly Date, int Minutes);
+public record RollupDataContract(string Tag, int Minutes, TagDayDataContract[] Days);
+
+/// <summary>How the reported hours are laid out under "Tags:".</summary>
+public enum TagLayout
+{
+    /// <summary>One line per tag: the sum over the whole range.</summary>
+    Total,
+
+    /// <summary>Days down, tags across. Only legible for a single week.</summary>
+    Matrix,
+
+    /// <summary>Each tag's sum, then the days that make it up.</summary>
+    Days,
+
+    /// <summary>A week per block, each tag's days as columns Monday to Sunday.</summary>
+    Weeks,
+}
 public record FindingDataContract(string Kind, DateOnly Date, string Message);
 public record DeltaDataContract(DateOnly Date, int Week, int ReportedMinutes, int MeasuredMinutes);
 public record WeekDataContract(int Week, DateOnly Monday, int ReportedMinutes, int MeasuredMinutes);

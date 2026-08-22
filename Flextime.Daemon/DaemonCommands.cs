@@ -161,6 +161,7 @@ public class DaemonCommands(
     /// <param name="idle">-i, Flat idle limit in minutes, for a user with no stored idle profiles.</param>
     /// <param name="noProfile">Ignore stored idle profiles and marks, and use the flat idle limit.</param>
     /// <param name="threshold">How many minutes a day may differ by before it is worth mentioning.</param>
+    /// <param name="tags">How to lay out the reported hours: total (sums only), matrix (days down, tags across — one week at most), days (each tag's days beneath it) or weeks (a week per block, days as columns).</param>
     /// <param name="verbose">-v, Also list the machines counted, the sections that found nothing, and the activity not counted as findings.</param>
     /// <param name="json">Write JSON to standard out.</param>
     public async Task<int> Report(
@@ -172,6 +173,7 @@ public class DaemonCommands(
         int? idle = null,
         bool noProfile = false,
         int threshold = Daemon.Report.DefaultThreshold,
+        TagLayout tags = TagLayout.Total,
         bool verbose = false,
         bool json = false,
         CancellationToken cancellationToken = default)
@@ -222,7 +224,7 @@ public class DaemonCommands(
             to = DateOnly.FromDateTime(DateTimeOffset.Now.Date);
         }
 
-        return await report.Invoke(timesheet, from, to, machines ?? [], idle, noProfile, threshold, verbose, json, cancellationToken);
+        return await report.Invoke(timesheet, from, to, machines ?? [], idle, noProfile, threshold, tags, verbose, json, cancellationToken);
     }
 
     /// <summary>Listen to events on device</summary>
