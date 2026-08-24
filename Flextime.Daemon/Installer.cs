@@ -22,6 +22,12 @@ public class Installer(DeviceCode deviceCode)
     private const string ListenTask = "Flextime Listen";
     private const string SyncTask = "Flextime Sync";
 
+    // How long to wait for launchd to let go of a label, and how many
+    // times to try taking it back.  See Bootout below for why.
+    private static readonly TimeSpan Poll = TimeSpan.FromMilliseconds(100);
+    private const int BootoutPolls = 100;
+    private const int BootstrapAttempts = 10;
+
     [DllImport("libc")]
     private static extern uint getuid();
 
@@ -218,6 +224,7 @@ public class Installer(DeviceCode deviceCode)
         Directory.CreateDirectory(logs);
 
         var domain = $"gui/{getuid()}";
+        var failed = false;
 
         foreach (var (label, command, keepAlive, interval, log) in new[]
                  {
@@ -235,16 +242,23 @@ public class Installer(DeviceCode deviceCode)
             // as upgrade.  Fails harmlessly when nothing is loaded.  The
             // enable clears a persisted stop, without which bootstrap
             // refuses the label.
-            await Run("launchctl", "bootout", $"{domain}/{label}");
+            await Bootout(domain, label);
             await Run("launchctl", "enable", $"{domain}/{label}");
 
-            var (code, error) = await Run("launchctl", "bootstrap", domain, path);
+            var (code, error) = await Bootstrap(domain, path);
 
             if (code != 0)
             {
-                Console.Error.WriteLine($"launchctl bootstrap failed: {error}");
-                return 1;
+                // Keep going: leaving the other agent on its old
+                // definition, or unloaded, is worse than reporting both.
+                Console.Error.WriteLine($"launchctl bootstrap failed for {label}: {error}");
+                failed = true;
             }
+        }
+
+        if (failed)
+        {
+            return 1;
         }
 
         Console.WriteLine($"Logs are written to {logs}");
@@ -260,7 +274,7 @@ public class Installer(DeviceCode deviceCode)
 
         foreach (var label in new[] { ListenLabel, SyncLabel })
         {
-            await Run("launchctl", "bootout", $"{domain}/{label}");
+            await Bootout(domain, label);
 
             var path = Path.Combine(agents, $"{label}.plist");
 
@@ -283,7 +297,7 @@ public class Installer(DeviceCode deviceCode)
         // the plist, which stays in place.  Bootout fails harmlessly
         // when nothing is loaded.
         await Run("launchctl", "disable", $"{domain}/{ListenLabel}");
-        await Run("launchctl", "bootout", $"{domain}/{ListenLabel}");
+        await Bootout(domain, ListenLabel);
 
         Console.WriteLine("Stopped listening. Sync keeps running and uploads any remaining data.");
         return 0;
@@ -299,9 +313,9 @@ public class Installer(DeviceCode deviceCode)
 
         // Unload first so that start doubles as restart.  Fails
         // harmlessly when nothing is loaded.
-        await Run("launchctl", "bootout", $"{domain}/{ListenLabel}");
+        await Bootout(domain, ListenLabel);
 
-        var (code, error) = await Run("launchctl", "bootstrap", domain, Path.Combine(agents, $"{ListenLabel}.plist"));
+        var (code, error) = await Bootstrap(domain, Path.Combine(agents, $"{ListenLabel}.plist"));
 
         if (code != 0)
         {
@@ -494,6 +508,49 @@ public class Installer(DeviceCode deviceCode)
 
         Console.WriteLine("Started.");
         return 0;
+    }
+
+    /// <summary>
+    /// Boots the label out and waits for launchd to forget it.  Bootout
+    /// returns once the job has been signalled, not once it is gone, and
+    /// bootstrapping inside that window fails -- which is where a second
+    /// start or install in a row used to land, leaving the agent unloaded
+    /// instead of running.
+    /// </summary>
+    private static async Task Bootout(string domain, string label)
+    {
+        await Run("launchctl", "bootout", $"{domain}/{label}");
+
+        for (var poll = 0; poll < BootoutPolls && await IsLoaded(domain, label); poll++)
+        {
+            await Task.Delay(Poll);
+        }
+    }
+
+    private static async Task<bool> IsLoaded(string domain, string label)
+    {
+        var (code, _) = await Run("launchctl", "print", $"{domain}/{label}");
+
+        return code == 0;
+    }
+
+    /// <summary>
+    /// Bootstraps, retrying briefly: the label can leave print a moment
+    /// before launchd is willing to hand it back.  A plist that is really
+    /// broken still fails, a second later.
+    /// </summary>
+    private static async Task<(int code, string error)> Bootstrap(string domain, string path)
+    {
+        var result = await Run("launchctl", "bootstrap", domain, path);
+
+        for (var attempt = 0; attempt < BootstrapAttempts && result.code != 0; attempt++)
+        {
+            await Task.Delay(Poll);
+
+            result = await Run("launchctl", "bootstrap", domain, path);
+        }
+
+        return result;
     }
 
     private static string SystemdUnitDirectory()
