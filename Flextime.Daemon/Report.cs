@@ -263,7 +263,7 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
             PrintDataSourceGenerationContext.Default.ZonesDataContract,
             cancellationToken);
 
-        var formatter = new MeasurementsFormatter(TimeSpan.FromMinutes(flat), false, 0);
+        var formatter = new MeasurementsFormatter(TimeSpan.FromMinutes(flat), 0);
         var work = new Dictionary<DateOnly, TimeSpan>();
 
         foreach (var row in zones?.Items ?? [])

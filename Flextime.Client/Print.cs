@@ -20,7 +20,7 @@ public class Print(Options options)
 
         var byDates = Reader.ReadFiles(options.MeasurementsFolder, options.Since);
 
-        var formatter = new MeasurementsFormatter(options.Idle, options.Verbose, options.BlocksPerDay);
+        var formatter = new MeasurementsFormatter(options.Idle, options.BlocksPerDay);
 
         if (options.Json)
         {

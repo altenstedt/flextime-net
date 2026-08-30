@@ -6,16 +6,16 @@ public class MeasurementsFormatterTest
 {
     [Theory]
     [ClassData(typeof(MeasurementsData))]
-    public void FormatterShouldWork(MeasurementWithZone[] measurements, string expected, TimeSpan idle, bool verbose, int blocksPerDay)
+    public void FormatterShouldWork(MeasurementWithZone[] measurements, string expected, TimeSpan idle, int blocksPerDay)
     {
-        var formatter = new MeasurementsFormatter(idle, verbose, blocksPerDay);
+        var formatter = new MeasurementsFormatter(idle, blocksPerDay);
         
         var result = formatter.SummarizeDay(measurements);
         
         Assert.Equal(expected, result);
     }
 
-    private class MeasurementsData : TheoryData<MeasurementWithZone[], string, TimeSpan, bool, int>
+    private class MeasurementsData : TheoryData<MeasurementWithZone[], string, TimeSpan, int>
     {
         public MeasurementsData()
         {
@@ -31,9 +31,23 @@ public class MeasurementsFormatterTest
                 return new MeasurementWithZone(measurement, zone, 60);
             }
 
-            Add(Array.Empty<MeasurementWithZone>(), string.Empty, TimeSpan.Zero, false, 0);
-            Add([Create(DateTimeOffset.Now, TimeSpan.Zero)], string.Empty, TimeSpan.Zero, false, 0); // Single measurement
-            Add([Create(DateTimeOffset.Now, TimeSpan.Zero)], string.Empty, TimeSpan.Zero, false, 42); // Single measurement
+            Add(Array.Empty<MeasurementWithZone>(), string.Empty, TimeSpan.Zero, 0);
+            // A lone measurement still names its day.  This is the shape
+            // that used to print as nothing at all, leaving the sync
+            // status list with a bare "[in sync]" and no date on it.
+            Add(
+                [Create(DateTimeOffset.Parse("2026-08-30T10:06:43+02:00"), TimeSpan.Zero)],
+                "2026-08-30 10:06 (1 measurement)       w/35 Sun",
+                TimeSpan.Zero,
+                0);
+
+            // Blocks are a property of a span, so asking for them changes
+            // nothing on a day that has none.
+            Add(
+                [Create(DateTimeOffset.Parse("2026-08-30T10:06:43+02:00"), TimeSpan.Zero)],
+                "2026-08-30 10:06 (1 measurement)       w/35 Sun",
+                TimeSpan.Zero,
+                42);
 
             Add(
                 [
@@ -42,7 +56,6 @@ public class MeasurementsFormatterTest
                 ],
                 "2023-12-01 07:00 – 07:09 00:09 | 00:09 w/48 Fri",
                 TimeSpan.FromMinutes(10),
-                false,
                 0);
 
             Add(
@@ -52,7 +65,6 @@ public class MeasurementsFormatterTest
                 ],
                 "2023-12-01 07:12 – 08:23 01:11 | 00:00 w/48 Fri",
                 TimeSpan.FromMinutes(0),
-                false,
                 0);
             
             Add(
@@ -65,7 +77,6 @@ public class MeasurementsFormatterTest
                 // inclusive, matching the web client.
                 "2023-12-01 07:00 – 08:23 01:23 | 00:10 w/48 Fri",
                 TimeSpan.FromMinutes(10),
-                false,
                 0);
 
             Add(
@@ -76,7 +87,6 @@ public class MeasurementsFormatterTest
                 ],
                 "2023-12-01 07:00 – 08:23 01:23 | 00:09 w/48 Fri",
                 TimeSpan.FromMinutes(10),
-                false,
                 0);
             
             Add(
@@ -88,7 +98,6 @@ public class MeasurementsFormatterTest
                 ],
                 "2023-12-01 07:00 – 08:23 01:23 | 00:09 w/48 Fri",
                 TimeSpan.FromMinutes(10),
-                false,
                 0);
             
             Add(
@@ -98,7 +107,6 @@ public class MeasurementsFormatterTest
                 ],
                 "2023-12-01 07:12 – 08:23 01:11 | 00:00 w/48 Fri [07:12/00:00]",
                 TimeSpan.FromSeconds(0),
-                false,
                 4);
             
             Add(
@@ -109,7 +117,6 @@ public class MeasurementsFormatterTest
                 ],
                 "2023-12-01 07:00 – 08:23 01:23 | 00:00 w/48 Fri [07:04/00:04]",
                 TimeSpan.FromMinutes(0),
-                false,
                 1);
 
             Add(
@@ -120,7 +127,6 @@ public class MeasurementsFormatterTest
                 ],
                 "2023-12-01 07:00 – 08:23 01:23 | 00:02 w/48 Fri [07:03/00:02]",
                 TimeSpan.FromMinutes(3),
-                false,
                 2);
 
             Add(
@@ -132,7 +138,6 @@ public class MeasurementsFormatterTest
                 ],
                 "2023-12-01 07:00 – 08:23 01:23 | 00:03 w/48 Fri [07:09/00:09, 07:03/00:03]",
                 TimeSpan.FromMinutes(4),
-                false,
                 2);
             
             Add(
@@ -142,7 +147,6 @@ public class MeasurementsFormatterTest
                 ],
                 "2023-12-01 07:00 – 07:09 00:09 | 00:09 w/48 Fri",
                 TimeSpan.FromMinutes(10),
-                false,
                 1);
 
             Add(
@@ -153,7 +157,6 @@ public class MeasurementsFormatterTest
                 // Each time is displayed in its own zone, but durations use the real elapsed time.
                 "2024-02-01 11:18 – 17:17 10:59 | 00:00 w/05 Thu [11:18/00:00]",
                 TimeSpan.FromMinutes(10),
-                false,
                 1);
 
             Add(
@@ -164,7 +167,6 @@ public class MeasurementsFormatterTest
                 // Each time is displayed in its own zone, but durations use the real elapsed time.
                 "2024-02-01 11:13 – 11:14 01:01 | 00:00 w/05 Thu [11:13/00:00]",
                 TimeSpan.FromMinutes(10),
-                false,
                 1);
 
             Add(
@@ -177,7 +179,6 @@ public class MeasurementsFormatterTest
                 // minutes pass, and durations use the real elapsed time.
                 "2024-03-31 01:55 – 03:05 00:10 | 00:10 w/13 Sun",
                 TimeSpan.FromMinutes(10),
-                false,
                 0);
 
             Add(
@@ -190,7 +191,6 @@ public class MeasurementsFormatterTest
                 // limit.
                 "2024-10-27 02:30 – 02:30 01:00 | 00:00 w/43 Sun",
                 TimeSpan.FromMinutes(10),
-                false,
                 0);
 
             Add(
@@ -203,33 +203,21 @@ public class MeasurementsFormatterTest
                 // zone of the machine running this test.
                 "2025-01-01 08:30 – 08:39 00:09 | 00:09 w/01 Wed",
                 TimeSpan.FromMinutes(10),
-                false,
                 0);
 
             Add(
                 [
                     Create(DateTimeOffset.Parse("2023-12-01T07:00:00+01:00"), TimeSpan.FromMinutes(10)),
                 ],
-                string.Empty,
+                "2023-12-01 07:00 (1 measurement)       w/48 Fri",
                 TimeSpan.FromMinutes(10),
-                false,
                 1);
-            
-            Add(
-                [
-                    Create(DateTimeOffset.Parse("2023-12-01T07:00:00+01:00"), TimeSpan.FromMinutes(10)),
-                ],
-                "Single measurement",
-                TimeSpan.FromMinutes(10),
-                true,
-                1);
-            
+                        
             Add(
                 [
                 ],
                 string.Empty,
                 TimeSpan.FromMinutes(10),
-                false,
                 1);
         }
     }

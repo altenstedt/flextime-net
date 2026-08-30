@@ -10,7 +10,7 @@ public record DaySummary(
     TimeSpan Work,
     int Measurements);
 
-public class MeasurementsFormatter(TimeSpan idle, bool verbose, int blocksPerDay)
+public class MeasurementsFormatter(TimeSpan idle, int blocksPerDay)
 {
     public DaySummary? ComputeDay(IReadOnlyList<DateTimeOffset> timestamps)
     {
@@ -72,6 +72,26 @@ public class MeasurementsFormatter(TimeSpan idle, bool verbose, int blocksPerDay
     public string FormatDay(DaySummary day) =>
         $@"{day.Start:yyyy-MM-dd} {day.Start:HH:mm} – {day.End:HH:mm} {day.Span:hh\:mm} | {day.Work:hh\:mm} w/{ISOWeek.GetWeekOfYear(day.Start.DateTime):00} {day.Start:ddd}";
 
+    // Everything FormatDay writes ahead of the week marker: date, the
+    // range, the span and the work.  A day with no span pads to it, so
+    // the columns after it stay where the eye already expects them.
+    private const int HeadWidth = 38;
+
+    /// <summary>
+    /// A day holding a single measurement — a wake, a stop, a lock, and
+    /// nothing after it.  There is no span to summarize, but it is
+    /// still a day on disk, and a line that left out the date gave the
+    /// reader a bare status label with no way to tell which day it
+    /// belonged to.  The one timestamp goes where the start time goes,
+    /// and the count says why the range is missing.
+    /// </summary>
+    public static string FormatSparseDay(DateTimeOffset timestamp)
+    {
+        var head = $"{timestamp:yyyy-MM-dd} {timestamp:HH:mm} (1 measurement)";
+
+        return $"{head,-HeadWidth} w/{ISOWeek.GetWeekOfYear(timestamp.DateTime):00} {timestamp:ddd}";
+    }
+
     public string SummarizeDay(MeasurementWithZone[] measurements)
     {
         if (measurements.Length == 0)
@@ -81,7 +101,7 @@ public class MeasurementsFormatter(TimeSpan idle, bool verbose, int blocksPerDay
 
         if (measurements.Length == 1)
         {
-            return verbose ? "Single measurement" : string.Empty;
+            return FormatSparseDay(measurements[0].Timestamp);
         }
 
         var day = ComputeDay(measurements.Select(item => item.Timestamp).ToArray())!;

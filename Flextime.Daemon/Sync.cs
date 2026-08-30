@@ -26,7 +26,7 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
     // just not once a minute.
     private static readonly TimeSpan ReconcileInterval = TimeSpan.FromDays(1);
 
-    private readonly MeasurementsFormatter formatter = new(TimeSpan.FromMinutes(10), false, 0);
+    private readonly MeasurementsFormatter formatter = new(TimeSpan.FromMinutes(10), 0);
 
     private readonly HttpClient httpClient = httpClientFactory.CreateClient("ApiHttpClient");
 

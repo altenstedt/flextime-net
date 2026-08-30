@@ -9,7 +9,7 @@ BenchmarkRunner.Run<FormatterBenchmark>();
 [MemoryDiagnoser]
 public class FormatterBenchmark
 {
-    private readonly MeasurementsFormatter formatter = new(TimeSpan.FromMinutes(10), false, 0);
+    private readonly MeasurementsFormatter formatter = new(TimeSpan.FromMinutes(10), 0);
     private readonly MeasurementWithZone[] measurementWithZones;
 
     public FormatterBenchmark()

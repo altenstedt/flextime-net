@@ -85,7 +85,7 @@ public class PrintData(
         bool timestamps,
         bool json)
     {
-        var formatter = new MeasurementsFormatter(TimeSpan.FromMinutes(idle ?? Report.DefaultIdle), false, 0);
+        var formatter = new MeasurementsFormatter(TimeSpan.FromMinutes(idle ?? Report.DefaultIdle), 0);
 
         if (!deviceCode.IsAuthenticated)
         {
