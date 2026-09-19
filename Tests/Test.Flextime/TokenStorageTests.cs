@@ -21,9 +21,9 @@ public class TokenStorageTests : IDisposable
     [Fact]
     public async Task RoundTripsTokens()
     {
-        await TokenStorage.Write("access token", 3600, "refresh token", TokenPath);
+        await TokenStorage.Write("access token", 3600, "refresh token", TokenPath, TestContext.Current.CancellationToken);
 
-        var (accessToken, expires, refreshToken) = await TokenStorage.Read(TokenPath);
+        var (accessToken, expires, refreshToken) = await TokenStorage.Read(TokenPath, TestContext.Current.CancellationToken);
 
         Assert.Equal("access token", accessToken);
         Assert.Equal("refresh token", refreshToken);
@@ -33,7 +33,7 @@ public class TokenStorageTests : IDisposable
     [Fact]
     public async Task MissingFileIsEmpty()
     {
-        var (accessToken, expires, refreshToken) = await TokenStorage.Read(TokenPath);
+        var (accessToken, expires, refreshToken) = await TokenStorage.Read(TokenPath, TestContext.Current.CancellationToken);
 
         Assert.Equal(string.Empty, accessToken);
         Assert.Equal(DateTimeOffset.MinValue, expires);
@@ -43,9 +43,9 @@ public class TokenStorageTests : IDisposable
     [Fact]
     public async Task TruncatedFileIsEmpty()
     {
-        await File.WriteAllLinesAsync(TokenPath, ["access token"]);
+        await File.WriteAllLinesAsync(TokenPath, ["access token"], TestContext.Current.CancellationToken);
 
-        var (accessToken, expires, refreshToken) = await TokenStorage.Read(TokenPath);
+        var (accessToken, expires, refreshToken) = await TokenStorage.Read(TokenPath, TestContext.Current.CancellationToken);
 
         Assert.Equal(string.Empty, accessToken);
         Assert.Equal(DateTimeOffset.MinValue, expires);
@@ -55,9 +55,9 @@ public class TokenStorageTests : IDisposable
     [Fact]
     public async Task FileWithoutRefreshTokenReadsEmptyRefreshToken()
     {
-        await File.WriteAllLinesAsync(TokenPath, ["access token", "2024-01-01T00:00:00.0000000+00:00"]);
+        await File.WriteAllLinesAsync(TokenPath, ["access token", "2024-01-01T00:00:00.0000000+00:00"], TestContext.Current.CancellationToken);
 
-        var (accessToken, expires, refreshToken) = await TokenStorage.Read(TokenPath);
+        var (accessToken, expires, refreshToken) = await TokenStorage.Read(TokenPath, TestContext.Current.CancellationToken);
 
         Assert.Equal("access token", accessToken);
         Assert.Equal(DateTimeOffset.Parse("2024-01-01T00:00:00+00:00"), expires);
@@ -72,7 +72,7 @@ public class TokenStorageTests : IDisposable
             return;
         }
 
-        await TokenStorage.Write("access token", 3600, "refresh token", TokenPath);
+        await TokenStorage.Write("access token", 3600, "refresh token", TokenPath, TestContext.Current.CancellationToken);
 
         Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(TokenPath));
     }

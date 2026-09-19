@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using Flextime.Daemon;
-using Xunit.Abstractions;
 
 namespace Test.Flextime;
 
@@ -31,7 +30,7 @@ public class RefreshTokenDelegatingHandlerTests(ITestOutputHelper testOutputHelp
         httpClient.BaseAddress = new Uri("https://localhost");
 
         HttpRequestMessage message = new HttpRequestMessage();
-        var response = await httpClient.SendAsync(message);
+        var response = await httpClient.SendAsync(message, TestContext.Current.CancellationToken);
         
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(1, tokenHandler.Count);
@@ -102,7 +101,7 @@ public class RefreshTokenDelegatingHandlerTests(ITestOutputHelper testOutputHelp
         var httpClient = new HttpClient(handler);
         httpClient.BaseAddress = new Uri("https://localhost");
 
-        var response = await httpClient.SendAsync(new HttpRequestMessage());
+        var response = await httpClient.SendAsync(new HttpRequestMessage(), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("Bearer stored access token", okHandler.Authorization);
@@ -137,7 +136,7 @@ public class RefreshTokenDelegatingHandlerTests(ITestOutputHelper testOutputHelp
         var httpClient = new HttpClient(handler);
         httpClient.BaseAddress = new Uri("https://localhost");
 
-        var response = await httpClient.SendAsync(new HttpRequestMessage());
+        var response = await httpClient.SendAsync(new HttpRequestMessage(), TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("Bearer access token", okHandler.Authorization);
