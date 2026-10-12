@@ -122,6 +122,15 @@ public class DaemonCommands(
         return printData.InvokeComputers(json);
     }
 
+    /// <summary>Show what this computer can tell about its network without asking for permission: the interface internet traffic leaves through, whether that is a VPN, and a fingerprint of the router. Nothing is stored or sent.</summary>
+    /// <param name="json">Write JSON to standard out.</param>
+    public Task<int> Network(bool json = false)
+    {
+        logger.LogDebug("Network invoked.");
+
+        return PrintNetwork.Invoke(json);
+    }
+
     /// <summary>
     /// Show activity data stored on the server.
     ///
