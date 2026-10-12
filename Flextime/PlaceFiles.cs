@@ -64,9 +64,6 @@ public static class PlaceFiles
         return list;
     }
 
-    /// <summary>Whether any file holds change points at all.</summary>
-    public static bool Any(string folder) => EnumerateFiles(folder).Any(file => TryParse(file)?.Places.Count > 0);
-
     /// <summary>
     /// The latest change point at or after <paramref name="notBefore"/>,
     /// looking at the newest files first.  Null when there is none.

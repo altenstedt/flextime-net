@@ -59,19 +59,6 @@ public class PlaceFilesTests : IDisposable
     public void Read_of_a_missing_folder_is_empty()
     {
         Assert.Empty(PlaceFiles.Read(Path.Combine(folder, "missing")));
-        Assert.False(PlaceFiles.Any(Path.Combine(folder, "missing")));
-    }
-
-    [Fact]
-    public void Any_is_false_for_files_without_places()
-    {
-        Write("2026-10-12T070000.bin", "UTC", [500]);
-
-        Assert.False(PlaceFiles.Any(folder));
-
-        Write("2026-10-12T080000.bin", "UTC", [1000], (900, 1, 0));
-
-        Assert.True(PlaceFiles.Any(folder));
     }
 
     [Fact]

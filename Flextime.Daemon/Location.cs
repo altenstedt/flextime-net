@@ -24,6 +24,9 @@ public static class Location
     public static bool IsOn(string? path = null) =>
         StateFiles.TryRead(path ?? StateFiles.LocationPath) is [var state, ..] && state.Trim() == "on";
 
+    /// <summary>Whether location was ever turned on or off here.</summary>
+    public static bool WasEverSet(string? path = null) => StateFiles.TryRead(path ?? StateFiles.LocationPath) != null;
+
     public static void SetOn(bool on, string? path = null) =>
         StateFiles.Write(path ?? StateFiles.LocationPath, on ? "on" : "off", DateTimeOffset.Now.ToString("O", CultureInfo.InvariantCulture));
 

@@ -133,14 +133,14 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         return ActOnRemoteStatus(upload: false, (line, _) => AnsiConsole.WriteLine(line), limit: count);
     }
 
-    // Places are synced when there is anything to do with them: location
-    // on, places on disk not known to be uploaded, or a clear the server
-    // has not confirmed.  Otherwise every request is what it was before
-    // places existed.
+    // Places are synced once location has ever been turned on or off —
+    // only then can the files hold any, and after off they still need
+    // uploading — or while a clear waits for the server.  Otherwise
+    // every request is what it was before places existed, and no file
+    // is read twice to find out.
     private bool PlacesActive() =>
-        Location.IsOn(LocationPath)
-        || Location.ReadClear(LocationClearPath)?.Pending == true
-        || PlaceFiles.Any(Folder);
+        Location.WasEverSet(LocationPath)
+        || Location.ReadClear(LocationClearPath)?.Pending == true;
 
     private async Task<SummaryDataContract?> GetSummary(string version, DateOnly? since) =>
         await httpClient.GetFromJsonAsync(

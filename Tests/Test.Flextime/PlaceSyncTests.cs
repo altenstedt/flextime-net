@@ -134,6 +134,7 @@ public class PlaceSyncTests : IDisposable
     public async Task Places_on_disk_are_uploaded_after_location_is_turned_off()
     {
         // The off marker is what stops the last place extending forward.
+        Location.SetOn(false, Path.Combine(folder, "location.txt"));
         WriteFile("2026-10-12T080000.bin", [Morning], (Morning, 0x95313127c39c, 0), (Morning + 30, 0, PlaceFlags.LocationOff));
 
         var api = new FakeApi
@@ -144,6 +145,28 @@ public class PlaceSyncTests : IDisposable
         await CreateSync(api).SyncAndLog(NullLogger.Instance);
 
         Assert.Contains((HttpMethod.Patch, $"/{ComputerId}/places?api-version=1.5"), Calls(api));
+    }
+
+    [Fact]
+    public async Task Never_set_location_ignores_places_on_disk()
+    {
+        // Only listen with location on writes places; without the setting
+        // file there is nothing to look for, and no 1.5 request is made.
+        WriteFile("2026-10-12T080000.bin", [Morning], (Morning, 0x95313127c39c, 0));
+
+        var api = new FakeApi
+        {
+            Respond = request => request.Method == HttpMethod.Get ? Json(EmptySummary) : new HttpResponseMessage(HttpStatusCode.NoContent),
+        };
+
+        await CreateSync(api).SyncAndLog(NullLogger.Instance);
+
+        Assert.Equal(
+            [
+                (HttpMethod.Get, $"/{ComputerId}/summary?api-version=1.4"),
+                (HttpMethod.Patch, $"/{ComputerId}"),
+            ],
+            Calls(api));
     }
 
     [Fact]
