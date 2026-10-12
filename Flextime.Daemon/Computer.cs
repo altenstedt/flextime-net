@@ -4,6 +4,17 @@ namespace Flextime.Daemon;
 
 public class Computer
 {
+    public Computer()
+    {
+    }
+
+    /// <summary>A computer known without its file, for tests.</summary>
+    public Computer(string id, string name)
+    {
+        Id = id;
+        Name = name;
+    }
+
     public string? Id { get; private set; }
     public string? Name { get; private set; }
 

@@ -30,6 +30,13 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
 
     private readonly HttpClient httpClient = httpClientFactory.CreateClient("ApiHttpClient");
 
+    // Where the data and state live; tests point them elsewhere.
+    public string Folder { get; init; } = Constants.MeasurementsFolder;
+    public string ReconcilePath { get; init; } = StateFiles.ReconcilePath;
+    public string LocationPath { get; init; } = StateFiles.LocationPath;
+    public string LocationClearPath { get; init; } = StateFiles.LocationClearPath;
+    public Func<bool> ListenRunning { get; init; } = () => SingleInstance.IsHeld(SingleInstance.ListenLockPath);
+
     public async Task SyncAndPrint()
     {
         var since = DueWindow();
@@ -48,7 +55,7 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
             }
 
             AnsiConsole.WriteLine(line);
-        }, since: since);
+        }, since: since, note: (line, _) => AnsiConsole.WriteLine(line));
 
         AnsiConsole.WriteLine(since.HasValue
             ? $"{inSync} days in sync since {since.Value:yyyy-MM-dd}."
@@ -75,14 +82,24 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
                     logger.LogInformation(line);
                     break;
             }
-        }, since: DueWindow());
+        }, since: DueWindow(), note: (line, warning) =>
+        {
+            if (warning)
+            {
+                logger.LogWarning(line);
+            }
+            else
+            {
+                logger.LogInformation(line);
+            }
+        });
     }
 
     // Null when the whole history is due to be compared again, otherwise
     // the first day the next pass needs to look at.
-    private static DateOnly? DueWindow()
+    private DateOnly? DueWindow()
     {
-        var last = StateFiles.TryRead(StateFiles.ReconcilePath) is [var text, ..]
+        var last = StateFiles.TryRead(ReconcilePath) is [var text, ..]
                    && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind,
                        out var parsed)
             ? parsed
@@ -116,14 +133,59 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         return ActOnRemoteStatus(upload: false, (line, _) => AnsiConsole.WriteLine(line), limit: count);
     }
 
-    private async Task ActOnRemoteStatus(bool upload, Action<string, DayStatus> output, int limit = int.MaxValue,
-        DateOnly? since = null)
-    {
-        var remoteSummary = await httpClient.GetFromJsonAsync(
-            since.HasValue
-                ? $"/{computer.Id}/summary?api-version=1.4&since={since.Value:yyyy-MM-dd}"
-                : $"/{computer.Id}/summary?api-version=1.4",
+    // Places are synced when there is anything to do with them: location
+    // on, places on disk not known to be uploaded, or a clear the server
+    // has not confirmed.  Otherwise every request is what it was before
+    // places existed.
+    private bool PlacesActive() =>
+        Location.IsOn(LocationPath)
+        || Location.ReadClear(LocationClearPath)?.Pending == true
+        || PlaceFiles.Any(Folder);
+
+    private async Task<SummaryDataContract?> GetSummary(string version, DateOnly? since) =>
+        await httpClient.GetFromJsonAsync(
+            SummaryUri(version, since),
             SummarySourceGenerationContext.Default.SummaryDataContract);
+
+    private string SummaryUri(string version, DateOnly? since) =>
+        since.HasValue
+            ? $"/{computer.Id}/summary?api-version={version}&since={since.Value:yyyy-MM-dd}"
+            : $"/{computer.Id}/summary?api-version={version}";
+
+    // The 1.5 summary is the 1.4 one with place watermarks.  An API
+    // without it answers 400 or 404; activity then syncs from 1.4 and
+    // places wait for the next round.
+    private async Task<(SummaryDataContract? summary, bool places)> GetPlacesSummary(DateOnly? since, Action<string, bool> note)
+    {
+        using var response = await httpClient.GetAsync(SummaryUri("1.5", since));
+
+        if (response.IsSuccessStatusCode)
+        {
+            return (await response.Content.ReadFromJsonAsync(SummarySourceGenerationContext.Default.SummaryDataContract), true);
+        }
+
+        note($"Places not synced, trying again next sync: the server answered {(int)response.StatusCode} to api-version 1.5.", true);
+
+        return (await GetSummary("1.4", since), false);
+    }
+
+    private async Task ActOnRemoteStatus(bool upload, Action<string, DayStatus> output, int limit = int.MaxValue,
+        DateOnly? since = null, Action<string, bool>? note = null)
+    {
+        note ??= (_, _) => { };
+
+        var places = upload && PlacesActive();
+
+        SummaryDataContract? remoteSummary;
+
+        if (places)
+        {
+            (remoteSummary, places) = await GetPlacesSummary(since, note);
+        }
+        else
+        {
+            remoteSummary = await GetSummary("1.4", since);
+        }
 
         if (upload && !string.IsNullOrEmpty(computer.Name) && remoteSummary?.Name != computer.Name)
         {
@@ -138,7 +200,7 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
             response.EnsureSuccessStatusCode();
         }
 
-        var localByDates = Reader.ReadFiles(Constants.MeasurementsFolder, TimeSpan.MinValue);
+        var localByDates = Reader.ReadFiles(Folder, TimeSpan.MinValue);
 
         // (Date, Zone) is unique in the response — the server stores one
         // row per day and zone — so a dictionary probes each group in
@@ -228,11 +290,19 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
             }
         }
 
+        if (places)
+        {
+            // After the activity, which is uploaded by now whatever
+            // happens to the places.
+            await new PlaceSync(httpClient, computer.Id!, Folder, LocationClearPath, ListenRunning())
+                .Run(remoteSummary?.PlacesClearedAt, remoteByKey, since, note);
+        }
+
         if (upload && since is null)
         {
             // Only a pass over every day proves the whole history was
             // compared, so only that one moves the reconcile stamp.
-            StateFiles.Write(StateFiles.ReconcilePath, DateTimeOffset.UtcNow.ToString("O"));
+            StateFiles.Write(ReconcilePath, DateTimeOffset.UtcNow.ToString("O"));
         }
     }
 
@@ -253,8 +323,19 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
     }
 }
 
-internal record SummaryItemDataContract(DateOnly Date, string Zone, int Count, long Last, long Sum);
-internal record SummaryDataContract(string? Name, SummaryItemDataContract[] Items);
+// The place fields come with api-version 1.5 and read as zero (null)
+// from 1.4, or when a (date, zone) has no places.
+public record SummaryItemDataContract(
+    DateOnly Date,
+    string Zone,
+    int Count,
+    long Last,
+    long Sum,
+    int PlacesCount = 0,
+    long PlacesLast = 0,
+    long PlacesSum = 0);
+
+public record SummaryDataContract(string? Name, SummaryItemDataContract[] Items, long? PlacesClearedAt = null);
 
 internal record MeasurementDataContract(int Kind, long Timestamp);
 internal record MeasurementsDataContract(string Zone, MeasurementDataContract[] Items);
