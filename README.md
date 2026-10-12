@@ -88,6 +88,27 @@ wrote the hours down.  `report --help` describes the window, machine
 and layout options; running `flextimed report` with no timesheet
 prints a primer much like this section.
 
+# Places
+
+The daemon can record where the measured time was spent — not a
+position, but the network's router — so the web client can color the
+day by place.  It is off until you turn it on:
+
+    flextimed location on       # requires login
+    flextimed location          # on or off, and the place right now
+    flextimed location off      # the time after this has no place
+    flextimed location clear    # remove the place history, here and on the server
+
+`listen` reads the setting every minute, so no restart is needed.  A
+place is written into the measurement files only when it changes, as a
+48-bit hash of your user id and the router's hardware address; the API
+keys that hash again before it stores anything.  With location off the
+files are exactly what they were before places existed, and sync sends
+exactly what it did.  `clear --all-computers` clears every computer on
+the account on the server; the others clear their own files when they
+next sync.  `flextimed network` shows what the daemon can tell about
+the network, and stores nothing.
+
 # protobuf
 
 We use Google's protobuf implementation.
@@ -98,6 +119,10 @@ If you want to change the storage format, you will want to edit file
 ```
 $ protoc measurement.proto --csharp_out=./Flextime
 ```
+
+The `protoc` inside the `Grpc.Tools` NuGet package works too
+(`tools/macosx_universal/protoc`); version 35.1 generated the current
+file.
 
 * https://grpc.io/docs/protoc-installation/
 * https://github.com/protocolbuffers/protobuf/tree/main/csharp
