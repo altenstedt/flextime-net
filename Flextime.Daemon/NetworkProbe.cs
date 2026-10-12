@@ -15,7 +15,12 @@ public sealed record InternetRoute(string Family, string LocalAddress, string In
 
 public sealed record VpnService(string Name, string Status);
 
-public sealed record Router(string Address, string Interface, string? Id);
+// The hardware address is kept for the place hash and never shown or
+// written: the id is what the diagnostic prints.
+public sealed record Router(string Address, string Interface, string? Id, [property: JsonIgnore] string? Mac = null);
+
+// One network service's router as configd recorded it on macOS.
+public sealed record ServiceRouter(string? Interface, string Router, string? Mac);
 
 public sealed record NetworkReport(
     InternetRoute[] Routes,
@@ -65,6 +70,9 @@ public static partial class NetworkProbe
 
         var routers = new List<Router>();
 
+        // Read once: every gateway below is looked up in the same table.
+        var serviceRouters = OperatingSystem.IsMacOS() ? ReadServiceRouters() : [];
+
         foreach (var nic in interfaces)
         {
             if (nic.OperationalStatus != OperationalStatus.Up
@@ -83,9 +91,9 @@ public static partial class NetworkProbe
                     continue;
                 }
 
-                var mac = await GatewayMac(address);
+                var mac = await GatewayMac(address, nic.Name, serviceRouters);
 
-                routers.Add(new Router(address.ToString(), nic.Name, mac == null ? null : RouterId(mac)));
+                routers.Add(new Router(address.ToString(), nic.Name, mac == null ? null : RouterId(mac), mac));
             }
         }
 
@@ -168,24 +176,45 @@ public static partial class NetworkProbe
             .Select(match => new VpnService(match.Groups["name"].Value.Trim(), match.Groups["status"].Value))
             .ToArray();
 
-    // `list State:/Network/Service/[^/]+/IPv4` in scutil: one subKey
-    // line per network service with an IPv4 configuration.
-    public static string[] ParseServiceKeys(string text) =>
-        text.Split('\n')
-            .Select(line => ServiceKeyPattern().Match(line))
-            .Where(match => match.Success)
-            .Select(match => match.Groups["key"].Value)
-            .ToArray();
-
-    // A service's IPv4 dictionary in scutil, where configd keeps the
-    // router it resolved and that router's hardware address.
-    public static (string? router, string? mac) ParseServiceRouter(string text)
+    // A service's IPv4 dictionary in configd, where it keeps the router
+    // it resolved and that router's hardware address.  The keys are not
+    // documented; NetworkSignature has carried the address for many
+    // releases because macOS recognises known networks by it.  A tunnel
+    // service has no router, or one without a hardware address.
+    public static ServiceRouter? ParseServiceRouter(IReadOnlyDictionary<string, string> ipv4)
     {
-        var router = ServiceRouterPattern().Match(text);
-        var resolved = ServiceRouterMacPattern().Match(text);
+        if (!ipv4.TryGetValue("Router", out var router) || string.IsNullOrWhiteSpace(router))
+        {
+            return null;
+        }
 
-        return (router.Success ? router.Groups["router"].Value : null,
-            resolved.Success ? ParseMac(resolved.Groups["mac"].Value) : null);
+        ipv4.TryGetValue("InterfaceName", out var interfaceName);
+
+        string? mac = null;
+
+        // The resolved address belongs to whichever IP address configd
+        // resolved, which is the router unless it says otherwise.
+        if (ipv4.TryGetValue("ARPResolvedHardwareAddress", out var resolved)
+            && (!ipv4.TryGetValue("ARPResolvedIPAddress", out var resolvedFor) || resolvedFor == router))
+        {
+            mac = ParseMac(resolved);
+        }
+
+        if (mac == null && ipv4.TryGetValue("NetworkSignature", out var signature))
+        {
+            var parts = signature
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(part => part.Split('=', 2))
+                .Where(pair => pair.Length == 2)
+                .ToLookup(pair => pair[0], pair => pair[1]);
+
+            if (parts["IPv4.Router"].FirstOrDefault() is not { } signed || signed == router)
+            {
+                mac = parts["IPv4.RouterHardwareAddress"].Select(ParseMac).FirstOrDefault(item => item != null);
+            }
+        }
+
+        return new ServiceRouter(interfaceName, router, mac);
     }
 
     // `nmcli -t -f NAME,TYPE,ACTIVE connection show` on Linux, where a
@@ -243,20 +272,20 @@ public static partial class NetworkProbe
     // The neighbour cache forgets an idle router after a minute or so.
     // When it has, one datagram to the router makes the system look its
     // hardware address up again; the router discards the datagram.
-    private static async Task<string?> GatewayMac(IPAddress address)
+    private static async Task<string?> GatewayMac(IPAddress address, string interfaceName, ServiceRouter[] serviceRouters)
     {
         // macOS hides the neighbour cache from programs without the
         // Local Network permission, but configd records the router's
         // hardware address with each network service, and anyone may
         // read that.
-        if (OperatingSystem.IsMacOS())
-        {
-            var known = await ServiceRouterMac(address);
+        var known = serviceRouters.FirstOrDefault(service =>
+                        service.Router == address.ToString() && service.Interface == interfaceName && service.Mac != null)
+                    ?? serviceRouters.FirstOrDefault(service =>
+                        service.Router == address.ToString() && service.Mac != null);
 
-            if (known != null)
-            {
-                return known;
-            }
+        if (known?.Mac != null)
+        {
+            return known.Mac;
         }
 
         var mac = await CachedMac(address);
@@ -282,28 +311,17 @@ public static partial class NetworkProbe
         return await CachedMac(address);
     }
 
-    private static async Task<string?> ServiceRouterMac(IPAddress address)
+    private static ServiceRouter[] ReadServiceRouters()
     {
-        var keys = await Scutil("list State:/Network/Service/[^/]+/IPv4\n");
-
-        foreach (var key in keys == null ? [] : ParseServiceKeys(keys))
+        if (!OperatingSystem.IsMacOS())
         {
-            var service = await Scutil($"show {key}\n");
-
-            if (service == null)
-            {
-                continue;
-            }
-
-            var (router, mac) = ParseServiceRouter(service);
-
-            if (router == address.ToString() && mac != null)
-            {
-                return mac;
-            }
+            return [];
         }
 
-        return null;
+        return SystemConfiguration.ReadServiceIPv4()?
+            .Select(ParseServiceRouter)
+            .OfType<ServiceRouter>()
+            .ToArray() ?? [];
     }
 
     private static async Task<string?> CachedMac(IPAddress address)
@@ -343,7 +361,16 @@ public static partial class NetworkProbe
 
         if (OperatingSystem.IsLinux())
         {
-            var output = await Run("nmcli", "-t", "-f", "NAME,TYPE,ACTIVE", "connection", "show");
+            // NetworkManager installs nmcli in /usr/bin; a distribution
+            // without it has no VPN list to give.
+            var nmcli = new[] { "/usr/bin/nmcli", "/bin/nmcli", "/usr/local/bin/nmcli" }.FirstOrDefault(File.Exists);
+
+            if (nmcli == null)
+            {
+                return null;
+            }
+
+            var output = await Run(nmcli, "-t", "-f", "NAME,TYPE,ACTIVE", "connection", "show");
 
             return output == null ? null : ParseNmcli(output);
         }
@@ -351,41 +378,6 @@ public static partial class NetworkProbe
         // Windows lists only its built-in VPN connections; the adapter
         // check above is what finds third-party clients there.
         return null;
-    }
-
-    // `scutil` reads its commands from standard input.
-    private static async Task<string?> Scutil(string script)
-    {
-        var info = new ProcessStartInfo("/usr/sbin/scutil")
-        {
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-
-        try
-        {
-            using var process = Process.Start(info);
-
-            if (process == null)
-            {
-                return null;
-            }
-
-            await process.StandardInput.WriteAsync(script);
-            process.StandardInput.Close();
-
-            var output = process.StandardOutput.ReadToEndAsync();
-            var error = process.StandardError.ReadToEndAsync();
-
-            await Task.WhenAll(output, error, process.WaitForExitAsync());
-
-            return process.ExitCode == 0 ? output.Result : null;
-        }
-        catch (Win32Exception)
-        {
-            return null;
-        }
     }
 
     // System tools are named by full path where they have a fixed home:
@@ -431,15 +423,6 @@ public static partial class NetworkProbe
 
     [GeneratedRegex(@"^\*?\s*\((?<status>[^)]+)\)\s+[0-9A-Fa-f-]{36}\s+VPN\s+\([^)]*\)\s+""(?<name>.*?)""?\s+\[")]
     private static partial Regex ScutilPattern();
-
-    [GeneratedRegex(@"subKey \[\d+\] = (?<key>State:/Network/Service/[^/\s]+/IPv4)")]
-    private static partial Regex ServiceKeyPattern();
-
-    [GeneratedRegex(@"^\s*Router : (?<router>\S+)", RegexOptions.Multiline)]
-    private static partial Regex ServiceRouterPattern();
-
-    [GeneratedRegex(@"(ARPResolvedHardwareAddress : |RouterHardwareAddress=)(?<mac>[0-9a-fA-F:]+)")]
-    private static partial Regex ServiceRouterMacPattern();
 
     [GeneratedRegex(@"(?<!\\):")]
     private static partial Regex NmcliSeparator();

@@ -8,6 +8,8 @@
 
   <PropertyGroup>
     <PublishAot>true</PublishAot>
+    <!-- SystemConfiguration and CoreFoundation are called through LibraryImport. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

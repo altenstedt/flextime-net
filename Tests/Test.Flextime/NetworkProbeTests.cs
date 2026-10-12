@@ -33,48 +33,84 @@ public class NetworkProbeTests
             services);
     }
 
-    [Fact]
-    public void ParseServiceKeys()
+    // The string values configd holds for a Wi-Fi service, as
+    // SCDynamicStoreCopyValue returns them (Addresses and the other
+    // arrays are left out by the reader).
+    private static Dictionary<string, string> WiFi() => new()
     {
-        const string text = """
-              subKey [0] = State:/Network/Service/A0B193B1-4B72-436C-8FA9-32C373CBC4CA/IPv4
-              subKey [1] = State:/Network/Service/com.wireguard.macos/IPv4
-            """;
-
-        Assert.Equal(
-            ["State:/Network/Service/A0B193B1-4B72-436C-8FA9-32C373CBC4CA/IPv4", "State:/Network/Service/com.wireguard.macos/IPv4"],
-            NetworkProbe.ParseServiceKeys(text));
-    }
+        ["ARPResolvedHardwareAddress"] = "0:1a:2b:c:d4:e5",
+        ["ARPResolvedIPAddress"] = "192.168.4.1",
+        ["ConfirmedInterfaceName"] = "en0",
+        ["InterfaceName"] = "en0",
+        ["NetworkSignature"] = "IPv4.Router=192.168.4.1;IPv4.RouterHardwareAddress=0:1a:2b:c:d4:e5",
+        ["Router"] = "192.168.4.1",
+    };
 
     [Fact]
     public void ParseServiceRouter()
     {
-        const string text = """
-            <dictionary> {
-              ARPResolvedHardwareAddress : 0:1a:2b:c:d4:e5
-              ARPResolvedIPAddress : 192.168.4.1
-              InterfaceName : en0
-              NetworkSignature : IPv4.Router=192.168.4.1;IPv4.RouterHardwareAddress=0:1a:2b:c:d4:e5
-              Router : 192.168.4.1
-            }
-            """;
+        Assert.Equal(
+            new ServiceRouter("en0", "192.168.4.1", "00:1a:2b:0c:d4:e5"),
+            NetworkProbe.ParseServiceRouter(WiFi()));
+    }
 
-        Assert.Equal(("192.168.4.1", "00:1a:2b:0c:d4:e5"), NetworkProbe.ParseServiceRouter(text));
+    [Fact]
+    public void ParseServiceRouter_falls_back_to_the_network_signature()
+    {
+        var ipv4 = WiFi();
+
+        ipv4.Remove("ARPResolvedHardwareAddress");
+        ipv4.Remove("ARPResolvedIPAddress");
+
+        Assert.Equal("00:1a:2b:0c:d4:e5", NetworkProbe.ParseServiceRouter(ipv4)?.Mac);
+    }
+
+    [Fact]
+    public void ParseServiceRouter_ignores_an_address_resolved_for_another_host()
+    {
+        var ipv4 = WiFi();
+
+        ipv4["ARPResolvedIPAddress"] = "192.168.4.7";
+        ipv4["ARPResolvedHardwareAddress"] = "aa:bb:cc:dd:ee:ff";
+
+        Assert.Equal("00:1a:2b:0c:d4:e5", NetworkProbe.ParseServiceRouter(ipv4)?.Mac);
+    }
+
+    [Fact]
+    public void ParseServiceRouter_router_not_resolved_yet()
+    {
+        var ipv4 = new Dictionary<string, string>
+        {
+            ["InterfaceName"] = "en0",
+            ["Router"] = "192.168.4.1",
+        };
+
+        Assert.Equal(new ServiceRouter("en0", "192.168.4.1", null), NetworkProbe.ParseServiceRouter(ipv4));
     }
 
     [Fact]
     public void ParseServiceRouter_tunnel_has_no_router()
     {
-        const string text = """
-            <dictionary> {
-              Addresses : <array> {
-                0 : 10.8.0.2
-              }
-              InterfaceName : utun4
-            }
-            """;
+        var ipv4 = new Dictionary<string, string>
+        {
+            ["InterfaceName"] = "utun4",
+        };
 
-        Assert.Equal((null, null), NetworkProbe.ParseServiceRouter(text));
+        Assert.Null(NetworkProbe.ParseServiceRouter(ipv4));
+    }
+
+    [Fact]
+    public void ParseServiceRouter_tunnel_router_has_no_hardware_address()
+    {
+        // Some VPN clients name a router for their tunnel; there is no
+        // link layer behind it, so no hardware address either.
+        var ipv4 = new Dictionary<string, string>
+        {
+            ["InterfaceName"] = "utun4",
+            ["Router"] = "10.8.0.1",
+        };
+
+        Assert.Null(NetworkProbe.ParseServiceRouter(ipv4)?.Mac);
     }
 
     [Fact]
