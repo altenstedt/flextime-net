@@ -129,9 +129,14 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
 
         var failed = outcome.Error != null;
 
-        Console.WriteLine(failed
-            ? $"The server could not be cleared now ({outcome.Error}). Sync tries again before it uploads any place."
-            : "Place history removed from the server for this computer.");
+        if (failed)
+        {
+            Console.Error.WriteLine($"The server could not be cleared now ({outcome.Error}). Sync tries again before it uploads any place.");
+        }
+        else
+        {
+            Console.WriteLine("Place history removed from the server for this computer.");
+        }
 
         if (!allComputers)
         {
