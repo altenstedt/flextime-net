@@ -15,7 +15,8 @@ public class DaemonCommands(
     ILogger<UserInputMonitor> monitorLogger,
     DeviceCode deviceCode,
     Sync sync,
-    Installer installer)
+    Installer installer,
+    LocationClient locationClient)
 {
     /// <summary>Flextime -- tracking working hours. With no command, displays information about the installation and exits.</summary>
     [Command("")]
@@ -129,6 +130,43 @@ public class DaemonCommands(
         logger.LogDebug("Network invoked.");
 
         return PrintNetwork.Invoke(json);
+    }
+
+    /// <summary>Show whether the place is recorded with the measurements, and the place this computer is at now. Off unless turned on.</summary>
+    [Command("location")]
+    public Task<int> Location()
+    {
+        logger.LogDebug("Location invoked.");
+
+        return locationClient.Status();
+    }
+
+    /// <summary>Record the place — a hash of the network's router — with the measurements, from the next minute. Requires login.</summary>
+    [Command("location on")]
+    public Task<int> LocationOn()
+    {
+        logger.LogDebug("Location on invoked.");
+
+        return locationClient.On();
+    }
+
+    /// <summary>Stop recording the place. The time after this shows as having no place; the history is kept.</summary>
+    [Command("location off")]
+    public int LocationOff()
+    {
+        logger.LogDebug("Location off invoked.");
+
+        return locationClient.Off();
+    }
+
+    /// <summary>Remove this computer's place history, locally and on the server. Activity is not touched, nor the place names set in the web.</summary>
+    /// <param name="allComputers">Remove the place history of every computer on the account from the server. The other computers clear their local files when they next sync.</param>
+    [Command("location clear")]
+    public Task<int> LocationClear(bool allComputers = false, CancellationToken cancellationToken = default)
+    {
+        logger.LogDebug("Location clear invoked.");
+
+        return locationClient.Clear(allComputers, cancellationToken);
     }
 
     /// <summary>

@@ -22,6 +22,7 @@ builder.Services.AddSingleton<PrintData>();
 builder.Services.AddSingleton<PolicyClient>();
 builder.Services.AddSingleton<Report>();
 builder.Services.AddSingleton<Installer>();
+builder.Services.AddSingleton<LocationClient>();
 builder.Services.AddApiHttpClient(accessToken, expires, refreshToken);
 
 builder.Logging.AddFilter("Flextime",
