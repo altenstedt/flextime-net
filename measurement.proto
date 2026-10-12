@@ -15,8 +15,19 @@ message Measurement {
   uint32 idle = 3;
 }
 
+// A change of place: from this timestamp on, measurements in the same
+// file and later belong here, until the next change.  Written only
+// while location is on; old readers skip the field.
+message Place {
+  uint32 timestamp = 1;   // when this place took effect
+  uint64 router = 2;      // client hash of the router, 48 bits; 0 = none found
+  uint32 flags = 3;       // bit 0: not dependable, bit 1: VPN, bit 2: location off
+  string hint = 4;        // address suggestion, first sighting of a router only
+}
+
 message Measurements {
   uint32 interval = 1;
   string zone = 2;
   repeated Measurement measurements = 3;
+  repeated Place places = 4;
 }

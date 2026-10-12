@@ -26,14 +26,17 @@ public static partial class MeasurementReflection {
           "YW1wGAEgASgNEh8KBGtpbmQYAiABKA4yES5NZWFzdXJlbWVudC5LaW5kEgwK",
           "BGlkbGUYAyABKA0iXAoES2luZBIICgROT05FEAASDwoLTUVBU1VSRU1FTlQQ",
           "ARIJCgVTVEFSVBACEggKBFNUT1AQAxIQCgxTRVNTSU9OX0xPQ0sQBBISCg5T",
-          "RVNTSU9OX1VOTE9DSxAFIlIKDE1lYXN1cmVtZW50cxIQCghpbnRlcnZhbBgB",
-          "IAEoDRIMCgR6b25lGAIgASgJEiIKDG1lYXN1cmVtZW50cxgDIAMoCzIMLk1l",
-          "YXN1cmVtZW50YgZwcm90bzM="));
+          "RVNTSU9OX1VOTE9DSxAFIkcKBVBsYWNlEhEKCXRpbWVzdGFtcBgBIAEoDRIO",
+          "CgZyb3V0ZXIYAiABKAQSDQoFZmxhZ3MYAyABKA0SDAoEaGludBgEIAEoCSJq",
+          "CgxNZWFzdXJlbWVudHMSEAoIaW50ZXJ2YWwYASABKA0SDAoEem9uZRgCIAEo",
+          "CRIiCgxtZWFzdXJlbWVudHMYAyADKAsyDC5NZWFzdXJlbWVudBIWCgZwbGFj",
+          "ZXMYBCADKAsyBi5QbGFjZWIGcHJvdG8z"));
     descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
         new pbr::FileDescriptor[] { },
         new pbr::GeneratedClrTypeInfo(null, null, new pbr::GeneratedClrTypeInfo[] {
           new pbr::GeneratedClrTypeInfo(typeof(global::Measurement), global::Measurement.Parser, new[]{ "Timestamp", "Kind", "Idle" }, null, new[]{ typeof(global::Measurement.Types.Kind) }, null, null),
-          new pbr::GeneratedClrTypeInfo(typeof(global::Measurements), global::Measurements.Parser, new[]{ "Interval", "Zone", "Measurements_" }, null, null, null, null)
+          new pbr::GeneratedClrTypeInfo(typeof(global::Place), global::Place.Parser, new[]{ "Timestamp", "Router", "Flags", "Hint" }, null, null, null, null),
+          new pbr::GeneratedClrTypeInfo(typeof(global::Measurements), global::Measurements.Parser, new[]{ "Interval", "Zone", "Measurements_", "Places" }, null, null, null, null)
         }));
   }
   #endregion
@@ -329,6 +332,332 @@ public sealed partial class Measurement : pb::IMessage<Measurement>
 
 }
 
+/// <summary>
+/// A change of place: from this timestamp on, measurements in the same
+/// file and later belong here, until the next change.  Written only
+/// while location is on; old readers skip the field.
+/// </summary>
+[global::System.Diagnostics.DebuggerDisplayAttribute("{ToString(),nq}")]
+public sealed partial class Place : pb::IMessage<Place>
+#if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    , pb::IBufferMessage
+#endif
+{
+  private static readonly pb::MessageParser<Place> _parser = new pb::MessageParser<Place>(() => new Place());
+  private pb::UnknownFieldSet _unknownFields;
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public static pb::MessageParser<Place> Parser { get { return _parser; } }
+
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public static pbr::MessageDescriptor Descriptor {
+    get { return global::MeasurementReflection.Descriptor.MessageTypes[1]; }
+  }
+
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  pbr::MessageDescriptor pb::IMessage.Descriptor {
+    get { return Descriptor; }
+  }
+
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public Place() {
+    OnConstruction();
+  }
+
+  partial void OnConstruction();
+
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public Place(Place other) : this() {
+    timestamp_ = other.timestamp_;
+    router_ = other.router_;
+    flags_ = other.flags_;
+    hint_ = other.hint_;
+    _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
+  }
+
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public Place Clone() {
+    return new Place(this);
+  }
+
+  /// <summary>Field number for the "timestamp" field.</summary>
+  public const int TimestampFieldNumber = 1;
+  private uint timestamp_;
+  /// <summary>
+  /// when this place took effect
+  /// </summary>
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public uint Timestamp {
+    get { return timestamp_; }
+    set {
+      timestamp_ = value;
+    }
+  }
+
+  /// <summary>Field number for the "router" field.</summary>
+  public const int RouterFieldNumber = 2;
+  private ulong router_;
+  /// <summary>
+  /// client hash of the router, 48 bits; 0 = none found
+  /// </summary>
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public ulong Router {
+    get { return router_; }
+    set {
+      router_ = value;
+    }
+  }
+
+  /// <summary>Field number for the "flags" field.</summary>
+  public const int FlagsFieldNumber = 3;
+  private uint flags_;
+  /// <summary>
+  /// bit 0: not dependable, bit 1: VPN, bit 2: location off
+  /// </summary>
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public uint Flags {
+    get { return flags_; }
+    set {
+      flags_ = value;
+    }
+  }
+
+  /// <summary>Field number for the "hint" field.</summary>
+  public const int HintFieldNumber = 4;
+  private string hint_ = "";
+  /// <summary>
+  /// address suggestion, first sighting of a router only
+  /// </summary>
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public string Hint {
+    get { return hint_; }
+    set {
+      hint_ = pb::ProtoPreconditions.CheckNotNull(value, "value");
+    }
+  }
+
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public override bool Equals(object other) {
+    return Equals(other as Place);
+  }
+
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public bool Equals(Place other) {
+    if (ReferenceEquals(other, null)) {
+      return false;
+    }
+    if (ReferenceEquals(other, this)) {
+      return true;
+    }
+    if (Timestamp != other.Timestamp) return false;
+    if (Router != other.Router) return false;
+    if (Flags != other.Flags) return false;
+    if (Hint != other.Hint) return false;
+    return Equals(_unknownFields, other._unknownFields);
+  }
+
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public override int GetHashCode() {
+    int hash = 1;
+    if (Timestamp != 0) hash ^= Timestamp.GetHashCode();
+    if (Router != 0UL) hash ^= Router.GetHashCode();
+    if (Flags != 0) hash ^= Flags.GetHashCode();
+    if (Hint.Length != 0) hash ^= Hint.GetHashCode();
+    if (_unknownFields != null) {
+      hash ^= _unknownFields.GetHashCode();
+    }
+    return hash;
+  }
+
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public override string ToString() {
+    return pb::JsonFormatter.ToDiagnosticString(this);
+  }
+
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public void WriteTo(pb::CodedOutputStream output) {
+  #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    output.WriteRawMessage(this);
+  #else
+    if (Timestamp != 0) {
+      output.WriteRawTag(8);
+      output.WriteUInt32(Timestamp);
+    }
+    if (Router != 0UL) {
+      output.WriteRawTag(16);
+      output.WriteUInt64(Router);
+    }
+    if (Flags != 0) {
+      output.WriteRawTag(24);
+      output.WriteUInt32(Flags);
+    }
+    if (Hint.Length != 0) {
+      output.WriteRawTag(34);
+      output.WriteString(Hint);
+    }
+    if (_unknownFields != null) {
+      _unknownFields.WriteTo(output);
+    }
+  #endif
+  }
+
+  #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  void pb::IBufferMessage.InternalWriteTo(ref pb::WriteContext output) {
+    if (Timestamp != 0) {
+      output.WriteRawTag(8);
+      output.WriteUInt32(Timestamp);
+    }
+    if (Router != 0UL) {
+      output.WriteRawTag(16);
+      output.WriteUInt64(Router);
+    }
+    if (Flags != 0) {
+      output.WriteRawTag(24);
+      output.WriteUInt32(Flags);
+    }
+    if (Hint.Length != 0) {
+      output.WriteRawTag(34);
+      output.WriteString(Hint);
+    }
+    if (_unknownFields != null) {
+      _unknownFields.WriteTo(ref output);
+    }
+  }
+  #endif
+
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public int CalculateSize() {
+    int size = 0;
+    if (Timestamp != 0) {
+      size += 1 + pb::CodedOutputStream.ComputeUInt32Size(Timestamp);
+    }
+    if (Router != 0UL) {
+      size += 1 + pb::CodedOutputStream.ComputeUInt64Size(Router);
+    }
+    if (Flags != 0) {
+      size += 1 + pb::CodedOutputStream.ComputeUInt32Size(Flags);
+    }
+    if (Hint.Length != 0) {
+      size += 1 + pb::CodedOutputStream.ComputeStringSize(Hint);
+    }
+    if (_unknownFields != null) {
+      size += _unknownFields.CalculateSize();
+    }
+    return size;
+  }
+
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public void MergeFrom(Place other) {
+    if (other == null) {
+      return;
+    }
+    if (other.Timestamp != 0) {
+      Timestamp = other.Timestamp;
+    }
+    if (other.Router != 0UL) {
+      Router = other.Router;
+    }
+    if (other.Flags != 0) {
+      Flags = other.Flags;
+    }
+    if (other.Hint.Length != 0) {
+      Hint = other.Hint;
+    }
+    _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
+  }
+
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public void MergeFrom(pb::CodedInputStream input) {
+  #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+    input.ReadRawMessage(this);
+  #else
+    uint tag;
+    while ((tag = input.ReadTag()) != 0) {
+    if ((tag & 7) == 4) {
+      // Abort on any end group tag.
+      return;
+    }
+    switch(tag) {
+        default:
+          _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, input);
+          break;
+        case 8: {
+          Timestamp = input.ReadUInt32();
+          break;
+        }
+        case 16: {
+          Router = input.ReadUInt64();
+          break;
+        }
+        case 24: {
+          Flags = input.ReadUInt32();
+          break;
+        }
+        case 34: {
+          Hint = input.ReadString();
+          break;
+        }
+      }
+    }
+  #endif
+  }
+
+  #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  void pb::IBufferMessage.InternalMergeFrom(ref pb::ParseContext input) {
+    uint tag;
+    while ((tag = input.ReadTag()) != 0) {
+    if ((tag & 7) == 4) {
+      // Abort on any end group tag.
+      return;
+    }
+    switch(tag) {
+        default:
+          _unknownFields = pb::UnknownFieldSet.MergeFieldFrom(_unknownFields, ref input);
+          break;
+        case 8: {
+          Timestamp = input.ReadUInt32();
+          break;
+        }
+        case 16: {
+          Router = input.ReadUInt64();
+          break;
+        }
+        case 24: {
+          Flags = input.ReadUInt32();
+          break;
+        }
+        case 34: {
+          Hint = input.ReadString();
+          break;
+        }
+      }
+    }
+  }
+  #endif
+
+}
+
 [global::System.Diagnostics.DebuggerDisplayAttribute("{ToString(),nq}")]
 public sealed partial class Measurements : pb::IMessage<Measurements>
 #if !GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE
@@ -344,7 +673,7 @@ public sealed partial class Measurements : pb::IMessage<Measurements>
   [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
   [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
   public static pbr::MessageDescriptor Descriptor {
-    get { return global::MeasurementReflection.Descriptor.MessageTypes[1]; }
+    get { return global::MeasurementReflection.Descriptor.MessageTypes[2]; }
   }
 
   [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
@@ -367,6 +696,7 @@ public sealed partial class Measurements : pb::IMessage<Measurements>
     interval_ = other.interval_;
     zone_ = other.zone_;
     measurements_ = other.measurements_.Clone();
+    places_ = other.places_.Clone();
     _unknownFields = pb::UnknownFieldSet.Clone(other._unknownFields);
   }
 
@@ -411,6 +741,17 @@ public sealed partial class Measurements : pb::IMessage<Measurements>
     get { return measurements_; }
   }
 
+  /// <summary>Field number for the "places" field.</summary>
+  public const int PlacesFieldNumber = 4;
+  private static readonly pb::FieldCodec<global::Place> _repeated_places_codec
+      = pb::FieldCodec.ForMessage(34, global::Place.Parser);
+  private readonly pbc::RepeatedField<global::Place> places_ = new pbc::RepeatedField<global::Place>();
+  [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
+  [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
+  public pbc::RepeatedField<global::Place> Places {
+    get { return places_; }
+  }
+
   [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
   [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]
   public override bool Equals(object other) {
@@ -429,6 +770,7 @@ public sealed partial class Measurements : pb::IMessage<Measurements>
     if (Interval != other.Interval) return false;
     if (Zone != other.Zone) return false;
     if(!measurements_.Equals(other.measurements_)) return false;
+    if(!places_.Equals(other.places_)) return false;
     return Equals(_unknownFields, other._unknownFields);
   }
 
@@ -439,6 +781,7 @@ public sealed partial class Measurements : pb::IMessage<Measurements>
     if (Interval != 0) hash ^= Interval.GetHashCode();
     if (Zone.Length != 0) hash ^= Zone.GetHashCode();
     hash ^= measurements_.GetHashCode();
+    hash ^= places_.GetHashCode();
     if (_unknownFields != null) {
       hash ^= _unknownFields.GetHashCode();
     }
@@ -466,6 +809,7 @@ public sealed partial class Measurements : pb::IMessage<Measurements>
       output.WriteString(Zone);
     }
     measurements_.WriteTo(output, _repeated_measurements_codec);
+    places_.WriteTo(output, _repeated_places_codec);
     if (_unknownFields != null) {
       _unknownFields.WriteTo(output);
     }
@@ -485,6 +829,7 @@ public sealed partial class Measurements : pb::IMessage<Measurements>
       output.WriteString(Zone);
     }
     measurements_.WriteTo(ref output, _repeated_measurements_codec);
+    places_.WriteTo(ref output, _repeated_places_codec);
     if (_unknownFields != null) {
       _unknownFields.WriteTo(ref output);
     }
@@ -502,6 +847,7 @@ public sealed partial class Measurements : pb::IMessage<Measurements>
       size += 1 + pb::CodedOutputStream.ComputeStringSize(Zone);
     }
     size += measurements_.CalculateSize(_repeated_measurements_codec);
+    size += places_.CalculateSize(_repeated_places_codec);
     if (_unknownFields != null) {
       size += _unknownFields.CalculateSize();
     }
@@ -521,6 +867,7 @@ public sealed partial class Measurements : pb::IMessage<Measurements>
       Zone = other.Zone;
     }
     measurements_.Add(other.measurements_);
+    places_.Add(other.places_);
     _unknownFields = pb::UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
   }
 
@@ -552,6 +899,10 @@ public sealed partial class Measurements : pb::IMessage<Measurements>
           measurements_.AddEntriesFrom(input, _repeated_measurements_codec);
           break;
         }
+        case 34: {
+          places_.AddEntriesFrom(input, _repeated_places_codec);
+          break;
+        }
       }
     }
   #endif
@@ -581,6 +932,10 @@ public sealed partial class Measurements : pb::IMessage<Measurements>
         }
         case 26: {
           measurements_.AddEntriesFrom(ref input, _repeated_measurements_codec);
+          break;
+        }
+        case 34: {
+          places_.AddEntriesFrom(ref input, _repeated_places_codec);
           break;
         }
       }
