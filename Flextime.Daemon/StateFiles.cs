@@ -21,6 +21,19 @@ public static class StateFiles
     /// <summary>When sync last compared every day against the server.</summary>
     public static readonly string ReconcilePath = Path.Combine(Folder, "reconcile.txt");
 
+    /// <summary>
+    /// Whether location is recorded: written by the location command,
+    /// read by listen every tick.  A setting, not published state, so it
+    /// is trusted without any lock.
+    /// </summary>
+    public static readonly string LocationPath = Path.Combine(Folder, "location.txt");
+
+    /// <summary>
+    /// The place clear marker: nothing before its time exists, locally
+    /// or on the server.  Written by location clear and by sync.
+    /// </summary>
+    public static readonly string LocationClearPath = Path.Combine(Folder, "location-clear.txt");
+
     public static void Write(string path, params string[] lines)
     {
         var directory = Path.GetDirectoryName(path);

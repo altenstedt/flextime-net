@@ -1,3 +1,4 @@
+using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using Google.Protobuf;
 using Microsoft.Extensions.Logging;
@@ -6,8 +7,21 @@ using Tmds.DBus.Protocol;
 
 namespace Flextime.Monitor;
 
-public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitorOptions options)
+public class UserInputMonitor(
+    ILogger<UserInputMonitor> logger,
+    UserInputMonitorOptions options,
+    PlaceRecorder? placeRecorder = null)
 {
+    // Network changes come in bursts while an interface comes up; one
+    // sample after it settles is enough.
+    private static readonly TimeSpan NetworkSettleDelay = TimeSpan.FromSeconds(2);
+
+    // configd resolves the router's hardware address shortly after the
+    // address itself, so a sample that found a router without one is
+    // repeated a few times.
+    private static readonly TimeSpan PendingRetryDelay = TimeSpan.FromSeconds(5);
+    private const int PendingRetries = 6;
+
     private readonly TimeSpan interval = TimeSpan.FromMinutes(1);
     private readonly TimeSpan fileTimeLimit = TimeSpan.FromHours(1);
     private readonly IList<Measurement> measurements = [];
@@ -29,8 +43,21 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
 
     private bool sessionLocked;
 
+    private int networkGeneration;
+
     public async Task Initialize()
     {
+        if (placeRecorder != null)
+        {
+            placeRecorder.Initialize(clearedAt => PlaceFiles.Last(Constants.MeasurementsFolder, clearedAt));
+
+            // The event is what makes a change take effect within
+            // seconds; the recorder's own timer only covers an event
+            // that never comes, after sleep for instance.
+            NetworkChange.NetworkAddressChanged += (_, _) => _ = OnNetworkChanged();
+            NetworkChange.NetworkAvailabilityChanged += (_, _) => _ = OnNetworkChanged();
+        }
+
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
             if (string.IsNullOrEmpty(DBusAddress.Session))
@@ -124,6 +151,8 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
 
     public async Task Run(CancellationToken token)
     {
+        var lastTick = DateTimeOffset.UtcNow;
+
         do
         {
             // We want to create measurements as close to the interval as possible.
@@ -139,14 +168,24 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
 
             await Task.Delay(next.Subtract(now), token);
 
-            await Mark(Measurement.Types.Kind.Measurement);
+            // Whatever clock the delay runs on, the wall clock jumps
+            // across a sleep: a long gap means a wake, and the network
+            // is checked before the next measurement so that it does not
+            // carry the place the lid was closed at.
+            var tick = DateTimeOffset.UtcNow;
+            var wake = tick - lastTick > interval * 3;
+
+            lastTick = tick;
+
+            await Mark(Measurement.Types.Kind.Measurement, wake);
 
         } while (!token.IsCancellationRequested);
     }
 
     public Task MarkStart()
     {
-        return Mark(Measurement.Types.Kind.Start);
+        // Like a wake: the place is unknown until the network is read.
+        return Mark(Measurement.Types.Kind.Start, wake: true);
     }
 
     public Task MarkStop()
@@ -154,13 +193,13 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
         return Mark(Measurement.Types.Kind.Stop);
     }
 
-    private async Task Mark(Measurement.Types.Kind kind)
+    private async Task Mark(Measurement.Types.Kind kind, bool wake = false)
     {
         await markSemaphore.WaitAsync();
 
         try
         {
-            await MarkCore(kind);
+            await MarkCore(kind, wake);
         }
         finally
         {
@@ -168,8 +207,10 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
         }
     }
 
-    private async Task MarkCore(Measurement.Types.Kind kind)
+    private async Task MarkCore(Measurement.Types.Kind kind, bool wake)
     {
+        var placesChanged = kind != Measurement.Types.Kind.Stop && await TickPlaces(wake);
+
         TimeSpan idle;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) {
             idle = TimeSpan.FromSeconds(
@@ -212,6 +253,11 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
         if (kind == Measurement.Types.Kind.Measurement && sessionLocked) {
             logger.LogDebug("Session is locked, measurement is not added.");
 
+            if (placesChanged)
+            {
+                FlushMeasurements();
+            }
+
             return;
         }
 
@@ -234,6 +280,12 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
             FlushMeasurements();
 
             lastLogSummaryCount++;
+        }
+        else if (placesChanged)
+        {
+            // A change of place is written when it is noticed, measured
+            // minute or not, so it survives a crash or a shutdown.
+            FlushMeasurements();
         }
 
         if (DateTimeOffset.UtcNow - lastLogSummary >= options.LogSummaryInterval) {
@@ -270,9 +322,98 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
         return zone;
     }
 
+    // Never lets a failure to read the network stop a measurement.
+    private async Task<bool> TickPlaces(bool wake)
+    {
+        if (placeRecorder == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var update = await placeRecorder.Tick(wake);
+
+            if (update.ClearedAt is { } clearedAt)
+            {
+                // The file being written is rewritten from memory below;
+                // the clear command leaves it alone for that reason.
+                var rewritten = PlaceFiles.ClearBefore(Constants.MeasurementsFolder, clearedAt, lastPath);
+
+                logger.LogDebug("Cleared place history from {Count} files.", rewritten);
+            }
+
+            if (update.Pending)
+            {
+                _ = OnNetworkChanged();
+            }
+
+            return update.Changed;
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "Reading the place failed.");
+
+            return false;
+        }
+    }
+
+    private async Task OnNetworkChanged()
+    {
+        if (placeRecorder == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var generation = Interlocked.Increment(ref networkGeneration);
+
+            await Task.Delay(NetworkSettleDelay);
+
+            // A newer event restarts the wait; the last one samples.
+            for (var attempt = 0; attempt < PendingRetries && generation == Volatile.Read(ref networkGeneration); attempt++)
+            {
+                PlaceUpdate update;
+
+                await markSemaphore.WaitAsync();
+
+                try
+                {
+                    update = await placeRecorder.NetworkChanged();
+
+                    if (update.Changed)
+                    {
+                        FlushMeasurements();
+                    }
+                }
+                finally
+                {
+                    markSemaphore.Release();
+                }
+
+                if (!update.Pending)
+                {
+                    return;
+                }
+
+                await Task.Delay(PendingRetryDelay);
+            }
+        }
+        catch (Exception exception)
+        {
+            // Called from an event handler; an exception here would end
+            // the process.
+            logger.LogError(exception, "Reading the place after a network change failed.");
+        }
+    }
+
     private void FlushMeasurements()
     {
-        if (measurements.Count == 0)
+        var places = placeRecorder?.Places ?? [];
+
+        // Nothing to write, and no file whose place points need rewriting.
+        if (measurements.Count == 0 && places.Count == 0 && lastPath == null)
         {
             return;
         }
@@ -287,6 +428,10 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
             Zone = zone
         };
         measurement.Measurements_.AddRange(measurements);
+
+        // Empty unless location is or was on: the file is then exactly
+        // what it was before places existed.
+        measurement.Places.AddRange(places);
 
         if ((lastFlush == null) || (lastPath == null)) {
             // Write to a new file
@@ -324,6 +469,8 @@ public class UserInputMonitor(ILogger<UserInputMonitor> logger, UserInputMonitor
                 lastPath = null;
 
                 measurements.Clear();
+
+                placeRecorder?.StartFile();
             }
         }
     }

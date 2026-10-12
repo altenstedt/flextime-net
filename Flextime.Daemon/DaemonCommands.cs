@@ -324,12 +324,17 @@ public class DaemonCommands(
         // while this process holds the listen lock.
         StateFiles.Write(StateFiles.ListenPath, timeZone ?? UserInputMonitor.GetTimeZoneInfo());
 
+        // Always there, but silent while location is off: it then only
+        // reads the setting every tick, so turning location on needs no
+        // restart.
+        var placeRecorder = new PlaceRecorder(new PlaceSource(logger), monitorLogger);
+
         var monitor = new UserInputMonitor(monitorLogger, new UserInputMonitorOptions
         {
             IgnoreSessionLocked = ignoreSessionLocked,
             TimeZone = timeZone,
             LogSummaryInterval = interval
-        });
+        }, placeRecorder);
 
         try
         {
