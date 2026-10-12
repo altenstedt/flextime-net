@@ -39,7 +39,14 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
         }
         else
         {
-            Console.WriteLine($"Place           :  {Location.Hex(reading.Router)}");
+            // Not the hash: the web shows the id the server makes of it,
+            // and two ids for one router help nobody.  The web marks the
+            // place measured now as "Here now"; name it there.
+            var router = report.Routers.FirstOrDefault(candidate => candidate.Mac != null);
+
+            Console.WriteLine(router == null
+                ? "Place           :  Recorded"
+                : $"Place           :  Router {router.Address} on {router.Interface}");
         }
 
         Console.WriteLine($"Position        :  {(report.Dependable ? "Dependable" : "Not dependable")}. {report.Reason}");
@@ -59,7 +66,7 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
 
         Console.WriteLine();
         Console.WriteLine(on
-            ? "The place is a hash of the router, not a position. Use location off to stop, location clear to remove the history."
+            ? "The place is the router, not a position; the web marks it \"Here now\", so name it there while you are here. Use location off to stop, location clear to remove the history."
             : "Use location on to record the place with the measurements.");
 
         return 0;

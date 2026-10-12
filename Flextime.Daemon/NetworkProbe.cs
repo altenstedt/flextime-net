@@ -477,12 +477,12 @@ public static class PrintNetwork
         {
             Console.WriteLine(router.Id == null
                 ? $"Router          :  {router.Address} on {router.Interface}, hardware address not known yet"
-                : $"Router          :  {router.Address} on {router.Interface}, id {router.Id}");
+                : $"Router          :  {router.Address} on {router.Interface}");
         }
 
         Console.WriteLine($"Position        :  {(report.Dependable ? "Dependable" : "Not dependable")}. {report.Reason}");
         Console.WriteLine();
-        Console.WriteLine("Nothing here is stored or sent. The router id is a hash; the router's hardware address is not shown.");
+        Console.WriteLine("Nothing here is stored or sent; the router's hardware address is not shown.");
 
         return 0;
     }
