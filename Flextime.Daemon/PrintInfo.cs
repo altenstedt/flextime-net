@@ -37,6 +37,7 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
         AnsiConsole.MarkupLine($"Local data      :  {LocalDataStatus()}");
         AnsiConsole.MarkupLine($"Listen process  :  {ListenStatus()}");
         AnsiConsole.MarkupLine($"Sync schedule   :  {SyncStatus()}");
+        AnsiConsole.MarkupLine($"Location        :  {LocationStatus()}");
         AnsiConsole.MarkupLine($"Server URL      :  {Constants.ApiUri}");
 
         await AnsiConsole.Status()
@@ -152,6 +153,15 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
         return StateFiles.TryRead(StateFiles.StopPath) is [var date, ..]
             ? $"Stopped {date}. Use start command to start again."
             : "Not running";
+    }
+
+    private static string LocationStatus()
+    {
+        var on = Location.IsOn() ? "On" : "Off";
+
+        return Location.ReadClear() is { Pending: true }
+            ? $"{on}, clearing the server's place history at the next sync"
+            : on;
     }
 
     private static string SyncStatus()
