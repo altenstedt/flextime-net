@@ -131,6 +131,37 @@ public class PlaceFilesTests : IDisposable
     }
 
     [Fact]
+    public void Files_from_a_time_are_the_later_files_and_the_one_in_effect()
+    {
+        Write("2026-10-01T080000.bin", "UTC", [1]);
+        Write("2026-10-05T230000.bin", "UTC", [2]);
+        Write("2026-10-06T000000.bin", "UTC", [3]);
+        Write("2026-10-07T120000.bin", "UTC", [4]);
+        Write("unnamed.bin", "UTC", [5]);
+
+        var files = PlaceFiles.Files(folder, new DateTime(2026, 10, 6, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(
+            ["2026-10-05T230000.bin", "2026-10-06T000000.bin", "2026-10-07T120000.bin", "unnamed.bin"],
+            files.Select(Path.GetFileName));
+        Assert.Equal(5, PlaceFiles.Files(folder, null).Count);
+    }
+
+    [Fact]
+    public void Read_from_a_time_does_not_open_older_files()
+    {
+        // Garbage would be skipped silently, so the old file holds a
+        // valid point that would show if it were read.
+        Write("2026-10-01T080000.bin", "UTC", [1], (5000, 9, 0));
+        Write("2026-10-05T230000.bin", "UTC", [2], (900, 1, 0));
+        Write("2026-10-06T080000.bin", "UTC", [3], (900, 1, 0), (1030, 2, 0));
+
+        var places = PlaceFiles.Read(folder, new DateTime(2026, 10, 6, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal([900u, 1030u], places.Select(item => item.Place.Timestamp));
+    }
+
+    [Fact]
     public void Read_keeps_the_hint_of_either_copy_of_a_point()
     {
         Write("2026-10-12T080000.bin", "UTC", [1000], (900, 1, 0));

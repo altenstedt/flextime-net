@@ -77,12 +77,16 @@ public static class PlaceFiles
     /// same point can be in two files; it is listed once, with a hint if
     /// either copy has one.
     /// </summary>
-    public static List<PlaceWithZone> Read(string folder)
+    /// <param name="from">
+    /// Read only the files <see cref="Files"/> gives for this time; null
+    /// reads every file.  Points before it may still be listed.
+    /// </param>
+    public static List<PlaceWithZone> Read(string folder, DateTime? from = null)
     {
         var list = new List<PlaceWithZone>();
         var seen = new Dictionary<(uint, ulong, uint), int>();
 
-        foreach (var file in EnumerateFiles(folder))
+        foreach (var file in Files(folder, from))
         {
             var measurements = TryParse(file);
 
@@ -110,6 +114,49 @@ public static class PlaceFiles
         list.Sort((left, right) => left.Place.Timestamp.CompareTo(right.Place.Timestamp));
 
         return list;
+    }
+
+    /// <summary>
+    /// The measurement files that can hold change points at or after
+    /// <paramref name="from"/> (UTC), oldest first, found from their
+    /// names alone: listen names a file by the UTC time it starts it,
+    /// and everything in it comes before the next file is started.  So
+    /// the files started at or after <paramref name="from"/> and the
+    /// last one started before it — which holds the place in effect, and
+    /// after a long sleep may run past it.  A file named otherwise is
+    /// always included.  Null gives every file.
+    /// </summary>
+    public static List<string> Files(string folder, DateTime? from)
+    {
+        var files = EnumerateFiles(folder).Order(StringComparer.Ordinal).ToList();
+
+        if (from == null)
+        {
+            return files;
+        }
+
+        var result = new List<string>();
+        string? before = null;
+
+        foreach (var file in files)
+        {
+            if (!TryStarted(file, out var started) || started >= from.Value)
+            {
+                result.Add(file);
+            }
+            else
+            {
+                // Ordered by name, so the last one seen is the newest.
+                before = file;
+            }
+        }
+
+        if (before != null)
+        {
+            result.Insert(0, before);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -203,6 +250,14 @@ public static class PlaceFiles
             return [];
         }
     }
+
+    private static bool TryStarted(string file, out DateTime started) =>
+        DateTime.TryParseExact(
+            Path.GetFileNameWithoutExtension(file),
+            "yyyy-MM-ddTHHmmss",
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal,
+            out started);
 
     private static Measurements? TryParse(string file)
     {

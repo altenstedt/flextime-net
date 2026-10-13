@@ -59,7 +59,7 @@ public sealed class PlaceSync(HttpClient httpClient, string computerId, string f
                 floor = at;
             }
 
-            var groups = PlaceFiles.Read(folder)
+            var groups = PlaceFiles.Read(folder, From(since))
                 .Where(item => item.Place.Timestamp >= floor)
                 .GroupBy(item => (Date: DateOnly.FromDateTime(item.Timestamp.Date), item.Zone))
                 .Where(group => !since.HasValue || group.Key.Date >= since.Value)
@@ -125,6 +125,16 @@ public sealed class PlaceSync(HttpClient httpClient, string computerId, string f
             note($"Places not synced, trying again next sync: {exception.Message}", true);
         }
     }
+
+    /// <summary>
+    /// The first file time worth reading for a window starting on
+    /// <paramref name="since"/>: the day before it in UTC, which covers
+    /// every zone's start of that day.  The file in effect then comes
+    /// along too (<see cref="PlaceFiles.Files"/>).  Every file without
+    /// a window.
+    /// </summary>
+    public static DateTime? From(DateOnly? since) =>
+        since?.AddDays(-1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
 
     private static string FormatTime(uint seconds) =>
         DateTimeOffset.FromUnixTimeSeconds(seconds).ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);

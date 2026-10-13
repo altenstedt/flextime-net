@@ -64,6 +64,9 @@ public class PlaceSyncTests : IDisposable
             ListenRunning = () => false,
         };
 
+    private static string FileName(uint started) =>
+        $"{DateTimeOffset.FromUnixTimeSeconds(started).UtcDateTime:yyyy-MM-ddTHHmmss}.bin";
+
     private void WriteFile(string name, uint[] measurements, params (uint timestamp, ulong router, uint flags)[] places) =>
         WriteFile(name, measurements, places.Select(place => new Place { Timestamp = place.timestamp, Router = place.router, Flags = place.flags }).ToArray());
 
@@ -238,7 +241,9 @@ public class PlaceSyncTests : IDisposable
         // Recent, so that the second, windowed pass still looks at it.
         var recent = (uint)DateTimeOffset.UtcNow.AddHours(-1).ToUnixTimeSeconds();
 
-        WriteFile("2026-10-12T080000.bin", [recent], (recent, 0x95313127c39c, 0));
+        // Named for when it was started, as listen names it: the
+        // windowed pass picks files by name.
+        WriteFile(FileName(recent), [recent], (recent, 0x95313127c39c, 0));
 
         var api = new FakeApi
         {
@@ -442,7 +447,54 @@ public class PlaceSyncTests : IDisposable
             api.Requests.Single(request => request.Uri.EndsWith("/places?api-version=1.5")).Body);
     }
 
-    private sealed class ListLogger(List<string> lines) : Microsoft.Extensions.Logging.ILogger
+    [Fact]
+    public async Task A_windowed_sync_does_not_open_files_outside_its_window()
+    {
+        Location.SetOn(true, Path.Combine(folder, "location.txt"));
+
+        // A full compare ran a moment ago, so this pass is windowed.
+        File.WriteAllText(Path.Combine(folder, "reconcile.txt"), DateTimeOffset.UtcNow.ToString("O"));
+
+        var now = DateTimeOffset.UtcNow;
+        var recent = (uint)now.AddHours(-1).ToUnixTimeSeconds();
+        var old = now.AddDays(-30);
+
+        // Its point is recent: were the file read, the point would be
+        // uploaded.  Only its name says it is outside the window.
+        WriteFile(FileName((uint)old.ToUnixTimeSeconds()), [], (recent - 60, 0xdeadbeef0001, 0));
+
+        // The file in effect when the window starts is read; its old
+        // point falls before the window and is not compared.
+        WriteFile(FileName((uint)old.AddDays(1).ToUnixTimeSeconds()), [], ((uint)old.AddDays(1).ToUnixTimeSeconds(), 0xdeadbeef0002, 0));
+
+        WriteFile(FileName(recent), [recent], (recent, 0x95313127c39c, 0));
+
+        var api = new FakeApi
+        {
+            Respond = request => request.Method == HttpMethod.Get ? Json(EmptySummary) : new HttpResponseMessage(HttpStatusCode.NoContent),
+        };
+
+        await CreateSync(api).SyncAndLog(NullLogger.Instance);
+
+        Assert.StartsWith($"/{ComputerId}/summary?api-version=1.5&since=", api.Requests[0].Uri);
+
+        var routers = api.Requests
+            .Where(request => request.Uri.EndsWith("/places?api-version=1.5"))
+            .SelectMany(request => JsonDocument.Parse(request.Body!).RootElement.GetProperty("items").EnumerateArray())
+            .Select(item => item.GetProperty("router").GetString())
+            .ToArray();
+
+        Assert.Equal(["95313127c39c"], routers);
+    }
+
+    [Fact]
+    public void The_window_reads_from_the_day_before_it_in_utc()
+    {
+        Assert.Null(PlaceSync.From(null));
+        Assert.Equal(new DateTime(2026, 10, 5, 0, 0, 0, DateTimeKind.Utc), PlaceSync.From(new DateOnly(2026, 10, 6)));
+    }
+
+        private sealed class ListLogger(List<string> lines) : Microsoft.Extensions.Logging.ILogger
     {
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
