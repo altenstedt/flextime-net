@@ -64,12 +64,15 @@ public class PlaceSyncTests : IDisposable
             ListenRunning = () => false,
         };
 
-    private void WriteFile(string name, uint[] measurements, params (uint timestamp, ulong router, uint flags)[] places)
+    private void WriteFile(string name, uint[] measurements, params (uint timestamp, ulong router, uint flags)[] places) =>
+        WriteFile(name, measurements, places.Select(place => new Place { Timestamp = place.timestamp, Router = place.router, Flags = place.flags }).ToArray());
+
+    private void WriteFile(string name, uint[] measurements, Place[] places)
     {
         var file = new Measurements { Interval = 60, Zone = "Europe/Stockholm" };
 
         file.Measurements_.AddRange(measurements.Select(timestamp => new Measurement { Timestamp = timestamp, Kind = Measurement.Types.Kind.Measurement }));
-        file.Places.AddRange(places.Select(place => new Place { Timestamp = place.timestamp, Router = place.router, Flags = place.flags }));
+        file.Places.AddRange(places);
 
         using var stream = File.Create(Path.Combine(Measurements, name));
 
@@ -414,6 +417,29 @@ public class PlaceSyncTests : IDisposable
         Assert.Equal(
             [PlaceSync.MaxItems, 5],
             uploads.Select(upload => JsonDocument.Parse(upload.Body!).RootElement.GetProperty("items").GetArrayLength()));
+    }
+
+[Fact]
+    public async Task Hints_are_sent_when_valid_and_left_out_otherwise()
+    {
+        Location.SetOn(true, Path.Combine(folder, "location.txt"));
+        WriteFile("2026-10-12T080000.bin", [Morning],
+        [
+            new Place { Timestamp = Morning, Router = 0x95313127c39c, Hint = "omegapoint.se" },
+            new Place { Timestamp = Morning + 10, Router = 0xa1b2c3d4e5f6, Hint = "Not Valid" },
+            new Place { Timestamp = Morning + 20, Router = 0, Hint = "no-router.example" },
+        ]);
+
+        var api = new FakeApi
+        {
+            Respond = request => request.Method == HttpMethod.Get ? Json(EmptySummary) : new HttpResponseMessage(HttpStatusCode.NoContent),
+        };
+
+        await CreateSync(api).SyncAndLog(NullLogger.Instance);
+
+        Assert.Equal(
+            """{"zone":"Europe/Stockholm","items":[{"timestamp":1760256000,"router":"95313127c39c","flags":0,"hint":"omegapoint.se"},{"timestamp":1760256010,"router":"a1b2c3d4e5f6","flags":0},{"timestamp":1760256020,"router":null,"flags":0}]}""",
+            api.Requests.Single(request => request.Uri.EndsWith("/places?api-version=1.5")).Body);
     }
 
     private sealed class ListLogger(List<string> lines) : Microsoft.Extensions.Logging.ILogger

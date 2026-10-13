@@ -101,7 +101,10 @@ public sealed class PlaceSync(HttpClient httpClient, string computerId, string f
                         chunk.Select(item => new PlaceDataContract(
                                 item.Timestamp,
                                 item.Router == 0 ? null : Location.Hex(item.Router),
-                                item.Flags))
+                                item.Flags,
+                                // The API refuses the whole request over a
+                                // bad hint; a file may hold anything.
+                                item.Router != 0 && PlaceHints.IsValid(item.Hint) ? item.Hint : null))
                             .ToArray());
 
                     var response = await httpClient.PatchAsJsonAsync(
@@ -128,7 +131,17 @@ public sealed class PlaceSync(HttpClient httpClient, string computerId, string f
 }
 
 /// <param name="Router">The client hash as 12 hex characters; null when no router was found.</param>
-public record PlaceDataContract(long Timestamp, string? Router, uint Flags);
+/// <param name="Hint">
+/// The network's DNS domain, with the first change point for a router;
+/// left out when there is none, so a request without hints is what it
+/// was before them.  An API before hints ignores it: it binds with the
+/// System.Text.Json defaults, which skip unknown members.
+/// </param>
+public record PlaceDataContract(
+    long Timestamp,
+    string? Router,
+    uint Flags,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Hint = null);
 
 public record PlacesDataContract(string Zone, PlaceDataContract[] Items);
 
