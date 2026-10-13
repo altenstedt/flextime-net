@@ -163,9 +163,17 @@ public static class PlaceFiles
     /// The latest change point at or after <paramref name="notBefore"/>,
     /// looking at the newest files first.  Null when there is none.
     /// </summary>
+    /// <remarks>
+    /// Looks at no more than <see cref="LastFilesBack"/> files.  While
+    /// location is on, listen starts every file with the place in effect,
+    /// so the newest file has it; a run of files without any means
+    /// location was off or never on then, and for listen that is the
+    /// same as no point at all.  Unbounded, a computer that never turned
+    /// location on would parse its whole history at every listen start.
+    /// </remarks>
     public static Place? Last(string folder, uint notBefore)
     {
-        foreach (var file in EnumerateFiles(folder).OrderDescending(StringComparer.Ordinal))
+        foreach (var file in EnumerateFiles(folder).OrderDescending(StringComparer.Ordinal).Take(LastFilesBack))
         {
             var places = TryParse(file)?.Places;
 
@@ -179,6 +187,9 @@ public static class PlaceFiles
 
         return null;
     }
+
+    /// <summary>How many of the newest files <see cref="Last"/> looks at: two days of hourly files.</summary>
+    public const int LastFilesBack = 48;
 
     /// <summary>The newest measurement file, the one listen may still be writing.</summary>
     public static string? Newest(string folder) =>

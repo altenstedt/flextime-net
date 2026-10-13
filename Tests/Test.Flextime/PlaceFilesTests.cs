@@ -179,6 +179,25 @@ public class PlaceFilesTests : IDisposable
         Assert.Equal("omegapoint.se", Assert.Single(PlaceFiles.Read(folder)).Place.Hint);
     }
 
+    [Fact]
+    public void Last_looks_back_a_bounded_number_of_files()
+    {
+        Write("2026-10-01T000000.bin", "UTC", [1000], (900, 1, 0));
+
+        var start = new DateTime(2026, 10, 2, 0, 0, 0, DateTimeKind.Utc);
+
+        for (var i = 0; i < PlaceFiles.LastFilesBack - 1; i++)
+        {
+            Write($"{start.AddHours(i):yyyy-MM-ddTHHmmss}.bin", "UTC", [2000]);
+        }
+
+        Assert.Equal(900u, PlaceFiles.Last(folder, 0)?.Timestamp);
+
+        Write($"{start.AddHours(PlaceFiles.LastFilesBack):yyyy-MM-ddTHHmmss}.bin", "UTC", [3000]);
+
+        Assert.Null(PlaceFiles.Last(folder, 0));
+    }
+
     [Theory]
     [InlineData("omegapoint.se", "omegapoint.se")]
     [InlineData("Omegapoint.SE.", "omegapoint.se")]
