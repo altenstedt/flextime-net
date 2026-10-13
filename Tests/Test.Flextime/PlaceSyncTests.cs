@@ -433,6 +433,7 @@ public class PlaceSyncTests : IDisposable
             new Place { Timestamp = Morning, Router = 0x95313127c39c, Hint = "omegapoint.se" },
             new Place { Timestamp = Morning + 10, Router = 0xa1b2c3d4e5f6, Hint = "Not Valid" },
             new Place { Timestamp = Morning + 20, Router = 0, Hint = "no-router.example" },
+            new Place { Timestamp = Morning + 30, Router = 0x95313127c39d, Hint = "localdomain" },
         ]);
 
         var api = new FakeApi
@@ -443,7 +444,7 @@ public class PlaceSyncTests : IDisposable
         await CreateSync(api).SyncAndLog(NullLogger.Instance);
 
         Assert.Equal(
-            """{"zone":"Europe/Stockholm","items":[{"timestamp":1760256000,"router":"95313127c39c","flags":0,"hint":"omegapoint.se"},{"timestamp":1760256010,"router":"a1b2c3d4e5f6","flags":0},{"timestamp":1760256020,"router":null,"flags":0}]}""",
+            """{"zone":"Europe/Stockholm","items":[{"timestamp":1760256000,"router":"95313127c39c","flags":0,"hint":"omegapoint.se"},{"timestamp":1760256010,"router":"a1b2c3d4e5f6","flags":0},{"timestamp":1760256020,"router":null,"flags":0},{"timestamp":1760256030,"router":"95313127c39d","flags":0}]}""",
             api.Requests.Single(request => request.Uri.EndsWith("/places?api-version=1.5")).Body);
     }
 

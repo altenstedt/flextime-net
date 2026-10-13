@@ -47,6 +47,19 @@ public static class PlaceHints
         return IsValid(hint) ? hint : null;
     }
 
+    /// <summary>
+    /// Domains routers hand out by default, which name no place: never
+    /// a hint.  Brand defaults like <c>fritz.box</c> do say something
+    /// and are kept.
+    /// </summary>
+    public static readonly IReadOnlySet<string> RouterDefaults = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "localdomain", "lan", "home", "local", "home.arpa", "localhost", "domain", "workgroup",
+    };
+
+    /// <summary>A normalized domain worth keeping as a hint: valid, and not a router default.</summary>
+    public static bool IsHint(string? domain) => IsValid(domain) && !RouterDefaults.Contains(domain!);
+
     /// <summary>1–253 characters of a–z, 0–9, dot and hyphen, not starting or ending with a dot.</summary>
     public static bool IsValid(string? hint) =>
         hint is { Length: > 0 and <= MaxLength }

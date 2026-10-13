@@ -222,4 +222,29 @@ public class PlaceFilesTests : IDisposable
         Assert.False(PlaceHints.IsValid(new string('a', 254)));
         Assert.False(PlaceHints.IsValid(string.Empty));
     }
+
+    [Theory]
+    [InlineData("localdomain")]
+    [InlineData("lan")]
+    [InlineData("home")]
+    [InlineData("local")]
+    [InlineData("home.arpa")]
+    [InlineData("localhost")]
+    [InlineData("domain")]
+    [InlineData("workgroup")]
+    public void Router_defaults_are_not_hints(string domain)
+    {
+        Assert.True(PlaceHints.IsValid(domain));
+        Assert.False(PlaceHints.IsHint(domain));
+    }
+
+    [Theory]
+    [InlineData("fritz.box")]
+    [InlineData("omegapoint.se")]
+    [InlineData("home.example.com")]
+    [InlineData("lan.se")]
+    public void Other_domains_are_hints(string domain)
+    {
+        Assert.True(PlaceHints.IsHint(domain));
+    }
 }

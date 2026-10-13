@@ -16,14 +16,26 @@ public sealed record InternetRoute(string Family, string LocalAddress, string In
 public sealed record VpnService(string Name, string Status);
 
 // The hardware address is kept for the place hash and never shown or
-// written: the id is what the diagnostic prints.  The hint is the DNS
-// domain of the router's network, valid as a place hint, or null.
+// written: the id is what the diagnostic prints.  Domain is the DNS
+// domain of the router's network, normalized and valid, or null; the
+// hint is that domain unless it is a router default like localdomain.
 public sealed record Router(
     string Address,
     string Interface,
     string? Id,
     [property: JsonIgnore] string? Mac = null,
-    string? Hint = null);
+    string? Domain = null)
+{
+    public string? Hint => PlaceHints.IsHint(Domain) ? Domain : null;
+
+    /// <summary>The Network line of location and network; null when the network gives no domain.</summary>
+    [JsonIgnore]
+    public string? NetworkLine => Domain == null
+        ? null
+        : Hint != null
+            ? $"Network         :  {Hint}"
+            : $"Network         :  none (router default {Domain})";
+}
 
 // One network service's router as configd recorded it on macOS.
 public sealed record ServiceRouter(string? Interface, string Router, string? Mac);
@@ -99,9 +111,9 @@ public static partial class NetworkProbe
 
                 var mac = await GatewayMac(address, nic.Name, serviceRouters);
 
-                var hint = domains != null ? domains.GetValueOrDefault(nic.Name) : SuffixHint(nic, routes);
+                var domain = domains != null ? domains.GetValueOrDefault(nic.Name) : SuffixDomain(nic, routes);
 
-                routers.Add(new Router(address.ToString(), nic.Name, mac == null ? null : RouterId(mac), mac, hint));
+                routers.Add(new Router(address.ToString(), nic.Name, mac == null ? null : RouterId(mac), mac, domain));
             }
         }
 
@@ -320,7 +332,7 @@ public static partial class NetworkProbe
     }
 
     /// <summary>
-    /// The DNS domain of each interface's network service, made a hint,
+    /// The DNS domain of each interface's network service, normalized,
     /// from configd's per-service dictionaries: the IPv4 one names the
     /// interface, the DNS one with the same service id holds
     /// <c>DomainName</c>.  Interfaces without a valid one are left out.
@@ -334,12 +346,12 @@ public static partial class NetworkProbe
             if (!key.EndsWith("/IPv4", StringComparison.Ordinal)
                 || !ipv4.TryGetValue("InterfaceName", out var interfaceName)
                 || !values.TryGetValue($"{key[..^"/IPv4".Length]}/DNS", out var dns)
-                || PlaceHints.Normalize(dns.GetValueOrDefault("DomainName")) is not { } hint)
+                || PlaceHints.Normalize(dns.GetValueOrDefault("DomainName")) is not { } domain)
             {
                 continue;
             }
 
-            domains.TryAdd(interfaceName, hint);
+            domains.TryAdd(interfaceName, domain);
         }
 
         return domains;
@@ -350,7 +362,7 @@ public static partial class NetworkProbe
     // /etc/resolv.conf for every interface alike, and while a tunnel
     // carries the traffic that is likely the VPN's domain, not the
     // network the router is on — no hint then.
-    private static string? SuffixHint(NetworkInterface nic, InternetRoute[] routes)
+    private static string? SuffixDomain(NetworkInterface nic, InternetRoute[] routes)
     {
         if (!OperatingSystem.IsWindows() && routes.Any(route => route.Tunnel))
         {
@@ -547,9 +559,9 @@ public static class PrintNetwork
                 ? $"Router          :  {router.Address} on {router.Interface}, hardware address not known yet"
                 : $"Router          :  {router.Address} on {router.Interface}");
 
-            if (router.Hint != null)
+            if (router.NetworkLine is { } line)
             {
-                Console.WriteLine($"Network         :  {router.Hint}");
+                Console.WriteLine(line);
             }
         }
 

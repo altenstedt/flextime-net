@@ -184,7 +184,7 @@ public class LocationTests : IDisposable
     {
         var other = new Router("10.0.0.1", "en5", "x", "aa:bb:cc:dd:ee:ff", "other.example");
 
-        var reading = Location.ToReading(Report([WiFi], [other, HomeRouter with { Hint = "omegapoint.se" }]), UserId);
+        var reading = Location.ToReading(Report([WiFi], [other, HomeRouter with { Domain = "omegapoint.se" }]), UserId);
 
         Assert.Equal("omegapoint.se", reading.Hint);
     }
@@ -192,8 +192,27 @@ public class LocationTests : IDisposable
     [Fact]
     public void Reading_without_a_router_has_no_hint()
     {
-        var reading = Location.ToReading(Report([WiFi], [HomeRouter with { Id = null, Mac = null, Hint = "omegapoint.se" }]), UserId);
+        var reading = Location.ToReading(Report([WiFi], [HomeRouter with { Id = null, Mac = null, Domain = "omegapoint.se" }]), UserId);
 
         Assert.Null(reading.Hint);
+    }
+
+    [Fact]
+    public void Reading_has_no_hint_for_a_router_default_domain()
+    {
+        var reading = Location.ToReading(Report([WiFi], [HomeRouter with { Domain = "localdomain" }]), UserId);
+
+        Assert.NotEqual(0ul, reading.Router);
+        Assert.Null(reading.Hint);
+    }
+
+    [Theory]
+    [InlineData("omegapoint.se", "Network         :  omegapoint.se")]
+    [InlineData("fritz.box", "Network         :  fritz.box")]
+    [InlineData("localdomain", "Network         :  none (router default localdomain)")]
+    [InlineData(null, null)]
+    public void The_network_line_says_why_there_is_no_hint(string? domain, string? line)
+    {
+        Assert.Equal(line, (HomeRouter with { Domain = domain }).NetworkLine);
     }
 }

@@ -104,7 +104,7 @@ public sealed class PlaceSync(HttpClient httpClient, string computerId, string f
                                 item.Flags,
                                 // The API refuses the whole request over a
                                 // bad hint; a file may hold anything.
-                                item.Router != 0 && PlaceHints.IsValid(item.Hint) ? item.Hint : null))
+                                item.Router != 0 && PlaceHints.IsHint(item.Hint) ? item.Hint : null))
                             .ToArray());
 
                     var response = await httpClient.PatchAsJsonAsync(

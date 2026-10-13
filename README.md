@@ -105,7 +105,8 @@ place is written into the measurement files only when it changes, as a
 keys that hash again before it stores anything.  The first time a file
 records a router it also notes the network's DNS domain, if the network
 gives one (like `omegapoint.se`), as a hint for naming the place; sync
-sends it with that change point.  With location off the
+sends it with that change point.  Router defaults such as `localdomain`,
+`lan` or `home` name no place and are left out.  With location off the
 files are exactly what they were before places existed, and sync sends
 exactly what it did.  `clear --all-computers` clears every computer on
 the account on the server; the others clear their own files when they
