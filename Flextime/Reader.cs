@@ -5,19 +5,11 @@ namespace Flextime;
 
 public static class Reader
 {
-    private static List<MeasurementWithZone> ReadFiles(string folder)
+    private static List<MeasurementWithZone> ReadFiles(string folder, DateTime? from = null)
     {
         var list = new List<MeasurementWithZone>();
 
-        IEnumerable<string> files;
-        try {
-            files = Directory.EnumerateFiles(folder, "*.bin");
-        }
-        catch (DirectoryNotFoundException) {
-            return [];
-        }
-
-        foreach (var file in files)
+        foreach (var file in MeasurementFiles.From(folder, from))
         {
             using var stream = File.OpenRead(file);
             var measurements = Measurements.Parser.ParseFrom(stream);
@@ -75,6 +67,21 @@ public static class Reader
         var byDates = GroupAndHash(list, since, now ?? DateTimeOffset.UtcNow);
 
         return byDates;
+    }
+
+    /// <summary>
+    /// The local days for a sync window from <paramref name="since"/>,
+    /// opening only the files that can hold them
+    /// (<see cref="MeasurementFiles.WindowStart"/>).  Every day from
+    /// <paramref name="since"/> on is complete; days before it may be
+    /// partial or missing, so the caller must not compare them.  Null
+    /// reads every file.
+    /// </summary>
+    public static SortedDictionary<DateOnly, (List<MeasurementWithZone> list, long hash)> ReadWindow(string folder, DateOnly? since)
+    {
+        var list = ReadFiles(folder, MeasurementFiles.WindowStart(since));
+
+        return GroupAndHash(list, TimeSpan.MinValue, DateTimeOffset.UtcNow);
     }
 
     public static (List<MeasurementWithZone> list, bool found) ReadFiles(string folder, TimeSpan since, DateOnly date, long hash) {

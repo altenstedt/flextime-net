@@ -116,48 +116,8 @@ public static class PlaceFiles
         return list;
     }
 
-    /// <summary>
-    /// The measurement files that can hold change points at or after
-    /// <paramref name="from"/> (UTC), oldest first, found from their
-    /// names alone: listen names a file by the UTC time it starts it,
-    /// and everything in it comes before the next file is started.  So
-    /// the files started at or after <paramref name="from"/> and the
-    /// last one started before it — which holds the place in effect, and
-    /// after a long sleep may run past it.  A file named otherwise is
-    /// always included.  Null gives every file.
-    /// </summary>
-    public static List<string> Files(string folder, DateTime? from)
-    {
-        var files = EnumerateFiles(folder).Order(StringComparer.Ordinal).ToList();
-
-        if (from == null)
-        {
-            return files;
-        }
-
-        var result = new List<string>();
-        string? before = null;
-
-        foreach (var file in files)
-        {
-            if (!TryStarted(file, out var started) || started >= from.Value)
-            {
-                result.Add(file);
-            }
-            else
-            {
-                // Ordered by name, so the last one seen is the newest.
-                before = file;
-            }
-        }
-
-        if (before != null)
-        {
-            result.Insert(0, before);
-        }
-
-        return result;
-    }
+    /// <summary>The files <see cref="MeasurementFiles.From"/> gives.</summary>
+    public static List<string> Files(string folder, DateTime? from) => MeasurementFiles.From(folder, from);
 
     /// <summary>
     /// The latest change point at or after <paramref name="notBefore"/>,
@@ -261,14 +221,6 @@ public static class PlaceFiles
             return [];
         }
     }
-
-    private static bool TryStarted(string file, out DateTime started) =>
-        DateTime.TryParseExact(
-            Path.GetFileNameWithoutExtension(file),
-            "yyyy-MM-ddTHHmmss",
-            System.Globalization.CultureInfo.InvariantCulture,
-            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal,
-            out started);
 
     private static Measurements? TryParse(string file)
     {

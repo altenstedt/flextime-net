@@ -487,7 +487,40 @@ public class PlaceSyncTests : IDisposable
         Assert.Equal(["95313127c39c"], routers);
     }
 
-    [Fact]
+[Fact]
+    public async Task A_windowed_activity_sync_does_not_open_files_outside_its_window()
+    {
+        // A full compare ran a moment ago, so this pass is windowed.
+        File.WriteAllText(Path.Combine(folder, "reconcile.txt"), DateTimeOffset.UtcNow.ToString("O"));
+
+        var now = DateTimeOffset.UtcNow;
+        var recent = (uint)now.AddHours(-1).ToUnixTimeSeconds();
+        var old = now.AddDays(-30);
+
+        // Recent measurements the server lacks: were the file read, they
+        // would be uploaded.  Only its name puts it outside the window.
+        WriteFile(FileName((uint)old.ToUnixTimeSeconds()), [recent - 120, recent - 60]);
+
+        // The file in effect when the window starts is read; its day is
+        // before the window and not compared.
+        WriteFile(FileName((uint)old.AddDays(1).ToUnixTimeSeconds()), [(uint)old.AddDays(1).ToUnixTimeSeconds()]);
+
+        WriteFile(FileName(recent), [recent]);
+
+        var api = new FakeApi
+        {
+            Respond = request => request.Method == HttpMethod.Get ? Json(EmptySummary) : new HttpResponseMessage(HttpStatusCode.NoContent),
+        };
+
+        await CreateSync(api).SyncAndLog(NullLogger.Instance);
+
+        Assert.StartsWith($"/{ComputerId}/summary?api-version=1.4&since=", api.Requests[0].Uri);
+        Assert.Equal(
+            $$"""{"zone":"Europe/Stockholm","items":[{"kind":1,"timestamp":{{recent}}}]}""",
+            api.Requests.Single(request => request.Method == HttpMethod.Patch).Body);
+    }
+
+        [Fact]
     public void The_window_reads_from_the_day_before_it_in_utc()
     {
         Assert.Null(PlaceSync.From(null));

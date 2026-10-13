@@ -127,14 +127,11 @@ public sealed class PlaceSync(HttpClient httpClient, string computerId, string f
     }
 
     /// <summary>
-    /// The first file time worth reading for a window starting on
-    /// <paramref name="since"/>: the day before it in UTC, which covers
-    /// every zone's start of that day.  The file in effect then comes
-    /// along too (<see cref="PlaceFiles.Files"/>).  Every file without
-    /// a window.
+    /// Where reading starts for a window from <paramref name="since"/>
+    /// (<see cref="MeasurementFiles.WindowStart"/>); the file in effect
+    /// then comes along too.
     /// </summary>
-    public static DateTime? From(DateOnly? since) =>
-        since?.AddDays(-1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+    public static DateTime? From(DateOnly? since) => MeasurementFiles.WindowStart(since);
 
     private static string FormatTime(uint seconds) =>
         DateTimeOffset.FromUnixTimeSeconds(seconds).ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);

@@ -200,7 +200,9 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
             response.EnsureSuccessStatusCode();
         }
 
-        var localByDates = Reader.ReadFiles(Folder, TimeSpan.MinValue);
+        // A windowed pass compares only days from since on, so only the
+        // files that can hold those are opened; a full pass reads all.
+        var localByDates = Reader.ReadWindow(Folder, since);
 
         // (Date, Zone) is unique in the response — the server stores one
         // row per day and zone — so a dictionary probes each group in
