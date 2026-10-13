@@ -25,14 +25,14 @@ public class DaemonCommands(
         await printInfo.Invoke();
     }
 
-    /// <summary>Log in to remote</summary>
+    /// <summary>Log in to the Flextime server with your account, so sync can upload measurements</summary>
     public async Task Login(CancellationToken cancellationToken)
     {
         logger.LogDebug("Login invoked.");
         await deviceCode.LogOn(cancellationToken);
     }
 
-    /// <summary>Synchronize data with remote</summary>
+    /// <summary>Upload measurements, and places when location is on, to the server: once, or every interval. One of --once or --every is required</summary>
     /// <param name="once">Sync data once with remote.</param>
     /// <param name="every">Sync data recurring with remote, for example 20m, 1h30m, "2 hours" or 00:20:00.</param>
     public async Task Sync(
@@ -123,7 +123,7 @@ public class DaemonCommands(
         return printData.InvokeComputers(json);
     }
 
-    /// <summary>Show what this computer can tell about its network without asking for permission: the interface internet traffic leaves through, whether that is a VPN, and a fingerprint of the router. Nothing is stored or sent.</summary>
+    /// <summary>Show what this computer can tell about its network without asking for permission: the interface internet traffic leaves through, whether that is a VPN, the router, and the network's domain. Nothing is stored or sent.</summary>
     /// <param name="json">Write JSON to standard out.</param>
     public Task<int> Network(bool json = false)
     {
@@ -274,7 +274,7 @@ public class DaemonCommands(
         return await report.Invoke(timesheet, from, to, machines ?? [], idle, noProfile, threshold, tags, verbose, json, cancellationToken);
     }
 
-    /// <summary>Listen to events on device</summary>
+    /// <summary>Record whether the computer is in use, once a minute, and the place when location is on. The installed service runs this</summary>
     /// <param name="timeZone">-t, Time zone used.</param>
     /// <param name="ignoreSessionLocked">Keep tracking measurements when the computer is locked</param>
     /// <param name="logSummaryInterval">Log summary interval, for example 30m or 01:00:00 (default: 1 hour)</param>
