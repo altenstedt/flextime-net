@@ -25,16 +25,22 @@ internal static unsafe partial class SystemConfiguration
     public const string ServiceIPv4Pattern = "State:/Network/Service/[^/]+/IPv4";
 
     /// <summary>
-    /// The string values of every service's IPv4 dictionary, keyed by
-    /// name; arrays and other values are left out.  Null when the store
-    /// cannot be opened.
+    /// Each service's DNS dictionary, with the <c>DomainName</c> the
+    /// network gave it (DHCP option 15) — per service, unlike
+    /// /etc/resolv.conf, which follows whichever service is primary, a
+    /// VPN included.
     /// </summary>
-    public static IReadOnlyList<IReadOnlyDictionary<string, string>>? ReadServiceIPv4()
+    public const string ServiceDnsPattern = "State:/Network/Service/[^/]+/DNS";
+
+    /// <summary>
+    /// The string values of every dictionary whose key matches one of
+    /// <paramref name="patterns"/>, by key; arrays and other values are
+    /// left out.  Null when the store cannot be opened.
+    /// </summary>
+    public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>? ReadValues(params string[] patterns)
     {
         var name = CreateString("flextimed");
-        var pattern = CreateString(ServiceIPv4Pattern);
         var store = IntPtr.Zero;
-        var keys = IntPtr.Zero;
 
         try
         {
@@ -45,14 +51,35 @@ internal static unsafe partial class SystemConfiguration
                 return null;
             }
 
+            var values = new Dictionary<string, IReadOnlyDictionary<string, string>>();
+
+            foreach (var text in patterns)
+            {
+                ReadPattern(store, text, values);
+            }
+
+            return values;
+        }
+        finally
+        {
+            Release(store);
+            Release(name);
+        }
+    }
+
+    private static void ReadPattern(IntPtr store, string text, Dictionary<string, IReadOnlyDictionary<string, string>> values)
+    {
+        var pattern = CreateString(text);
+        var keys = IntPtr.Zero;
+
+        try
+        {
             keys = SCDynamicStoreCopyKeyList(store, pattern);
 
             if (keys == IntPtr.Zero)
             {
-                return [];
+                return;
             }
-
-            var services = new List<IReadOnlyDictionary<string, string>>();
 
             var count = CFArrayGetCount(keys);
 
@@ -73,7 +100,7 @@ internal static unsafe partial class SystemConfiguration
                 {
                     if (CFGetTypeID(value) == CFDictionaryGetTypeID())
                     {
-                        services.Add(ReadStrings(value));
+                        values[ToString(key)] = ReadStrings(value);
                     }
                 }
                 finally
@@ -81,15 +108,11 @@ internal static unsafe partial class SystemConfiguration
                     CFRelease(value);
                 }
             }
-
-            return services;
         }
         finally
         {
             Release(keys);
-            Release(store);
             Release(pattern);
-            Release(name);
         }
     }
 

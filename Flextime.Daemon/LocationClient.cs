@@ -47,6 +47,11 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
             Console.WriteLine(router == null
                 ? "Place           :  Recorded"
                 : $"Place           :  Router {router.Address} on {router.Interface}");
+
+            if (reading.Hint != null)
+            {
+                Console.WriteLine($"Network         :  {reading.Hint}");
+            }
         }
 
         Console.WriteLine($"Position        :  {(report.Dependable ? "Dependable" : "Not dependable")}. {report.Reason}");

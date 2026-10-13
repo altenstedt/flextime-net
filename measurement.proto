@@ -22,7 +22,7 @@ message Place {
   uint32 timestamp = 1;   // when this place took effect
   uint64 router = 2;      // client hash of the router, 48 bits; 0 = none found
   uint32 flags = 3;       // bit 0: not dependable, bit 1: VPN, bit 2: location off
-  string hint = 4;        // address suggestion, first sighting of a router only
+  string hint = 4;        // the network's DNS domain, first change point for a router in a file only
 }
 
 message Measurements {

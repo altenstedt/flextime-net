@@ -178,4 +178,22 @@ public class LocationTests : IDisposable
     {
         Assert.Equal(0ul, Location.ToReading(Report([WiFi], [HomeRouter]), null).Router);
     }
+
+    [Fact]
+    public void Reading_carries_the_hint_of_the_router_it_takes()
+    {
+        var other = new Router("10.0.0.1", "en5", "x", "aa:bb:cc:dd:ee:ff", "other.example");
+
+        var reading = Location.ToReading(Report([WiFi], [other, HomeRouter with { Hint = "omegapoint.se" }]), UserId);
+
+        Assert.Equal("omegapoint.se", reading.Hint);
+    }
+
+    [Fact]
+    public void Reading_without_a_router_has_no_hint()
+    {
+        var reading = Location.ToReading(Report([WiFi], [HomeRouter with { Id = null, Mac = null, Hint = "omegapoint.se" }]), UserId);
+
+        Assert.Null(reading.Hint);
+    }
 }

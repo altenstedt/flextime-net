@@ -129,4 +129,47 @@ public class PlaceFilesTests : IDisposable
 
         Assert.Equal(new DateOnly(2026, 10, 13), DateOnly.FromDateTime(place.Timestamp.Date));
     }
+
+    [Fact]
+    public void Read_keeps_the_hint_of_either_copy_of_a_point()
+    {
+        Write("2026-10-12T080000.bin", "UTC", [1000], (900, 1, 0));
+
+        var path = Path.Combine(folder, "2026-10-12T090000.bin");
+        var file = new Measurements { Interval = 60, Zone = "UTC" };
+
+        file.Places.Add(new Place { Timestamp = 900, Router = 1, Hint = "omegapoint.se" });
+
+        using (var stream = File.Create(path))
+        {
+            file.WriteTo(stream);
+        }
+
+        Assert.Equal("omegapoint.se", Assert.Single(PlaceFiles.Read(folder)).Place.Hint);
+    }
+
+    [Theory]
+    [InlineData("omegapoint.se", "omegapoint.se")]
+    [InlineData("Omegapoint.SE.", "omegapoint.se")]
+    [InlineData("  corp.example-1.com  ", "corp.example-1.com")]
+    [InlineData("", null)]
+    [InlineData(".", null)]
+    [InlineData(null, null)]
+    [InlineData(".example.com", null)]
+    [InlineData("example.com..", null)]
+    [InlineData("exa mple.com", null)]
+    [InlineData("exämple.se", null)]
+    [InlineData("under_score.se", null)]
+    public void Hints_are_normalized_or_dropped(string? domain, string? expected)
+    {
+        Assert.Equal(expected, PlaceHints.Normalize(domain));
+    }
+
+    [Fact]
+    public void Hints_are_at_most_253_characters()
+    {
+        Assert.True(PlaceHints.IsValid(new string('a', 253)));
+        Assert.False(PlaceHints.IsValid(new string('a', 254)));
+        Assert.False(PlaceHints.IsValid(string.Empty));
+    }
 }

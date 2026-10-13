@@ -7,7 +7,8 @@ namespace Flextime.Monitor;
 /// <param name="Flags">The <see cref="PlaceFlags"/> bits, never <see cref="PlaceFlags.LocationOff"/>.</param>
 /// <param name="Online">Whether there is a route to the internet at all.</param>
 /// <param name="Pending">A router was found, but not its hardware address yet: worth asking again shortly.</param>
-public readonly record struct PlaceReading(ulong Router, uint Flags, bool Online = true, bool Pending = false);
+/// <param name="Hint">The DNS domain of the router's network, valid as a hint; null when there is none.</param>
+public readonly record struct PlaceReading(ulong Router, uint Flags, bool Online = true, bool Pending = false, string? Hint = null);
 
 /// <summary>The user's location settings, read every tick.</summary>
 /// <param name="On">Whether location is recorded.</param>
@@ -31,6 +32,8 @@ public readonly record struct PlaceUpdate(bool Changed, uint? ClearedAt = null, 
 /// Keeps the place change points for the measurement file listen is
 /// writing.  A change point is recorded when (router, flags) changes,
 /// when location is turned off, and as the first entry of each file.
+/// The first change point for a router in a file carries its hint; a
+/// hint alone changing is not a change of place.
 /// The network is sampled on the network-change event, on wake, and
 /// every <see cref="FallbackInterval"/> in case an event never comes.
 /// </summary>
@@ -49,6 +52,10 @@ public sealed class PlaceRecorder(IPlaceSource source, ILogger logger)
 
     // The last change point recorded, the off marker included.
     private Place? current;
+
+    // The hint for the router in current, which may have come after the
+    // change point did; the next file starts with it.
+    private string hint = string.Empty;
 
     private DateTimeOffset? lastSample;
     private uint clearedAt;
@@ -73,6 +80,7 @@ public sealed class PlaceRecorder(IPlaceSource source, ILogger logger)
         var last = lastOnDisk(clearedAt);
 
         current = last != null && last.Timestamp >= clearedAt ? last : null;
+        hint = current?.Hint ?? string.Empty;
         lastSample = null;
 
         StartFile();
@@ -85,7 +93,12 @@ public sealed class PlaceRecorder(IPlaceSource source, ILogger logger)
 
         if (current != null && !IsOff(current))
         {
-            places.Add(current);
+            var first = current.Clone();
+
+            first.Hint = first.Router == 0 ? string.Empty : hint;
+
+            places.Add(first);
+            current = first;
         }
     }
 
@@ -170,9 +183,23 @@ public sealed class PlaceRecorder(IPlaceSource source, ILogger logger)
 
         lastSample = Now();
 
+        var readingHint = reading.Router == 0 ? string.Empty : reading.Hint ?? string.Empty;
+
         if (current != null && !IsOff(current) && current.Router == reading.Router && current.Flags == reading.Flags)
         {
+            // Kept for the next file; this one's change point stays as
+            // it was written.
+            if (hint.Length == 0)
+            {
+                hint = readingHint;
+            }
+
             return new PlaceUpdate(false, Pending: reading.Pending);
+        }
+
+        if (current == null || current.Router != reading.Router || hint.Length == 0)
+        {
+            hint = readingHint;
         }
 
         Add(new Place { Timestamp = Timestamp(), Router = reading.Router, Flags = reading.Flags });
@@ -190,6 +217,13 @@ public sealed class PlaceRecorder(IPlaceSource source, ILogger logger)
         if (places.Count > 0 && places[^1].Timestamp == place.Timestamp)
         {
             places.RemoveAt(places.Count - 1);
+        }
+
+        // Once per router and file: the router's later change points
+        // here, a VPN coming up for instance, would only repeat it.
+        if (place.Router != 0 && places.All(other => other.Router != place.Router))
+        {
+            place.Hint = hint;
         }
 
         places.Add(place);

@@ -363,4 +363,84 @@ public class PlaceRecorderTests
 
         Assert.True((await recorder.Tick(wake: false)).Pending);
     }
+
+    private static (uint, ulong, uint, string)[] PointsWithHints(PlaceRecorder recorder) =>
+        recorder.Places.Select(place => (place.Timestamp, place.Router, place.Flags, place.Hint)).ToArray();
+
+    [Fact]
+    public async Task The_first_change_point_for_a_router_in_a_file_carries_the_hint()
+    {
+        var (recorder, source, clock) = Create();
+
+        source.Script.Enqueue(new PlaceReading(Office, 0, Hint: "omegapoint.se"));
+        source.Script.Enqueue(new PlaceReading(Office, PlaceFlags.Vpn, Hint: "omegapoint.se"));
+        source.Script.Enqueue(new PlaceReading(Home, 0, Hint: "localdomain"));
+        source.Script.Enqueue(new PlaceReading(Office, 0, Hint: "omegapoint.se"));
+        source.Script.Enqueue(new PlaceReading(0, 0, Hint: "ignored"));
+
+        for (var i = 0; i < 5; i++)
+        {
+            await recorder.NetworkChanged();
+            clock.Now += TimeSpan.FromMinutes(1);
+        }
+
+        Assert.Equal(
+            [
+                (Seconds(Start), Office, 0u, "omegapoint.se"),
+                (Seconds(Start.AddMinutes(1)), Office, PlaceFlags.Vpn, ""),
+                (Seconds(Start.AddMinutes(2)), Home, 0u, "localdomain"),
+                (Seconds(Start.AddMinutes(3)), Office, 0u, ""),
+                (Seconds(Start.AddMinutes(4)), 0ul, 0u, ""),
+            ],
+            PointsWithHints(recorder));
+    }
+
+    [Fact]
+    public async Task A_hint_alone_changing_is_not_a_change_point_and_reaches_the_next_file()
+    {
+        var (recorder, source, clock) = Create();
+
+        source.Network = new PlaceReading(Office, 0);
+        await recorder.Tick(wake: false);
+
+        clock.Now += TimeSpan.FromMinutes(1);
+        source.Network = new PlaceReading(Office, 0, Hint: "omegapoint.se");
+
+        Assert.False((await recorder.NetworkChanged()).Changed);
+        Assert.Equal([(Seconds(Start), Office, 0u, "")], PointsWithHints(recorder));
+
+        recorder.StartFile();
+
+        Assert.Equal([(Seconds(Start), Office, 0u, "omegapoint.se")], PointsWithHints(recorder));
+    }
+
+    [Fact]
+    public async Task A_new_file_starts_with_the_hint_even_after_a_later_point_for_the_router()
+    {
+        var (recorder, source, clock) = Create();
+
+        source.Network = new PlaceReading(Office, 0, Hint: "omegapoint.se");
+        await recorder.Tick(wake: false);
+
+        clock.Now += TimeSpan.FromMinutes(1);
+        source.Network = new PlaceReading(Office, PlaceFlags.Vpn, Hint: "omegapoint.se");
+        await recorder.NetworkChanged();
+
+        recorder.StartFile();
+
+        Assert.Equal([(Seconds(Start.AddMinutes(1)), Office, PlaceFlags.Vpn, "omegapoint.se")], PointsWithHints(recorder));
+    }
+
+    [Fact]
+    public async Task Without_hints_change_points_are_what_they_were()
+    {
+        var (recorder, source, _) = Create();
+
+        source.Network = new PlaceReading(Home, 0);
+        await recorder.Tick(wake: false);
+
+        recorder.StartFile();
+
+        Assert.All(recorder.Places, place => Assert.Equal(new Place { Timestamp = place.Timestamp, Router = Home }, place));
+    }
 }

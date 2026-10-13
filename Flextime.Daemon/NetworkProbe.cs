@@ -16,8 +16,14 @@ public sealed record InternetRoute(string Family, string LocalAddress, string In
 public sealed record VpnService(string Name, string Status);
 
 // The hardware address is kept for the place hash and never shown or
-// written: the id is what the diagnostic prints.
-public sealed record Router(string Address, string Interface, string? Id, [property: JsonIgnore] string? Mac = null);
+// written: the id is what the diagnostic prints.  The hint is the DNS
+// domain of the router's network, valid as a place hint, or null.
+public sealed record Router(
+    string Address,
+    string Interface,
+    string? Id,
+    [property: JsonIgnore] string? Mac = null,
+    string? Hint = null);
 
 // One network service's router as configd recorded it on macOS.
 public sealed record ServiceRouter(string? Interface, string Router, string? Mac);
@@ -71,7 +77,7 @@ public static partial class NetworkProbe
         var routers = new List<Router>();
 
         // Read once: every gateway below is looked up in the same table.
-        var serviceRouters = OperatingSystem.IsMacOS() ? ReadServiceRouters() : [];
+        var (serviceRouters, domains) = OperatingSystem.IsMacOS() ? ReadServices() : ([], null);
 
         foreach (var nic in interfaces)
         {
@@ -93,7 +99,9 @@ public static partial class NetworkProbe
 
                 var mac = await GatewayMac(address, nic.Name, serviceRouters);
 
-                routers.Add(new Router(address.ToString(), nic.Name, mac == null ? null : RouterId(mac), mac));
+                var hint = domains != null ? domains.GetValueOrDefault(nic.Name) : SuffixHint(nic, routes);
+
+                routers.Add(new Router(address.ToString(), nic.Name, mac == null ? null : RouterId(mac), mac, hint));
             }
         }
 
@@ -311,17 +319,77 @@ public static partial class NetworkProbe
         return await CachedMac(address);
     }
 
-    private static ServiceRouter[] ReadServiceRouters()
+    /// <summary>
+    /// The DNS domain of each interface's network service, made a hint,
+    /// from configd's per-service dictionaries: the IPv4 one names the
+    /// interface, the DNS one with the same service id holds
+    /// <c>DomainName</c>.  Interfaces without a valid one are left out.
+    /// </summary>
+    public static Dictionary<string, string> ParseServiceDomains(IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> values)
+    {
+        var domains = new Dictionary<string, string>();
+
+        foreach (var (key, ipv4) in values)
+        {
+            if (!key.EndsWith("/IPv4", StringComparison.Ordinal)
+                || !ipv4.TryGetValue("InterfaceName", out var interfaceName)
+                || !values.TryGetValue($"{key[..^"/IPv4".Length]}/DNS", out var dns)
+                || PlaceHints.Normalize(dns.GetValueOrDefault("DomainName")) is not { } hint)
+            {
+                continue;
+            }
+
+            domains.TryAdd(interfaceName, hint);
+        }
+
+        return domains;
+    }
+
+    // Where configd cannot be read, the interface's own DNS suffix.  On
+    // Windows that is the adapter's; elsewhere .NET reads it from
+    // /etc/resolv.conf for every interface alike, and while a tunnel
+    // carries the traffic that is likely the VPN's domain, not the
+    // network the router is on — no hint then.
+    private static string? SuffixHint(NetworkInterface nic, InternetRoute[] routes)
+    {
+        if (!OperatingSystem.IsWindows() && routes.Any(route => route.Tunnel))
+        {
+            return null;
+        }
+
+        try
+        {
+            return PlaceHints.Normalize(nic.GetIPProperties().DnsSuffix);
+        }
+        catch (Exception exception) when (exception is PlatformNotSupportedException or NetworkInformationException)
+        {
+            return null;
+        }
+    }
+
+    // configd's routers and DNS domains; no domains (null) when the
+    // store cannot be read, so the caller falls back to the DNS suffix.
+    private static (ServiceRouter[] routers, Dictionary<string, string>? domains) ReadServices()
     {
         if (!OperatingSystem.IsMacOS())
         {
-            return [];
+            return ([], null);
         }
 
-        return SystemConfiguration.ReadServiceIPv4()?
-            .Select(ParseServiceRouter)
+        var values = SystemConfiguration.ReadValues(SystemConfiguration.ServiceIPv4Pattern, SystemConfiguration.ServiceDnsPattern);
+
+        if (values == null)
+        {
+            return ([], null);
+        }
+
+        var routers = values
+            .Where(pair => pair.Key.EndsWith("/IPv4", StringComparison.Ordinal))
+            .Select(pair => ParseServiceRouter(pair.Value))
             .OfType<ServiceRouter>()
-            .ToArray() ?? [];
+            .ToArray();
+
+        return (routers, ParseServiceDomains(values));
     }
 
     private static async Task<string?> CachedMac(IPAddress address)
@@ -478,6 +546,11 @@ public static class PrintNetwork
             Console.WriteLine(router.Id == null
                 ? $"Router          :  {router.Address} on {router.Interface}, hardware address not known yet"
                 : $"Router          :  {router.Address} on {router.Interface}");
+
+            if (router.Hint != null)
+            {
+                Console.WriteLine($"Network         :  {router.Hint}");
+            }
         }
 
         Console.WriteLine($"Position        :  {(report.Dependable ? "Dependable" : "Not dependable")}. {report.Reason}");

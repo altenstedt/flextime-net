@@ -434,7 +434,7 @@ public sealed partial class Place : pb::IMessage<Place>
   public const int HintFieldNumber = 4;
   private string hint_ = "";
   /// <summary>
-  /// address suggestion, first sighting of a router only
+  /// the network's DNS domain, first change point for a router in a file only
   /// </summary>
   [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
   [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]

@@ -177,4 +177,23 @@ public class NetworkProbeTests
 
         Assert.False(dependable);
     }
+
+    [Fact]
+    public void ParseServiceDomains_joins_the_dns_domain_to_the_interface_by_service()
+    {
+        var values = new Dictionary<string, IReadOnlyDictionary<string, string>>
+        {
+            ["State:/Network/Service/A/IPv4"] = new Dictionary<string, string> { ["InterfaceName"] = "en0", ["Router"] = "192.168.4.1" },
+            ["State:/Network/Service/A/DNS"] = new Dictionary<string, string> { ["DomainName"] = "Omegapoint.se." },
+            ["State:/Network/Service/B/IPv4"] = new Dictionary<string, string> { ["InterfaceName"] = "utun4" },
+            ["State:/Network/Service/B/DNS"] = new Dictionary<string, string> { ["DomainName"] = "vpn.example" },
+            ["State:/Network/Service/C/IPv4"] = new Dictionary<string, string> { ["InterfaceName"] = "en5" },
+            ["State:/Network/Service/C/DNS"] = new Dictionary<string, string> { ["DomainName"] = "bad domain" },
+            ["State:/Network/Service/D/IPv4"] = new Dictionary<string, string> { ["InterfaceName"] = "en6" },
+        };
+
+        Assert.Equal(
+            new Dictionary<string, string> { ["en0"] = "omegapoint.se", ["utun4"] = "vpn.example" },
+            NetworkProbe.ParseServiceDomains(values));
+    }
 }

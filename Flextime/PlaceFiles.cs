@@ -15,6 +15,46 @@ public static class PlaceFlags
     public const uint LocationOff = 4;
 }
 
+/// <summary>
+/// The hint kept with a router: the DNS domain of its network, like
+/// <c>omegapoint.se</c>.  The API takes the same rules and refuses
+/// anything else, so an invalid hint is dropped, never sent.
+/// </summary>
+public static class PlaceHints
+{
+    public const int MaxLength = 253;
+
+    /// <summary>
+    /// A domain as the system reports it, made a hint: a trailing dot
+    /// (the root) trimmed, lowercase.  Null when empty or invalid.
+    /// </summary>
+    public static string? Normalize(string? domain)
+    {
+        if (domain == null)
+        {
+            return null;
+        }
+
+        var hint = domain.Trim();
+
+        if (hint.EndsWith('.'))
+        {
+            hint = hint[..^1];
+        }
+
+        hint = hint.ToLowerInvariant();
+
+        return IsValid(hint) ? hint : null;
+    }
+
+    /// <summary>1–253 characters of a–z, 0–9, dot and hyphen, not starting or ending with a dot.</summary>
+    public static bool IsValid(string? hint) =>
+        hint is { Length: > 0 and <= MaxLength }
+        && hint[0] != '.'
+        && hint[^1] != '.'
+        && hint.All(character => character is >= 'a' and <= 'z' or >= '0' and <= '9' or '.' or '-');
+}
+
 public record PlaceWithZone(Place Place, string Zone)
 {
     public DateTimeOffset Timestamp { get; } =
@@ -34,12 +74,13 @@ public static class PlaceFiles
     /// <summary>
     /// Every change point on disk with the zone of the file it is in,
     /// sorted by time.  A file starts with the place in effect, so the
-    /// same point can be in two files; it is listed once.
+    /// same point can be in two files; it is listed once, with a hint if
+    /// either copy has one.
     /// </summary>
     public static List<PlaceWithZone> Read(string folder)
     {
         var list = new List<PlaceWithZone>();
-        var seen = new HashSet<(uint, ulong, uint)>();
+        var seen = new Dictionary<(uint, ulong, uint), int>();
 
         foreach (var file in EnumerateFiles(folder))
         {
@@ -52,9 +93,16 @@ public static class PlaceFiles
 
             foreach (var place in measurements.Places)
             {
-                if (seen.Add((place.Timestamp, place.Router, place.Flags)))
+                var key = (place.Timestamp, place.Router, place.Flags);
+
+                if (!seen.TryGetValue(key, out var index))
                 {
+                    seen[key] = list.Count;
                     list.Add(new PlaceWithZone(place, measurements.Zone));
+                }
+                else if (list[index].Place.Hint.Length == 0 && place.Hint.Length > 0)
+                {
+                    list[index] = new PlaceWithZone(place, list[index].Zone);
                 }
             }
         }

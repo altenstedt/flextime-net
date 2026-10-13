@@ -102,7 +102,10 @@ day by place.  It is off until you turn it on:
 `listen` reads the setting every minute, so no restart is needed.  A
 place is written into the measurement files only when it changes, as a
 48-bit hash of your user id and the router's hardware address; the API
-keys that hash again before it stores anything.  With location off the
+keys that hash again before it stores anything.  The first time a file
+records a router it also notes the network's DNS domain, if the network
+gives one (like `omegapoint.se`), as a hint for naming the place; sync
+sends it with that change point.  With location off the
 files are exactly what they were before places existed, and sync sends
 exactly what it did.  `clear --all-computers` clears every computer on
 the account on the server; the others clear their own files when they

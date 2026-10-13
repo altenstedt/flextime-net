@@ -106,7 +106,8 @@ public static class Location
     /// What a network report says about the place: the router on the
     /// interface internet traffic leaves through, or, when that is a
     /// tunnel, the router of the physical network under it — a VPN does
-    /// not move the computer.  The flags say how far to trust it.
+    /// not move the computer.  The flags say how far to trust it, and
+    /// the hint, that router network's DNS domain, what to call it.
     /// </summary>
     public static PlaceReading ToReading(NetworkReport report, string? userId)
     {
@@ -138,6 +139,6 @@ public static class Location
             return new PlaceReading(0, flags, Pending: router != null && router.Mac == null);
         }
 
-        return new PlaceReading(ClientHash(userId, router.Mac), flags);
+        return new PlaceReading(ClientHash(userId, router.Mac), flags, Hint: router.Hint);
     }
 }
