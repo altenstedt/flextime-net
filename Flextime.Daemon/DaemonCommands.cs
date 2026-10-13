@@ -132,7 +132,7 @@ public class DaemonCommands(
         return PrintNetwork.Invoke(json);
     }
 
-    /// <summary>Show whether the place is recorded with the measurements, and the place this computer is at now. Off unless turned on.</summary>
+    /// <summary>Show whether the place is recorded with the measurements, and the place this computer is at now. Off unless turned on. Change it with location on, location off and location clear [--all-computers].</summary>
     [Command("location")]
     public Task<int> Location()
     {
