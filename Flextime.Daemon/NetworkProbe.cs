@@ -571,13 +571,10 @@ public static class PrintNetwork
         }
 
         Console.WriteLine($"Position        :  {(report.Dependable ? "Dependable" : "Not dependable")}. {report.Reason}");
-        Console.WriteLine();
-        if (userId == null)
+
+        if (userId != null)
         {
-            Console.WriteLine("Nothing here is stored or sent.");
-        }
-        else
-        {
+            Console.WriteLine();
             Console.WriteLine("The hashed id represents the router's MAC address. With location on,");
             Console.WriteLine("sync sends it, the network and the VPN state; nothing else here is sent.");
         }
