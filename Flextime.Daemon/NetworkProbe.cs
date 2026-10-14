@@ -567,7 +567,8 @@ public static class PrintNetwork
 
         Console.WriteLine($"Position        :  {(report.Dependable ? "Dependable" : "Not dependable")}. {report.Reason}");
         Console.WriteLine();
-        Console.WriteLine("Nothing here is stored or sent; the router's hardware address is not shown.");
+        Console.WriteLine("Nothing here is stored or sent. The hashed id comes from the router's");
+        Console.WriteLine("hardware address and can be traced back to it; share it with care.");
 
         return 0;
     }
