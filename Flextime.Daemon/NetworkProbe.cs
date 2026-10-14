@@ -16,7 +16,8 @@ public sealed record InternetRoute(string Family, string LocalAddress, string In
 public sealed record VpnService(string Name, string Status);
 
 // The hardware address is kept for the place hash and never shown or
-// written: the id is what the diagnostic prints.  Domain is the DNS
+// written: the diagnostic prints the place hash as Id, the value sync
+// sends, which needs the user id and so a login.  Domain is the DNS
 // domain of the router's network, normalized and valid, or null; the
 // hint is that domain unless it is a router default like localdomain.
 public sealed record Router(
@@ -113,7 +114,7 @@ public static partial class NetworkProbe
 
                 var domain = domains != null ? domains.GetValueOrDefault(nic.Name) : SuffixDomain(nic, routes);
 
-                routers.Add(new Router(address.ToString(), nic.Name, mac == null ? null : RouterId(mac), mac, domain));
+                routers.Add(new Router(address.ToString(), nic.Name, null, mac, domain));
             }
         }
 
@@ -157,16 +158,6 @@ public static partial class NetworkProbe
 
         return TunnelNamePrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                || TunnelDescriptions.Any(text => description.Contains(text, StringComparison.OrdinalIgnoreCase));
-    }
-
-    // A stable id for a router that does not reveal its hardware
-    // address.  The prefix keeps the hash from matching any other
-    // table of hashed MAC addresses.
-    public static string RouterId(string mac)
-    {
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"flextime-router:{mac}"));
-
-        return Convert.ToHexStringLower(hash, 0, 6);
     }
 
     // The first hardware address in arp output, normalized to
@@ -514,6 +505,18 @@ public static class PrintNetwork
     {
         var report = await NetworkProbe.Read();
 
+        // The id is the place hash sync sends with location on, so what
+        // is printed here can be matched against what the server gets.
+        var userId = await Location.ReadUserId();
+
+        report = report with
+        {
+            Routers = [.. report.Routers.Select(router => router with
+            {
+                Id = router.Mac == null || userId == null ? null : Location.Hex(Location.ClientHash(userId, router.Mac))
+            })]
+        };
+
         if (json)
         {
             Console.WriteLine(JsonSerializer.Serialize(report, NetworkSourceGenerationContext.Default.NetworkReport));
@@ -555,9 +558,11 @@ public static class PrintNetwork
 
         foreach (var router in report.Routers)
         {
-            Console.WriteLine(router.Id == null
+            Console.WriteLine(router.Mac == null
                 ? $"Router          :  {router.Address} on {router.Interface}, hardware address not known yet"
-                : $"Router          :  {router.Address} on {router.Interface} (hashed id {router.Id})");
+                : router.Id == null
+                    ? $"Router          :  {router.Address} on {router.Interface} (log in for its hashed id)"
+                    : $"Router          :  {router.Address} on {router.Interface} (hashed id {router.Id})");
 
             if (router.NetworkLine is { } line)
             {
@@ -567,8 +572,8 @@ public static class PrintNetwork
 
         Console.WriteLine($"Position        :  {(report.Dependable ? "Dependable" : "Not dependable")}. {report.Reason}");
         Console.WriteLine();
-        Console.WriteLine("Nothing here is stored or sent. The hashed id comes from the router's");
-        Console.WriteLine("hardware address and can be traced back to it; share it with care.");
+        Console.WriteLine("The hashed id represents the router's MAC address. With location on,");
+        Console.WriteLine("sync sends it, the network and the VPN state; nothing else here is sent.");
 
         return 0;
     }

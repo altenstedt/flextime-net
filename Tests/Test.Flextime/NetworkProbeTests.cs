@@ -140,16 +140,6 @@ public class NetworkProbeTests
     }
 
     [Fact]
-    public void RouterId_is_stable_and_short()
-    {
-        var id = NetworkProbe.RouterId("00:1a:2b:0c:d4:e5");
-
-        Assert.Equal(id, NetworkProbe.RouterId("00:1a:2b:0c:d4:e5"));
-        Assert.NotEqual(id, NetworkProbe.RouterId("00:1a:2b:0c:d4:e6"));
-        Assert.Matches("^[0-9a-f]{12}$", id);
-    }
-
-    [Fact]
     public void Judge_tunnel_is_not_dependable()
     {
         var (dependable, reason) = NetworkProbe.Judge(
