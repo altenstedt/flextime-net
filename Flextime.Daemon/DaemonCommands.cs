@@ -18,21 +18,21 @@ public class DaemonCommands(
     Installer installer,
     LocationClient locationClient)
 {
-    /// <summary>Flextime -- tracking working hours. With no command, displays information about the installation and exits.</summary>
+    /// <summary>Flextime -- track working hours. Without a command, show the installation.</summary>
     [Command("")]
     public async Task Root()
     {
         await printInfo.Invoke();
     }
 
-    /// <summary>Log in to the Flextime server with your account, so sync can upload measurements</summary>
+    /// <summary>Log in to the Flextime server, so sync can upload</summary>
     public async Task Login(CancellationToken cancellationToken)
     {
         logger.LogDebug("Login invoked.");
         await deviceCode.LogOn(cancellationToken);
     }
 
-    /// <summary>Log out: remove the saved sign-in from this computer. Sync stops uploading until you log in again; measurements are kept.</summary>
+    /// <summary>Remove the sign-in from this computer; measurements are kept</summary>
     public int Logout()
     {
         logger.LogDebug("Logout invoked.");
@@ -44,12 +44,12 @@ public class DaemonCommands(
         return 0;
     }
 
-    /// <summary>Upload measurements, and places when location is on, to the server: once, or every interval. One of --once or --every is required</summary>
-    /// <param name="once">Sync data once with remote.</param>
-    /// <param name="every">Sync data recurring with remote, for example 20m, 1h30m, "2 hours" or 00:20:00.</param>
+    /// <summary>Upload measurements and places, --once or --every</summary>
+    /// <param name="once">Sync once.</param>
+    /// <param name="every">Sync every interval: 20m, 1h30m, "2 hours" or 00:20:00.</param>
     public async Task Sync(
         bool once = false,
-        string? every = null,
+        [HideDefaultValue] string? every = null,
         CancellationToken cancellationToken = default)
     {
         logger.LogDebug("Sync invoked.");
@@ -126,7 +126,7 @@ public class DaemonCommands(
         }
     }
 
-    /// <summary>Show the computers on this account, with the ids the report command takes</summary>
+    /// <summary>Show your computers and the ids report takes</summary>
     /// <param name="json">Write JSON to standard out.</param>
     public Task<int> Computers(bool json = false)
     {
@@ -135,7 +135,7 @@ public class DaemonCommands(
         return printData.InvokeComputers(json);
     }
 
-    /// <summary>Show what this computer can tell about its network without asking for permission: the interface internet traffic leaves through, whether that is a VPN, the router, and the network's domain. Nothing is stored or sent.</summary>
+    /// <summary>Show the network as seen without permissions; sends nothing</summary>
     /// <param name="json">Write JSON to standard out.</param>
     public Task<int> Network(bool json = false)
     {
@@ -144,7 +144,7 @@ public class DaemonCommands(
         return PrintNetwork.Invoke(json);
     }
 
-    /// <summary>Show whether the place is recorded with the measurements, and the place this computer is at now. Off unless turned on. Change it with location on, location off and location clear [--all-computers].</summary>
+    /// <summary>Show whether the place is recorded, and the place now</summary>
     [Command("location")]
     public Task<int> Location()
     {
@@ -153,7 +153,7 @@ public class DaemonCommands(
         return locationClient.Status();
     }
 
-    /// <summary>Record the place — a hash of the network's router — with the measurements, from the next minute. Requires login.</summary>
+    /// <summary>Record the place, a hash of the router. Requires login</summary>
     [Command("location on")]
     public Task<int> LocationOn()
     {
@@ -162,7 +162,7 @@ public class DaemonCommands(
         return locationClient.On();
     }
 
-    /// <summary>Stop recording the place. The time after this shows as having no place; the history is kept.</summary>
+    /// <summary>Stop recording the place; the history is kept</summary>
     [Command("location off")]
     public int LocationOff()
     {
@@ -171,8 +171,8 @@ public class DaemonCommands(
         return locationClient.Off();
     }
 
-    /// <summary>Remove this computer's place history, locally and on the server. Activity is not touched, nor the place names set in the web.</summary>
-    /// <param name="allComputers">Remove the place history of every computer on the account from the server. The other computers clear their local files when they next sync.</param>
+    /// <summary>Remove this computer's place history, here and on the server</summary>
+    /// <param name="allComputers">Clear every computer on the account, on the server too.</param>
     [Command("location clear")]
     public Task<int> LocationClear(bool allComputers = false, CancellationToken cancellationToken = default)
     {
@@ -181,27 +181,26 @@ public class DaemonCommands(
         return locationClient.Clear(allComputers, cancellationToken);
     }
 
-    /// <summary>
-    /// Show activity data stored on the server.
-    ///
+    /// <summary>Show activity on the server; report matches the web</summary>
+    /// <remarks>
     /// Note that these numbers are not the web client's, even with idle
     /// profiles applied: days are grouped here rather than on the
     /// server, so a day can begin and end differently near midnight.
     /// The report command is the one that reproduces what the web
     /// client shows.
-    /// </summary>
+    /// </remarks>
     /// <param name="days">-d, Number of days to show.</param>
-    /// <param name="computer">-c, Computer id to show, comma separated for multiple. Defaults to this computer.</param>
+    /// <param name="computer">-c, Computer ids, comma separated. Default: here.</param>
     /// <param name="allComputers">Show all computers.</param>
-    /// <param name="idle">-i, Idle limit in minutes. Overrides any stored idle profiles.</param>
-    /// <param name="noProfile">Ignore stored idle profiles and use the flat idle limit.</param>
-    /// <param name="timestamps">Include raw timestamps (Unix seconds) in JSON output.</param>
+    /// <param name="idle">-i, Idle limit in minutes; overrides profiles.</param>
+    /// <param name="noProfile">Ignore idle profiles; use the flat limit.</param>
+    /// <param name="timestamps">Include raw Unix timestamps in JSON output.</param>
     /// <param name="json">Write JSON to standard out.</param>
     public Task<int> Data(
         int days = 30,
-        string[]? computer = null,
+        [HideDefaultValue] string[]? computer = null,
         bool allComputers = false,
-        int? idle = null,
+        [HideDefaultValue] int? idle = null,
         bool noProfile = false,
         bool timestamps = false,
         bool json = false)
@@ -211,28 +210,28 @@ public class DaemonCommands(
         return printData.Invoke(days, computer ?? [], allComputers, idle, noProfile, timestamps, json);
     }
 
-    /// <summary>Compare the hours you reported — a timesheet file you supply — against the activity measured, and show where they disagree</summary>
-    /// <param name="timesheet">-t, Path to a JSON file holding the hours you reported — the side this checks the measurements against. The file holds a list of {"date": "2026-06-26", "tag": "ClientA", "minutes": 540}, tag optional, written by whatever you report your time from. Read from a pipe when omitted, or with -.</param>
-    /// <param name="since">-s, How far back to reconcile, for example 1w, 3d, "2 weeks ago" or P7D. Ignored when --week is given.</param>
-    /// <param name="week">-w, Reconcile whole ISO weeks instead: this, last, 34, 32-34, 2026-W34 or 2026-W32-34.</param>
-    /// <param name="month">Reconcile whole calendar months instead, which is what invoicing follows: this, last, aug, jun-aug, 8, 6-8, 2026-08 or 2026-jun-aug.</param>
-    /// <param name="machines">-m, Computer id(s) whose activity counts, comma separated. Defaults to every computer you have, which is rarely what you want if some of them are personal.</param>
-    /// <param name="idle">-i, Flat idle limit in minutes, for a user with no stored idle profiles.</param>
-    /// <param name="noProfile">Ignore stored idle profiles and marks, and use the flat idle limit.</param>
-    /// <param name="threshold">How many minutes a day may differ by before it is worth mentioning.</param>
-    /// <param name="tags">How to lay out the reported hours: total (sums only), matrix (days down, tags across — one week at most), days (each tag's days beneath it) or weeks (a week per block, days as columns).</param>
-    /// <param name="verbose">-v, Also list the machines counted, the sections that found nothing, and the activity not counted as findings.</param>
+    /// <summary>Compare reported hours with measured activity</summary>
+    /// <param name="timesheet">-t, JSON file of reported hours, or - for stdin.</param>
+    /// <param name="since">-s, How far back: 1w (default), 3d or P7D.</param>
+    /// <param name="week">-w, ISO weeks: this, last, 34, 32-34 or 2026-W34.</param>
+    /// <param name="month">Months: this, last, aug, jun-aug, 8 or 2026-08.</param>
+    /// <param name="machines">-m, Computer ids to count. Default: all.</param>
+    /// <param name="idle">-i, Flat idle limit when there are no profiles.</param>
+    /// <param name="noProfile">Ignore idle profiles and marks.</param>
+    /// <param name="threshold">Minutes a day may differ quietly.</param>
+    /// <param name="tags">Layout: total (default), matrix, days, weeks.</param>
+    /// <param name="verbose">-v, Also list machines and uncounted activity.</param>
     /// <param name="json">Write JSON to standard out.</param>
     public async Task<int> Report(
-        string? timesheet = null,
-        string since = "1w",
-        string? week = null,
-        string? month = null,
-        string[]? machines = null,
-        int? idle = null,
+        [HideDefaultValue] string? timesheet = null,
+        [HideDefaultValue] string since = "1w",
+        [HideDefaultValue] string? week = null,
+        [HideDefaultValue] string? month = null,
+        [HideDefaultValue] string[]? machines = null,
+        [HideDefaultValue] int? idle = null,
         bool noProfile = false,
         int threshold = Daemon.Report.DefaultThreshold,
-        TagLayout tags = TagLayout.Total,
+        [HideDefaultValue] TagLayout tags = TagLayout.Total,
         bool verbose = false,
         bool json = false,
         CancellationToken cancellationToken = default)
@@ -286,14 +285,14 @@ public class DaemonCommands(
         return await report.Invoke(timesheet, from, to, machines ?? [], idle, noProfile, threshold, tags, verbose, json, cancellationToken);
     }
 
-    /// <summary>Record whether the computer is in use, once a minute, and the place when location is on. The installed service runs this</summary>
+    /// <summary>Record use once a minute, and the place when location is on</summary>
     /// <param name="timeZone">-t, Time zone used.</param>
-    /// <param name="ignoreSessionLocked">Keep tracking measurements when the computer is locked</param>
-    /// <param name="logSummaryInterval">Log summary interval, for example 30m or 01:00:00 (default: 1 hour)</param>
+    /// <param name="ignoreSessionLocked">Keep measuring while locked.</param>
+    /// <param name="logSummaryInterval">Log a summary this often (default: 1h).</param>
     public async Task Listen(
-        string? timeZone = null,
+        [HideDefaultValue] string? timeZone = null,
         bool ignoreSessionLocked = false,
-        string? logSummaryInterval = null,
+        [HideDefaultValue] string? logSummaryInterval = null,
         CancellationToken cancellationToken = default)
     {
         logger.LogDebug("Listen invoked.");
@@ -419,10 +418,10 @@ public class DaemonCommands(
         await monitor.MarkStop();
     }
 
-    /// <summary>Install listen and sync as user services that start at logon</summary>
+    /// <summary>Install listen and sync as services that start at logon</summary>
     /// <param name="timeZone">-t, Time zone used. Required on Windows.</param>
-    /// <param name="every">Sync interval, for example 20m or 00:20:00 (default: 20 minutes).</param>
-    public async Task<int> Install(string? timeZone = null, string? every = null)
+    /// <param name="every">Sync interval, for example 20m (default: 20m).</param>
+    public async Task<int> Install([HideDefaultValue] string? timeZone = null, [HideDefaultValue] string? every = null)
     {
         logger.LogDebug("Install invoked.");
 
@@ -458,7 +457,7 @@ public class DaemonCommands(
         return true;
     }
 
-    /// <summary>Uninstall the user services. Measurements and tokens are kept.</summary>
+    /// <summary>Uninstall the services; measurements and tokens are kept</summary>
     public async Task<int> Uninstall()
     {
         logger.LogDebug("Uninstall invoked.");
@@ -466,7 +465,7 @@ public class DaemonCommands(
         return await installer.Uninstall();
     }
 
-    /// <summary>Stop the listen service without uninstalling. It stays stopped across logons until started again. Sync keeps running.</summary>
+    /// <summary>Stop listen, across logons, until start; sync keeps going</summary>
     public async Task<int> Stop()
     {
         logger.LogDebug("Stop invoked.");
@@ -474,7 +473,7 @@ public class DaemonCommands(
         return await installer.Stop();
     }
 
-    /// <summary>Start the listen service after a stop</summary>
+    /// <summary>Start listen after a stop</summary>
     public async Task<int> Start()
     {
         logger.LogDebug("Start invoked.");
