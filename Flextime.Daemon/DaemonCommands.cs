@@ -32,6 +32,18 @@ public class DaemonCommands(
         await deviceCode.LogOn(cancellationToken);
     }
 
+    /// <summary>Log out: remove the saved sign-in from this computer. Sync stops uploading until you log in again; measurements are kept.</summary>
+    public int Logout()
+    {
+        logger.LogDebug("Logout invoked.");
+
+        Console.WriteLine(TokenStorage.Delete()
+            ? "Logged out. Sync uploads nothing until you log in again."
+            : "Not logged in.");
+
+        return 0;
+    }
+
     /// <summary>Upload measurements, and places when location is on, to the server: once, or every interval. One of --once or --every is required</summary>
     /// <param name="once">Sync data once with remote.</param>
     /// <param name="every">Sync data recurring with remote, for example 20m, 1h30m, "2 hours" or 00:20:00.</param>

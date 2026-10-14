@@ -31,6 +31,16 @@ public class TokenStorageTests : IDisposable
     }
 
     [Fact]
+    public async Task DeleteRemovesTokens()
+    {
+        await TokenStorage.Write("access token", 3600, "refresh token", TokenPath, TestContext.Current.CancellationToken);
+
+        Assert.True(TokenStorage.Delete(TokenPath));
+        Assert.False(File.Exists(TokenPath));
+        Assert.False(TokenStorage.Delete(TokenPath));
+    }
+
+    [Fact]
     public async Task MissingFileIsEmpty()
     {
         var (accessToken, expires, refreshToken) = await TokenStorage.Read(TokenPath, TestContext.Current.CancellationToken);

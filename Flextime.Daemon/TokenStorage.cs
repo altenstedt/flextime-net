@@ -49,4 +49,19 @@ public static class TokenStorage
             File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
         }
     }
+
+    /// <summary>Removes the token file; false when there was none.</summary>
+    public static bool Delete(string? path = null)
+    {
+        path ??= DefaultPath;
+
+        if (!File.Exists(path))
+        {
+            return false;
+        }
+
+        File.Delete(path);
+
+        return true;
+    }
 }
