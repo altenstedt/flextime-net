@@ -561,7 +561,7 @@ public static class PrintNetwork
             Console.WriteLine(router.Mac == null
                 ? $"Router          :  {router.Address} on {router.Interface}, hardware address not known yet"
                 : router.Id == null
-                    ? $"Router          :  {router.Address} on {router.Interface} (log in for its hashed id)"
+                    ? $"Router          :  {router.Address} on {router.Interface}"
                     : $"Router          :  {router.Address} on {router.Interface} (hashed id {router.Id})");
 
             if (router.NetworkLine is { } line)
@@ -572,8 +572,15 @@ public static class PrintNetwork
 
         Console.WriteLine($"Position        :  {(report.Dependable ? "Dependable" : "Not dependable")}. {report.Reason}");
         Console.WriteLine();
-        Console.WriteLine("The hashed id represents the router's MAC address. With location on,");
-        Console.WriteLine("sync sends it, the network and the VPN state; nothing else here is sent.");
+        if (userId == null)
+        {
+            Console.WriteLine("Nothing here is stored or sent.");
+        }
+        else
+        {
+            Console.WriteLine("The hashed id represents the router's MAC address. With location on,");
+            Console.WriteLine("sync sends it, the network and the VPN state; nothing else here is sent.");
+        }
 
         return 0;
     }
