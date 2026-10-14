@@ -557,7 +557,7 @@ public static class PrintNetwork
         {
             Console.WriteLine(router.Id == null
                 ? $"Router          :  {router.Address} on {router.Interface}, hardware address not known yet"
-                : $"Router          :  {router.Address} on {router.Interface}");
+                : $"Router          :  {router.Address} on {router.Interface} (hashed id {router.Id})");
 
             if (router.NetworkLine is { } line)
             {
