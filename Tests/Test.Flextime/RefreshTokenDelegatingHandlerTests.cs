@@ -15,7 +15,7 @@ public class RefreshTokenDelegatingHandlerTests(ITestOutputHelper testOutputHelp
         {
             Scope = "scope",
             ClientId = "client id 1",
-            RefreshToken = string.Empty,
+            RefreshToken = "refresh token",
             WriteToStorage = false
         };
         
@@ -45,7 +45,7 @@ public class RefreshTokenDelegatingHandlerTests(ITestOutputHelper testOutputHelp
         {
             Scope = "scope",
             ClientId = "client id 2",
-            RefreshToken = string.Empty,
+            RefreshToken = "refresh token",
             WriteToStorage = false
         };
 
@@ -87,7 +87,7 @@ public class RefreshTokenDelegatingHandlerTests(ITestOutputHelper testOutputHelp
             ClientId = "client id 3",
             AccessToken = "stored access token",
             Expires = DateTimeOffset.UtcNow.AddMinutes(30),
-            RefreshToken = string.Empty,
+            RefreshToken = "refresh token",
             WriteToStorage = false
         };
 
@@ -122,7 +122,7 @@ public class RefreshTokenDelegatingHandlerTests(ITestOutputHelper testOutputHelp
 
             // Inside the handler's one minute grace, so it must not be used.
             Expires = DateTimeOffset.UtcNow.AddSeconds(30),
-            RefreshToken = string.Empty,
+            RefreshToken = "refresh token",
             WriteToStorage = false
         };
 

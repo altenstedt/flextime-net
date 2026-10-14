@@ -21,6 +21,14 @@ public class RefreshTokenDelegatingHandler(
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
+        // Never logged in: there is nothing to refresh, and an empty grant
+        // reads as an expired sign-in.  Send the request anonymously —
+        // /ping allows that, and everything else checks the login first.
+        if (string.IsNullOrEmpty(options.RefreshToken))
+        {
+            return await base.SendAsync(request, cancellationToken);
+        }
+
         var accessToken = await cache.GetOrAddAsync<string>(options.ClientId, async entry =>
         {
             // This is guaranteed to be single threaded since we use LazyCache.
