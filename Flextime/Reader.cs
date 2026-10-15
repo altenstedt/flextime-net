@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
+using Google.Protobuf;
 
 namespace Flextime;
 
@@ -11,8 +12,24 @@ public static class Reader
 
         foreach (var file in MeasurementFiles.From(folder, from))
         {
-            using var stream = File.OpenRead(file);
-            var measurements = Measurements.Parser.ParseFrom(stream);
+            Measurements measurements;
+
+            try
+            {
+                using var stream = File.OpenRead(file);
+                measurements = Measurements.Parser.ParseFrom(stream);
+            }
+            catch (InvalidProtocolBufferException exception)
+            {
+                // A file cut short — listen killed midway through a write
+                // before writes went through a rename, say.  Losing its
+                // hour is better than every sync, data and report failing
+                // for good.  Standard error, so data's JSON stays clean
+                // and the services' logs have it.
+                Console.Error.WriteLine($"Skipping unreadable measurement file {Path.GetFileName(file)}: {exception.Message}");
+
+                continue;
+            }
 
             list.AddRange(measurements.Measurements_.Select(item => new MeasurementWithZone(item, measurements.Zone, measurements.Interval)));
         }

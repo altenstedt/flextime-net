@@ -230,6 +230,26 @@ public class ReaderTests : IDisposable
     }
 
     [Fact]
+    public void TruncatedFileIsSkipped()
+    {
+        var timestamp = DateTimeOffset.Parse("2024-01-01T10:00:00+00:00");
+
+        WriteFile(folder, "UTC", timestamp);
+        WriteFile(folder, "UTC", timestamp.AddDays(1), timestamp.AddDays(1).AddMinutes(1));
+
+        // Cut the second file midway through its last measurement.
+        var second = Path.Combine(folder, "001.bin");
+        var bytes = File.ReadAllBytes(second);
+        File.WriteAllBytes(second, bytes[..^2]);
+
+        Assert.Throws<InvalidProtocolBufferException>(() => Measurements.Parser.ParseFrom(File.ReadAllBytes(second)));
+
+        var byDates = Reader.ReadFiles(folder, TimeSpan.MinValue);
+
+        Assert.Equal(new[] { new DateOnly(2024, 1, 1) }, byDates.Keys);
+    }
+
+    [Fact]
     public void ReplaceRewritesWholeAndLeavesNoTemporaryFile()
     {
         var path = Path.Combine(folder, "2024-01-01T100000.bin");
