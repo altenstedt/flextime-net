@@ -199,16 +199,9 @@ public static class PlaceFiles
             measurements.Places.Clear();
             measurements.Places.AddRange(kept);
 
-            var temporary = $"{file}.{Guid.NewGuid():N}.tmp";
-
             try
             {
-                using (var stream = File.Create(temporary))
-                {
-                    measurements.WriteTo(stream);
-                }
-
-                File.Move(temporary, file, overwrite: true);
+                MeasurementFiles.Replace(file, measurements);
 
                 rewritten++;
             }
@@ -216,7 +209,6 @@ public static class PlaceFiles
             {
                 // The marker still holds: nothing before it is uploaded,
                 // and the next clear tries the file again.
-                TryDelete(temporary);
             }
         }
 
@@ -247,18 +239,6 @@ public static class PlaceFiles
         {
             // Being written by listen this very moment, or removed.
             return null;
-        }
-    }
-
-    private static void TryDelete(string path)
-    {
-        try
-        {
-            File.Delete(path);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            // A stray temporary file is not a .bin file; nothing reads it.
         }
     }
 }

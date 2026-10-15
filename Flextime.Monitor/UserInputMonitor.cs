@@ -1,6 +1,5 @@
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
-using Google.Protobuf;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using Tmds.DBus.Protocol;
@@ -443,18 +442,17 @@ public class UserInputMonitor(
                 PrivateFolder.Ensure(directory);
             }
 
-            using var stream = File.Create(path);
-            measurement.WriteTo(stream);
+            MeasurementFiles.Replace(path, measurement);
 
             logger.LogTrace("Flushed {Path}.", path);
 
             lastPath = path;
             lastFlush = DateTimeOffset.Now;
         } else {
-            // Rewrite the existing file with all measurements collected so far.
-            // Truncate, or shorter serializations would leave trailing bytes.
-            using var stream = File.Create(lastPath);
-            measurement.WriteTo(stream);
+            // Rewrite the existing file with all measurements collected so
+            // far.  Replaced whole, so a crash or a full disk midway never
+            // leaves a truncated file for sync to trip over.
+            MeasurementFiles.Replace(lastPath, measurement);
 
             logger.LogTrace("Flushed {Path}.", lastPath);
 

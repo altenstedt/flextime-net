@@ -229,6 +229,26 @@ public class ReaderTests : IDisposable
         return Assert.Single(Reader.ReadFiles(hashFolder, TimeSpan.MinValue)).Value.hash;
     }
 
+    [Fact]
+    public void ReplaceRewritesWholeAndLeavesNoTemporaryFile()
+    {
+        var path = Path.Combine(folder, "2024-01-01T100000.bin");
+        var timestamp = DateTimeOffset.Parse("2024-01-01T10:00:00+00:00");
+
+        var longer = new Measurements { Interval = 60, Zone = "UTC" };
+        longer.Measurements_.Add(new Measurement { Timestamp = (uint)timestamp.ToUnixTimeSeconds() });
+        longer.Measurements_.Add(new Measurement { Timestamp = (uint)timestamp.AddMinutes(1).ToUnixTimeSeconds() });
+
+        var shorter = new Measurements { Interval = 60, Zone = "UTC" };
+        shorter.Measurements_.Add(new Measurement { Timestamp = (uint)timestamp.ToUnixTimeSeconds() });
+
+        MeasurementFiles.Replace(path, longer);
+        MeasurementFiles.Replace(path, shorter);
+
+        Assert.Equal(shorter.ToByteArray(), File.ReadAllBytes(path));
+        Assert.Equal(new[] { path }, Directory.GetFiles(folder));
+    }
+
     private void WriteFile(string targetFolder, string zone, params DateTimeOffset[] timestamps)
     {
         WriteFile(targetFolder, zone, idle: 0, timestamps);

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Google.Protobuf;
 
 namespace Flextime;
 
@@ -67,6 +68,46 @@ public static class MeasurementFiles
     /// </summary>
     public static DateTime? WindowStart(DateOnly? since) =>
         since?.AddDays(-1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+
+    /// <summary>
+    /// Writes <paramref name="measurements"/> to <paramref name="path"/>
+    /// through a temporary file next to it, replaced in one rename: a
+    /// reader sees the old file or the new one, never half of one, and a
+    /// crash midway leaves the old file as it was.  The temporary file is
+    /// not a .bin file, so nothing reads it.
+    /// </summary>
+    public static void Replace(string path, Measurements measurements)
+    {
+        var temporary = $"{path}.{Guid.NewGuid():N}.tmp";
+
+        try
+        {
+            using (var stream = File.Create(temporary))
+            {
+                measurements.WriteTo(stream);
+            }
+
+            File.Move(temporary, path, overwrite: true);
+        }
+        catch
+        {
+            TryDelete(temporary);
+
+            throw;
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // A stray temporary file is not a .bin file; nothing reads it.
+        }
+    }
 
     private static bool TryStarted(string file, out DateTime started) =>
         DateTime.TryParseExact(
