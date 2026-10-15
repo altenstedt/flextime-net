@@ -94,7 +94,10 @@ public class RefreshTokenDelegatingHandler(
 
             if (options.WriteToStorage)
             {
-                await TokenStorage.Write(accessToken, tokenResponse.expires_in, refreshToken, cancellationToken: cancellationToken);
+                // The token kept above: a response without a new one must
+                // not blank the stored one, or the next process starts
+                // logged out.
+                await TokenStorage.Write(accessToken, tokenResponse.expires_in, options.RefreshToken, options.TokenPath, cancellationToken);
             }
 
             return accessToken;
@@ -113,6 +116,9 @@ public record RefreshTokenDelegatingHandlerOptions
     public required string ClientId { get; init; }
     public required string Scope { get; init; }
     public required bool WriteToStorage { get; init; }
+
+    /// <summary>Where <see cref="WriteToStorage"/> writes; null is the token file.</summary>
+    public string? TokenPath { get; init; }
 }
 
 public class TokenRefreshException(string message) : Exception(message);

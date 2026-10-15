@@ -143,9 +143,52 @@ public class RefreshTokenDelegatingHandlerTests(ITestOutputHelper testOutputHelp
         Assert.Equal(1, tokenHandler.Count);
         Assert.Equal("access token", handlerOptions.AccessToken);
     }
+
+    [Fact]
+    public async Task TestRefreshTokenIsKeptWhenNoneIsReturned()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), $"flextime-refresh-tests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(folder);
+
+        try
+        {
+            var tokenPath = Path.Combine(folder, "user");
+
+            var handlerOptions = new RefreshTokenDelegatingHandlerOptions
+            {
+                Scope = "scope",
+                ClientId = "client id 5",
+                RefreshToken = "refresh token",
+                WriteToStorage = true,
+                TokenPath = tokenPath
+            };
+
+            var handler = new RefreshTokenDelegatingHandler(
+                new MockHttpClientFactory(new TokenHandler(refreshToken: null)),
+                handlerOptions)
+            {
+                InnerHandler = new OkHandler()
+            };
+
+            var httpClient = new HttpClient(handler);
+            httpClient.BaseAddress = new Uri("https://localhost");
+
+            await httpClient.SendAsync(new HttpRequestMessage(), TestContext.Current.CancellationToken);
+
+            var (accessToken, _, refreshToken) = await TokenStorage.Read(tokenPath, TestContext.Current.CancellationToken);
+
+            Assert.Equal("access token", accessToken);
+            Assert.Equal("refresh token", refreshToken);
+            Assert.Equal("refresh token", handlerOptions.RefreshToken);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
 }
 
-public class TokenHandler : DelegatingHandler
+public class TokenHandler(string? refreshToken = "refresh token") : DelegatingHandler
 {
     public int Count { get; private set; }
     
@@ -155,7 +198,9 @@ public class TokenHandler : DelegatingHandler
         
         var message = new HttpResponseMessage(HttpStatusCode.OK);
 
-        message.Content = JsonContent.Create(new { access_token = "access token", expires_in = 360, refresh_token = "refresh token" });
+        message.Content = refreshToken == null
+            ? JsonContent.Create(new { access_token = "access token", expires_in = 360 })
+            : JsonContent.Create(new { access_token = "access token", expires_in = 360, refresh_token = refreshToken });
 
         await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken);
         
