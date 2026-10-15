@@ -21,24 +21,24 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
 
         var version = VersionHelper.GetVersion();
 
-        AnsiConsole.MarkupLine($"Client version  :  {version ?? "Unknown"}");
-        AnsiConsole.MarkupLine($"Computer name   :  {computer.Name}");
-        AnsiConsole.MarkupLine($"Computer id     :  {computer.Id}");
-        AnsiConsole.MarkupLine($"Time zone       :  {PrintTimeZone()}");
-        AnsiConsole.MarkupLine($"Measurements    :  {Path.GetFullPath(computer.MeasurementsFolder)}");
+        AnsiConsole.MarkupLineInterpolated($"Client version  :  {version ?? "Unknown"}");
+        AnsiConsole.MarkupLineInterpolated($"Computer name   :  {computer.Name}");
+        AnsiConsole.MarkupLineInterpolated($"Computer id     :  {computer.Id}");
+        AnsiConsole.MarkupLineInterpolated($"Time zone       :  {PrintTimeZone()}");
+        AnsiConsole.MarkupLineInterpolated($"Measurements    :  {Path.GetFullPath(computer.MeasurementsFolder)}");
 
         var logs = LogsStatus();
 
         if (logs != null)
         {
-            AnsiConsole.MarkupLine($"Logs            :  {logs}");
+            AnsiConsole.MarkupLineInterpolated($"Logs            :  {logs}");
         }
 
-        AnsiConsole.MarkupLine($"Local data      :  {LocalDataStatus()}");
-        AnsiConsole.MarkupLine($"Listen process  :  {ListenStatus()}");
-        AnsiConsole.MarkupLine($"Sync schedule   :  {SyncStatus()}");
-        AnsiConsole.MarkupLine($"Location        :  {LocationStatus()}");
-        AnsiConsole.MarkupLine($"Server URL      :  {Constants.ApiUri}");
+        AnsiConsole.MarkupLineInterpolated($"Local data      :  {LocalDataStatus()}");
+        AnsiConsole.MarkupLineInterpolated($"Listen process  :  {ListenStatus()}");
+        AnsiConsole.MarkupLineInterpolated($"Sync schedule   :  {SyncStatus()}");
+        AnsiConsole.MarkupLineInterpolated($"Location        :  {LocationStatus()}");
+        AnsiConsole.MarkupLineInterpolated($"Server URL      :  {Constants.ApiUri}");
 
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots2)
@@ -49,7 +49,7 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                 {
                     var pingResult = await httpClient.GetFromJsonAsync("/ping", PingSourceGenerationContext.Default.PingDataContract);
 
-                    AnsiConsole.MarkupLine($"Server version  :  {pingResult?.Version}");
+                    AnsiConsole.MarkupLineInterpolated($"Server version  :  {pingResult?.Version}");
                 }
                 catch (TokenRefreshException exception)
                 {
@@ -57,11 +57,11 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                 }
                 catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
                 {
-                    AnsiConsole.MarkupLine($"Error contacting backend: {exception.Message}.");
+                    AnsiConsole.MarkupLineInterpolated($"Error contacting backend: {exception.Message}.");
 
                     if (exception.InnerException != null)
                     {
-                        AnsiConsole.MarkupLine($"  {exception.InnerException.Message}");
+                        AnsiConsole.MarkupLineInterpolated($"  {exception.InnerException.Message}");
                     }
                 }
             });
@@ -77,7 +77,7 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
             else
             {
                 var user = GetUserInfo(accessToken);
-                AnsiConsole.MarkupLine($"Signed in       :  {user}");
+                AnsiConsole.MarkupLineInterpolated($"Signed in       :  {user}");
             }
 
             await AnsiConsole.Status()
@@ -99,7 +99,7 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                         }
                         catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
                         {
-                            AnsiConsole.MarkupLine($"Error contacting backend: {exception.Message}.");
+                            AnsiConsole.MarkupLineInterpolated($"Error contacting backend: {exception.Message}.");
                         }
                     });
         }
