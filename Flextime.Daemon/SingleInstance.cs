@@ -33,7 +33,7 @@ public static class SingleInstance
 
         if (!string.IsNullOrEmpty(directory))
         {
-            Directory.CreateDirectory(directory);
+            PrivateFolder.Ensure(directory);
         }
 
         try

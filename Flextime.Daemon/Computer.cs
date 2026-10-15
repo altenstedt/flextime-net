@@ -24,6 +24,10 @@ public class Computer
     {
         var computerFilePath = Path.Combine(MeasurementsFolder, "../computer.txt");
 
+        // Every command starts here, so a folder created before it was
+        // made private is tightened by the next one run.
+        PrivateFolder.Ensure(Path.GetDirectoryName(computerFilePath)!);
+
         if (File.Exists(computerFilePath))
         {
             var lines = await File.ReadAllLinesAsync(computerFilePath);
@@ -47,14 +51,6 @@ public class Computer
 
         Id = Convert.ToHexString(bytes).ToLowerInvariant();
         Name = Environment.MachineName;
-
-        var directoryName = Path.GetDirectoryName(computerFilePath);
-        if (directoryName != null)
-        {
-            // Create the directory if it does not exist.  This happens
-            // if this command is the first command you run on this machine.
-            Directory.CreateDirectory(directoryName);
-        }
 
         await File.WriteAllTextAsync(computerFilePath, $"{Id}{Environment.NewLine}{Name}");
     }

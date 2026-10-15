@@ -438,11 +438,9 @@ public class UserInputMonitor(
             var path = GetPath();
             var directory = Path.GetDirectoryName(path);
 
-            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            if (!string.IsNullOrEmpty(directory))
             {
-                Directory.CreateDirectory(directory);
-
-                logger.LogDebug("Created directories for {Path}.", path);
+                PrivateFolder.Ensure(directory);
             }
 
             using var stream = File.Create(path);

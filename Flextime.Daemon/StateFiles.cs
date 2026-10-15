@@ -40,7 +40,7 @@ public static class StateFiles
 
         if (!string.IsNullOrEmpty(directory))
         {
-            Directory.CreateDirectory(directory);
+            PrivateFolder.Ensure(directory);
         }
 
         File.WriteAllLines(path, lines);
