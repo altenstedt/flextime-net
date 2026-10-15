@@ -5,8 +5,19 @@ using System.Text.Json.Serialization;
 
 namespace Flextime.Daemon;
 
-public class DeviceCode
+/// <param name="handler">Sends the requests; null for the network, set by tests.</param>
+/// <param name="tokenPath">Where the tokens are kept; null is the token file.</param>
+/// <param name="delay">Waits between polls; null for Task.Delay, set by tests.</param>
+public class DeviceCode(
+    HttpMessageHandler? handler = null,
+    string? tokenPath = null,
+    Func<TimeSpan, CancellationToken, Task>? delay = null)
 {
+    // RFC 8628: poll every 5 seconds unless told otherwise, and 5 seconds
+    // slower each time the server answers slow_down.
+    private static readonly TimeSpan DefaultInterval = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan SlowDownStep = TimeSpan.FromSeconds(5);
+
     private DateTimeOffset expires = DateTimeOffset.MinValue;
 
     private string? accessToken;
@@ -17,12 +28,16 @@ public class DeviceCode
     
     public async Task Initialize()
     {
-        (accessToken, expires, refreshToken) = await TokenStorage.Read();
+        (accessToken, expires, refreshToken) = await TokenStorage.Read(tokenPath);
     }
     
     public async Task LogOn(CancellationToken cancellationToken)
     {
-        var httpClient = new HttpClient { BaseAddress = Constants.AuthorityUri };
+        var httpClient = handler == null
+            ? new HttpClient { BaseAddress = Constants.AuthorityUri }
+            : new HttpClient(handler, disposeHandler: false) { BaseAddress = Constants.AuthorityUri };
+
+        delay ??= Task.Delay;
 
         KeyValuePair<string, string>[] collection = [
             new KeyValuePair<string, string>("client_id", Constants.ClientId),
@@ -31,10 +46,31 @@ public class DeviceCode
         
         var responseMessage = await httpClient.PostAsync("deviceCode", new FormUrlEncodedContent(collection), cancellationToken);
 
+        if (!responseMessage.IsSuccessStatusCode)
+        {
+            // An error body, if any, has the same shape as a poll error.
+            var error = await TryReadError(responseMessage, cancellationToken);
+
+            Console.Error.WriteLine($"Could not start the login: {(int)responseMessage.StatusCode} {responseMessage.ReasonPhrase}. {error}".TrimEnd());
+
+            return;
+        }
+
         var deviceCodeResponse = await responseMessage.Content.ReadFromJsonAsync(DeviceCodeResponseSourceGenerationContext.Default.DeviceCodeResponse, cancellationToken: cancellationToken);
 
-        var deviceCodeExpires = DateTime.Now.Add(TimeSpan.FromSeconds(deviceCodeResponse!.expires_in));
-        
+        if (deviceCodeResponse == null || string.IsNullOrEmpty(deviceCodeResponse.device_code))
+        {
+            Console.Error.WriteLine("Could not start the login: the server sent no device code.");
+
+            return;
+        }
+
+        var deviceCodeExpires = DateTime.Now.Add(TimeSpan.FromSeconds(deviceCodeResponse.expires_in));
+
+        var interval = deviceCodeResponse.interval > 0
+            ? TimeSpan.FromSeconds(deviceCodeResponse.interval)
+            : DefaultInterval;
+
         Console.WriteLine(deviceCodeResponse.message);
 
         KeyValuePair<string, string>[] pullCollection =
@@ -54,7 +90,14 @@ public class DeviceCode
             {
                 if (pollResponse?.error == "authorization_pending")
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(deviceCodeResponse.interval), cancellationToken);
+                    await delay(interval, cancellationToken);
+                }
+                else if (pollResponse?.error == "slow_down")
+                {
+                    // Still pending, but polled too often; slower from now on.
+                    interval += SlowDownStep;
+
+                    await delay(interval, cancellationToken);
                 }
                 else
                 {
@@ -73,7 +116,8 @@ public class DeviceCode
                 await TokenStorage.Write(
                     pollResponse.access_token,
                     pollResponse.expires_in,
-                    pollResponse.refresh_token);
+                    pollResponse.refresh_token,
+                    tokenPath);
 
                 accessToken = pollResponse.access_token;
                 refreshToken = pollResponse.refresh_token;
@@ -88,6 +132,21 @@ public class DeviceCode
                 return;
             }
         } while (deviceCodeExpires > DateTime.Now);
+    }
+
+    private static async Task<string> TryReadError(HttpResponseMessage responseMessage, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var error = await responseMessage.Content.ReadFromJsonAsync(PollResponseSourceGenerationContext.Default.PollResponse, cancellationToken: cancellationToken);
+
+            return $"{error?.error} {error?.error_description}".Trim();
+        }
+        catch (Exception exception) when (exception is System.Text.Json.JsonException or NotSupportedException)
+        {
+            // Not JSON, or not this shape; the status says enough.
+            return string.Empty;
+        }
     }
 }
 
