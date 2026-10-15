@@ -86,4 +86,56 @@ public class TokenStorageTests : IDisposable
 
         Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(TokenPath));
     }
+
+    [Fact]
+    public async Task LooseFileIsReplacedPrivate()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        await File.WriteAllTextAsync(TokenPath, "old", TestContext.Current.CancellationToken);
+        File.SetUnixFileMode(TokenPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+
+        await TokenStorage.Write("access token", 3600, "refresh token", TokenPath, TestContext.Current.CancellationToken);
+
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(TokenPath));
+    }
+
+    [Fact]
+    public async Task WriteLeavesNoTemporaryFile()
+    {
+        await TokenStorage.Write("access token", 3600, "refresh token", TokenPath, TestContext.Current.CancellationToken);
+        await TokenStorage.Write("access token", 3600, "refresh token", TokenPath, TestContext.Current.CancellationToken);
+
+        Assert.Equal(["user"], Directory.GetFiles(folder).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public async Task FileIsWhatWriteAllLinesWrote()
+    {
+        await TokenStorage.Write("access token", 3600, "refresh token", TokenPath, TestContext.Current.CancellationToken);
+
+        var lines = await File.ReadAllLinesAsync(TokenPath, TestContext.Current.CancellationToken);
+        var expected = Path.Combine(folder, "expected");
+
+        // The format from before the file was written through a temporary
+        // file: UTF-8 with a byte order mark, every line terminated.
+        await File.WriteAllLinesAsync(expected, lines, System.Text.Encoding.UTF8, TestContext.Current.CancellationToken);
+
+        Assert.Equal(await File.ReadAllBytesAsync(expected, TestContext.Current.CancellationToken), await File.ReadAllBytesAsync(TokenPath, TestContext.Current.CancellationToken));
+        Assert.Equal([0xEF, 0xBB, 0xBF], (await File.ReadAllBytesAsync(TokenPath, TestContext.Current.CancellationToken))[..3]);
+    }
+
+    [Fact]
+    public async Task FileWithoutByteOrderMarkIsRead()
+    {
+        await File.WriteAllLinesAsync(TokenPath, ["access token", "2024-01-01T00:00:00.0000000+00:00", "refresh token"], new System.Text.UTF8Encoding(false), TestContext.Current.CancellationToken);
+
+        var (accessToken, _, refreshToken) = await TokenStorage.Read(TokenPath, TestContext.Current.CancellationToken);
+
+        Assert.Equal("access token", accessToken);
+        Assert.Equal("refresh token", refreshToken);
+    }
 }

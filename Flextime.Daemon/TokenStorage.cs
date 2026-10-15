@@ -41,12 +41,49 @@ public static class TokenStorage
             refreshToken
         ];
         
-        await File.WriteAllLinesAsync(path, lines, Encoding.UTF8, cancellationToken);
+        // The file contains tokens; keep it private to the user from the
+        // moment it exists, then replace the old one in a single rename so
+        // a reader never sees half of it.
+        var temporary = $"{path}.{Guid.NewGuid():N}.tmp";
+
+        var fileOptions = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write };
 
         if (!OperatingSystem.IsWindows())
         {
-            // The file contains tokens; keep it private to the user.
-            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            fileOptions.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        }
+
+        try
+        {
+            // Encoding.UTF8 writes a byte order mark, as File.WriteAllLines
+            // always has; the file stays byte for byte what it was.
+            await using (var writer = new StreamWriter(temporary, Encoding.UTF8, fileOptions))
+            {
+                foreach (var line in lines)
+                {
+                    await writer.WriteLineAsync(line.AsMemory(), cancellationToken);
+                }
+            }
+
+            File.Move(temporary, path, overwrite: true);
+        }
+        catch
+        {
+            TryDelete(temporary);
+
+            throw;
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // A stray temporary file is private to the user; nothing reads it.
         }
     }
 
