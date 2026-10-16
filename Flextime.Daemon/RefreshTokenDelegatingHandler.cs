@@ -24,9 +24,22 @@ public class RefreshTokenDelegatingHandler(
         // Never logged in: there is nothing to refresh, and an empty grant
         // reads as an expired sign-in.  Send the request anonymously —
         // /ping allows that, and everything else checks the login first.
+        if (options.LoggedOut)
+        {
+            throw LoggedOut();
+        }
+
         if (string.IsNullOrEmpty(options.RefreshToken))
         {
             return await base.SendAsync(request, cancellationToken);
+        }
+
+        // The logout command deletes the token file.  A process that read
+        // it before then -- a sync --every loop, say -- must not carry on
+        // with the tokens it holds, nor write them back on a refresh.
+        if (options.WriteToStorage && !TokenStorage.Exists(options.TokenPath))
+        {
+            throw LogOut();
         }
 
         var accessToken = await cache.GetOrAddAsync<string>(options.ClientId, async entry =>
@@ -74,6 +87,12 @@ public class RefreshTokenDelegatingHandler(
                 throw new InvalidOperationException("Token response was null.");
             }
         
+            // Logged out during the round trip: writing now would undo it.
+            if (options.WriteToStorage && !TokenStorage.Exists(options.TokenPath))
+            {
+                throw LogOut();
+            }
+
             var accessToken = tokenResponse.access_token;
             var refreshToken = tokenResponse.refresh_token;
 
@@ -107,12 +126,28 @@ public class RefreshTokenDelegatingHandler(
 
         return await base.SendAsync(request, cancellationToken);
     }
+
+    private TokenRefreshException LogOut()
+    {
+        options.LoggedOut = true;
+        options.AccessToken = string.Empty;
+        options.RefreshToken = string.Empty;
+        options.Expires = DateTimeOffset.MinValue;
+
+        return LoggedOut();
+    }
+
+    private static TokenRefreshException LoggedOut() =>
+        new("Logged out. Use the login command to log in again.");
 }
 public record RefreshTokenDelegatingHandlerOptions
 {
     public required string RefreshToken { get; set; }
     public string AccessToken { get; set; } = string.Empty;
     public DateTimeOffset Expires { get; set; } = DateTimeOffset.MinValue;
+
+    /// <summary>Set once the token file is found deleted; no request is sent after.</summary>
+    public bool LoggedOut { get; set; }
     public required string ClientId { get; init; }
     public required string Scope { get; init; }
     public required bool WriteToStorage { get; init; }

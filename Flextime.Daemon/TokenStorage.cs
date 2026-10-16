@@ -87,6 +87,9 @@ public static class TokenStorage
         }
     }
 
+    /// <summary>Whether the token file is there, that is, whether logged in.</summary>
+    public static bool Exists(string? path = null) => File.Exists(path ?? DefaultPath);
+
     /// <summary>Removes the token file; false when there was none.</summary>
     public static bool Delete(string? path = null)
     {

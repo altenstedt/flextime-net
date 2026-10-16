@@ -154,6 +154,9 @@ public class RefreshTokenDelegatingHandlerTests(ITestOutputHelper testOutputHelp
         {
             var tokenPath = Path.Combine(folder, "user");
 
+            // Logged in: a process only refreshes tokens it read from the file.
+            await TokenStorage.Write("old access token", 0, "refresh token", tokenPath, TestContext.Current.CancellationToken);
+
             var handlerOptions = new RefreshTokenDelegatingHandlerOptions
             {
                 Scope = "scope",
@@ -185,6 +188,125 @@ public class RefreshTokenDelegatingHandlerTests(ITestOutputHelper testOutputHelp
         {
             Directory.Delete(folder, recursive: true);
         }
+    }
+}
+
+public class RefreshTokenLogoutTests : IDisposable
+{
+    private readonly string folder = Path.Combine(Path.GetTempPath(), $"flextime-logout-tests-{Guid.NewGuid():N}");
+
+    private string TokenPath => Path.Combine(folder, "user");
+
+    public RefreshTokenLogoutTests()
+    {
+        Directory.CreateDirectory(folder);
+    }
+
+    public void Dispose()
+    {
+        Directory.Delete(folder, recursive: true);
+    }
+
+    private (HttpClient client, TokenHandler tokens, OkHandler api, RefreshTokenDelegatingHandlerOptions options) Create(
+        string clientId, string accessToken = "", DateTimeOffset? expires = null)
+    {
+        var tokens = new TokenHandler();
+        var api = new OkHandler();
+
+        var options = new RefreshTokenDelegatingHandlerOptions
+        {
+            Scope = "scope",
+            ClientId = clientId,
+            AccessToken = accessToken,
+            Expires = expires ?? DateTimeOffset.MinValue,
+            RefreshToken = "refresh token",
+            WriteToStorage = true,
+            TokenPath = TokenPath
+        };
+
+        var handler = new RefreshTokenDelegatingHandler(new MockHttpClientFactory(tokens), options)
+        {
+            InnerHandler = api
+        };
+
+        return (new HttpClient(handler) { BaseAddress = new Uri("https://localhost") }, tokens, api, options);
+    }
+
+    [Fact]
+    public async Task RefreshAfterLogoutDoesNotWriteTheTokenFile()
+    {
+        var (client, tokens, api, options) = Create("logout client 1");
+
+        await TokenStorage.Write("old", 0, "refresh token", TokenPath, TestContext.Current.CancellationToken);
+        TokenStorage.Delete(TokenPath);
+
+        await Assert.ThrowsAsync<TokenRefreshException>(() =>
+            client.SendAsync(new HttpRequestMessage(), TestContext.Current.CancellationToken));
+
+        Assert.False(File.Exists(TokenPath));
+        Assert.Equal(0, tokens.Count);
+        Assert.Null(api.Authorization);
+        Assert.True(options.LoggedOut);
+        Assert.Equal(string.Empty, options.RefreshToken);
+    }
+
+    [Fact]
+    public async Task HeldAccessTokenIsDroppedAfterLogout()
+    {
+        var (client, tokens, api, options) = Create(
+            "logout client 2", "held access token", DateTimeOffset.UtcNow.AddMinutes(30));
+
+        await TokenStorage.Write("held access token", 1800, "refresh token", TokenPath, TestContext.Current.CancellationToken);
+
+        await client.SendAsync(new HttpRequestMessage(), TestContext.Current.CancellationToken);
+
+        Assert.Equal("Bearer held access token", api.Authorization);
+
+        TokenStorage.Delete(TokenPath);
+
+        await Assert.ThrowsAsync<TokenRefreshException>(() =>
+            client.SendAsync(new HttpRequestMessage(), TestContext.Current.CancellationToken));
+
+        // Stays logged out, even once a later login writes the file again:
+        // this process holds no tokens to send.
+        await TokenStorage.Write("new", 3600, "new refresh token", TokenPath, TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<TokenRefreshException>(() =>
+            client.SendAsync(new HttpRequestMessage(), TestContext.Current.CancellationToken));
+
+        var (accessToken, _, _) = await TokenStorage.Read(TokenPath, TestContext.Current.CancellationToken);
+
+        Assert.Equal("new", accessToken);
+        Assert.Equal(0, tokens.Count);
+        Assert.Equal(string.Empty, options.AccessToken);
+    }
+
+    [Fact]
+    public async Task NeverLoggedInSendsAnonymously()
+    {
+        var api = new OkHandler();
+
+        var options = new RefreshTokenDelegatingHandlerOptions
+        {
+            Scope = "scope",
+            ClientId = "logout client 3",
+            RefreshToken = string.Empty,
+            WriteToStorage = true,
+            TokenPath = TokenPath
+        };
+
+        var handler = new RefreshTokenDelegatingHandler(new MockHttpClientFactory(new TokenHandler()), options)
+        {
+            InnerHandler = api
+        };
+
+        var client = new HttpClient(handler) { BaseAddress = new Uri("https://localhost") };
+
+        var response = await client.SendAsync(new HttpRequestMessage(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Null(api.Authorization);
+        Assert.False(options.LoggedOut);
     }
 }
 
