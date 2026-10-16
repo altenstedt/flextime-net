@@ -179,13 +179,13 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
         }
         catch (TokenRefreshException exception)
         {
-            Console.Error.WriteLine(exception.Message);
+            Console.Error.WriteLine(TerminalText.Clean(exception.Message));
 
             return 2;
         }
         catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
         {
-            Console.Error.WriteLine($"Network error: {exception.Message}");
+            Console.Error.WriteLine($"Network error: {TerminalText.Clean(exception.Message)}");
 
             return 1;
         }
@@ -591,7 +591,7 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
 
     private static string Fit(string tag)
     {
-        var name = string.IsNullOrEmpty(tag) ? "(untagged)" : tag;
+        var name = string.IsNullOrEmpty(tag) ? "(untagged)" : TerminalText.Clean(tag);
 
         return name.Length <= TagWidth ? name : name[..(TagWidth - 1)] + "\u2026";
     }
@@ -735,7 +735,7 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
     }
 
     private static string Name(MachineDataContract machine) =>
-        string.IsNullOrEmpty(machine.Name) ? machine.Id : $"{machine.Name} ({machine.Id})";
+        TerminalText.Clean(string.IsNullOrEmpty(machine.Name) ? machine.Id : $"{machine.Name} ({machine.Id})");
 }
 
 public record ReportedEntry(DateOnly Date, string? Tag, int Minutes);

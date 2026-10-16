@@ -104,7 +104,7 @@ public class DaemonCommands(
                         // Network might be down — or the API too old for
                         // this client; the message says which.  Try
                         // again next interval either way.
-                        logger.LogWarning("Sync failed: {Message}", exception.Message);
+                        logger.LogWarning("Sync failed: {Message}", TerminalText.Clean(exception.Message));
                     }
 
                     await Task.Delay(everyValue.Value, cancellationToken);
@@ -118,11 +118,11 @@ public class DaemonCommands(
         catch (TokenRefreshException exception)
         {
             // Retrying will not help until the user logs in again.
-            AnsiConsole.WriteLine(exception.Message);
+            AnsiConsole.WriteLine(TerminalText.Clean(exception.Message));
         }
         catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
         {
-            AnsiConsole.WriteLine($"Network error: {exception.Message}");
+            AnsiConsole.WriteLine($"Network error: {TerminalText.Clean(exception.Message)}");
         }
     }
 

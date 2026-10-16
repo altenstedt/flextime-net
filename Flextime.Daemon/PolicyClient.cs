@@ -52,7 +52,7 @@ public class PolicyClient(IHttpClientFactory httpClientFactory)
             // the user read in the web client; a document read wrong
             // would reproduce a different one just as confidently.
             throw new IdlePolicyException(
-                $"The stored {name} document cannot be read by this version of flextimed: {exception.Message}");
+                $"The stored {name} document cannot be read by this version of flextimed: {TerminalText.Clean(exception.Message)}");
         }
     }
 }

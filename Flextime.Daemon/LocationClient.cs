@@ -62,7 +62,7 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
             ? "VPN             :  Not listed on this platform"
             : connected.Length == 0
                 ? "VPN             :  None connected"
-                : $"VPN             :  {string.Join(", ", connected)}");
+                : $"VPN             :  {TerminalText.Clean(string.Join(", ", connected))}");
 
         if (Location.ReadClear() is { } marker)
         {
@@ -123,7 +123,7 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
         }
         catch (TokenRefreshException exception)
         {
-            Console.Error.WriteLine(exception.Message);
+            Console.Error.WriteLine(TerminalText.Clean(exception.Message));
 
             return 2;
         }
@@ -143,7 +143,7 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
 
         if (failed)
         {
-            Console.Error.WriteLine($"The server could not be cleared now ({outcome.Error}). Sync tries again before it uploads any place.");
+            Console.Error.WriteLine($"The server could not be cleared now ({TerminalText.Clean(outcome.Error)}). Sync tries again before it uploads any place.");
         }
         else
         {
@@ -164,7 +164,7 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
 
             foreach (var other in known?.Items.Where(item => item.Id != computer.Id) ?? [])
             {
-                var name = string.IsNullOrEmpty(other.Name) ? other.Id : $"{other.Name} ({other.Id})";
+                var name = TerminalText.Clean(string.IsNullOrEmpty(other.Name) ? other.Id : $"{other.Name} ({other.Id})");
 
                 try
                 {
@@ -174,7 +174,7 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
                 }
                 catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
                 {
-                    Console.Error.WriteLine($"Could not clear {name}: {exception.Message}. Run clear --all-computers again.");
+                    Console.Error.WriteLine($"Could not clear {name}: {TerminalText.Clean(exception.Message)}. Run clear --all-computers again.");
 
                     failed = true;
                 }
@@ -184,13 +184,13 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
         }
         catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
         {
-            Console.Error.WriteLine($"Could not list the other computers: {exception.Message}. Run clear --all-computers again.");
+            Console.Error.WriteLine($"Could not list the other computers: {TerminalText.Clean(exception.Message)}. Run clear --all-computers again.");
 
             failed = true;
         }
         catch (TokenRefreshException exception)
         {
-            Console.Error.WriteLine(exception.Message);
+            Console.Error.WriteLine(TerminalText.Clean(exception.Message));
 
             return 2;
         }

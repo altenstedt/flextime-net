@@ -49,19 +49,19 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                 {
                     var pingResult = await httpClient.GetFromJsonAsync("/ping", PingSourceGenerationContext.Default.PingDataContract);
 
-                    AnsiConsole.MarkupLineInterpolated($"Server version  :  {pingResult?.Version}");
+                    AnsiConsole.MarkupLineInterpolated($"Server version  :  {TerminalText.Clean(pingResult?.Version)}");
                 }
                 catch (TokenRefreshException exception)
                 {
-                    AnsiConsole.WriteLine(exception.Message);
+                    AnsiConsole.WriteLine(TerminalText.Clean(exception.Message));
                 }
                 catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
                 {
-                    AnsiConsole.MarkupLineInterpolated($"Error contacting backend: {exception.Message}.");
+                    AnsiConsole.MarkupLineInterpolated($"Error contacting backend: {TerminalText.Clean(exception.Message)}.");
 
                     if (exception.InnerException != null)
                     {
-                        AnsiConsole.MarkupLineInterpolated($"  {exception.InnerException.Message}");
+                        AnsiConsole.MarkupLineInterpolated($"  {TerminalText.Clean(exception.InnerException.Message)}");
                     }
                 }
             });
@@ -77,7 +77,7 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
             else
             {
                 var user = GetUserInfo(accessToken);
-                AnsiConsole.MarkupLineInterpolated($"Signed in       :  {user}");
+                AnsiConsole.MarkupLineInterpolated($"Signed in       :  {TerminalText.Clean(user)}");
             }
 
             await AnsiConsole.Status()
@@ -95,11 +95,11 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                         }
                         catch (TokenRefreshException exception)
                         {
-                            AnsiConsole.WriteLine(exception.Message);
+                            AnsiConsole.WriteLine(TerminalText.Clean(exception.Message));
                         }
                         catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
                         {
-                            AnsiConsole.MarkupLineInterpolated($"Error contacting backend: {exception.Message}.");
+                            AnsiConsole.MarkupLineInterpolated($"Error contacting backend: {TerminalText.Clean(exception.Message)}.");
                         }
                     });
         }

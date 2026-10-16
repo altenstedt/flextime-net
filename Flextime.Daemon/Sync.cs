@@ -54,8 +54,8 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
                 return;
             }
 
-            AnsiConsole.WriteLine(line);
-        }, since: since, note: (line, _) => AnsiConsole.WriteLine(line));
+            AnsiConsole.WriteLine(TerminalText.Clean(line));
+        }, since: since, note: (line, _) => AnsiConsole.WriteLine(TerminalText.Clean(line)));
 
         AnsiConsole.WriteLine(since.HasValue
             ? $"{inSync} days in sync since {since.Value:yyyy-MM-dd}."
@@ -75,22 +75,22 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
                     break;
 
                 case DayStatus.ServerHasMore:
-                    logger.LogWarning(line);
+                    logger.LogWarning(TerminalText.Clean(line));
                     break;
 
                 default:
-                    logger.LogInformation(line);
+                    logger.LogInformation(TerminalText.Clean(line));
                     break;
             }
         }, since: DueWindow(), note: (line, warning) =>
         {
             if (warning)
             {
-                logger.LogWarning(line);
+                logger.LogWarning(TerminalText.Clean(line));
             }
             else
             {
-                logger.LogInformation(line);
+                logger.LogInformation(TerminalText.Clean(line));
             }
         });
     }
@@ -130,7 +130,7 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
 
     public Task Print(int count)
     {
-        return ActOnRemoteStatus(upload: false, (line, _) => AnsiConsole.WriteLine(line), limit: count);
+        return ActOnRemoteStatus(upload: false, (line, _) => AnsiConsole.WriteLine(TerminalText.Clean(line)), limit: count);
     }
 
     // Places are synced once location has ever been turned on or off —

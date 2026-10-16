@@ -51,7 +51,7 @@ public class DeviceCode(
             // An error body, if any, has the same shape as a poll error.
             var error = await TryReadError(responseMessage, cancellationToken);
 
-            Console.Error.WriteLine($"Could not start the login: {(int)responseMessage.StatusCode} {responseMessage.ReasonPhrase}. {error}".TrimEnd());
+            Console.Error.WriteLine(TerminalText.Clean($"Could not start the login: {(int)responseMessage.StatusCode} {responseMessage.ReasonPhrase}. {error}".TrimEnd()));
 
             return;
         }
@@ -71,7 +71,7 @@ public class DeviceCode(
             ? TimeSpan.FromSeconds(deviceCodeResponse.interval)
             : DefaultInterval;
 
-        Console.WriteLine(deviceCodeResponse.message);
+        Console.WriteLine(TerminalText.Clean(deviceCodeResponse.message));
 
         KeyValuePair<string, string>[] pullCollection =
         [
@@ -101,7 +101,7 @@ public class DeviceCode(
                 }
                 else
                 {
-                    Console.WriteLine($"Unexpected response {pollResponse?.error}. {pollResponse?.error_description}");
+                    Console.WriteLine(TerminalText.Clean($"Unexpected response {pollResponse?.error}. {pollResponse?.error_description}"));
 
                     return;
                 }

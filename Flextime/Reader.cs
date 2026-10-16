@@ -26,7 +26,7 @@ public static class Reader
                 // hour is better than every sync, data and report failing
                 // for good.  Standard error, so data's JSON stays clean
                 // and the services' logs have it.
-                Console.Error.WriteLine($"Skipping unreadable measurement file {Path.GetFileName(file)}: {exception.Message}");
+                Console.Error.WriteLine($"Skipping unreadable measurement file {TerminalText.Clean(Path.GetFileName(file))}: {TerminalText.Clean(exception.Message)}");
 
                 continue;
             }
@@ -59,10 +59,10 @@ public static class Reader
         try {
             pagedMeasurements = await httpClient.GetFromJsonAsync($"/{computerId}", PagedMeasurementsSourceGenerationContext.Default.PagedMeasurementsDataContract);
         } catch (HttpRequestException exception) {
-            Console.WriteLine($"Error contacting backend: {exception.Message}.");
+            Console.WriteLine($"Error contacting backend: {TerminalText.Clean(exception.Message)}.");
 
             if (exception.InnerException != null) {
-                Console.WriteLine($"  {exception.InnerException.Message}");
+                Console.WriteLine($"  {TerminalText.Clean(exception.InnerException.Message)}");
             }
         }
 

@@ -57,20 +57,20 @@ public class PrintData(
                 // is the one whose id is hardest to look up elsewhere.
                 var here = item.Id == computer.Id ? " *" : string.Empty;
 
-                Console.WriteLine($"{item.Id}  {item.Name}{here}");
+                Console.WriteLine(TerminalText.Clean($"{item.Id}  {item.Name}") + here);
             }
 
             return 0;
         }
         catch (TokenRefreshException exception)
         {
-            Console.Error.WriteLine(exception.Message);
+            Console.Error.WriteLine(TerminalText.Clean(exception.Message));
 
             return 2;
         }
         catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
         {
-            Console.Error.WriteLine($"Network error: {exception.Message}");
+            Console.Error.WriteLine($"Network error: {TerminalText.Clean(exception.Message)}");
 
             return 1;
         }
@@ -164,7 +164,7 @@ public class PrintData(
                     {
                         // A zone the server knows but this machine cannot
                         // resolve, for example on Windows without ICU.
-                        Console.Error.WriteLine($"Skipping measurements in unknown time zone {item.Zone}.");
+                        Console.Error.WriteLine($"Skipping measurements in unknown time zone {TerminalText.Clean(item.Zone)}.");
                     }
                 }
 
@@ -231,12 +231,12 @@ public class PrintData(
         catch (TokenRefreshException exception)
         {
             // Retrying will not help until the user logs in again.
-            Console.Error.WriteLine(exception.Message);
+            Console.Error.WriteLine(TerminalText.Clean(exception.Message));
             return 2;
         }
         catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
         {
-            Console.Error.WriteLine($"Network error: {exception.Message}");
+            Console.Error.WriteLine($"Network error: {TerminalText.Clean(exception.Message)}");
             return 1;
         }
     }
@@ -254,7 +254,7 @@ public class PrintData(
 
             firstComputer = false;
 
-            Console.WriteLine(string.IsNullOrEmpty(item.Name) ? item.Id : $"{item.Name} ({item.Id})");
+            Console.WriteLine(TerminalText.Clean(string.IsNullOrEmpty(item.Name) ? item.Id : $"{item.Name} ({item.Id})"));
 
             if (item.Days.Length == 0)
             {

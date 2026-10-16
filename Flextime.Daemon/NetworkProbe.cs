@@ -547,7 +547,7 @@ public static class PrintNetwork
             {
                 var service = report.VpnServices[i];
 
-                Console.WriteLine($"{(i == 0 ? "VPN services    :  " : "                   ")}{service.Name}, {service.Status}");
+                Console.WriteLine($"{(i == 0 ? "VPN services    :  " : "                   ")}{TerminalText.Clean(service.Name)}, {TerminalText.Clean(service.Status)}");
             }
         }
 
