@@ -236,7 +236,11 @@ public class UserInputMonitor(
             // it.
             idle = TimeSpan.FromMilliseconds(await idleMonitor.GetIdletimeAsync());
         } else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
-            idle = TimeSpan.FromMilliseconds(LastInputInfo.GetIdleTimeSinceLastInputInMilliSeconds());
+            // Idle time that cannot be read counts as idle: a minute is
+            // only measured when there is input to show for it.
+            idle = LastInputInfo.GetIdleTimeSinceLastInputInMilliSeconds() is { } milliseconds
+                ? TimeSpan.FromMilliseconds(milliseconds)
+                : TimeSpan.MaxValue;
         } else {
             throw new InvalidOperationException($"OS {RuntimeInformation.OSDescription} is not supported");
         }
