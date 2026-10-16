@@ -80,9 +80,18 @@ public static class MeasurementFiles
     {
         var temporary = $"{path}.{Guid.NewGuid():N}.tmp";
 
+        // Private to the user from the moment it exists, whatever the
+        // umask, as the token file is.
+        var fileOptions = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write };
+
+        if (!OperatingSystem.IsWindows())
+        {
+            fileOptions.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        }
+
         try
         {
-            using (var stream = File.Create(temporary))
+            using (var stream = new FileStream(temporary, fileOptions))
             {
                 measurements.WriteTo(stream);
             }

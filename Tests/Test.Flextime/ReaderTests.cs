@@ -269,6 +269,21 @@ public class ReaderTests : IDisposable
         Assert.Equal(new[] { path }, Directory.GetFiles(folder));
     }
 
+    [Fact]
+    public void ReplaceWritesFilePrivateToUser()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var path = Path.Combine(folder, "2024-01-01T100000.bin");
+
+        MeasurementFiles.Replace(path, new Measurements { Interval = 60, Zone = "UTC" });
+
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(path));
+    }
+
     private void WriteFile(string targetFolder, string zone, params DateTimeOffset[] timestamps)
     {
         WriteFile(targetFolder, zone, idle: 0, timestamps);
