@@ -63,6 +63,21 @@ public class TokenStorageTests : IDisposable
     }
 
     [Fact]
+    public async Task MalformedExpiryIsEmpty()
+    {
+        await File.WriteAllLinesAsync(TokenPath, ["access token", "not a date", "refresh token"], TestContext.Current.CancellationToken);
+
+        var (accessToken, expires, refreshToken) = await TokenStorage.Read(TokenPath, TestContext.Current.CancellationToken);
+
+        Assert.Equal(string.Empty, accessToken);
+        Assert.Equal(DateTimeOffset.MinValue, expires);
+        Assert.Equal(string.Empty, refreshToken);
+
+        // Logout still removes it.
+        Assert.True(TokenStorage.Delete(TokenPath));
+    }
+
+    [Fact]
     public async Task FileWithoutRefreshTokenReadsEmptyRefreshToken()
     {
         await File.WriteAllLinesAsync(TokenPath, ["access token", "2024-01-01T00:00:00.0000000+00:00"], TestContext.Current.CancellationToken);

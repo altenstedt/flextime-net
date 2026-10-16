@@ -18,14 +18,15 @@ public static class TokenStorage
         
         var lines = await File.ReadAllLinesAsync(path, Encoding.UTF8, cancellationToken);
 
-        return lines.Length < 2
-            ? (string.Empty, DateTimeOffset.MinValue, string.Empty)
-            : lines.Length == 2
-                ? (lines[0], ParseExpires(lines[1]), string.Empty)
-                : (lines[0], ParseExpires(lines[1]), lines[2]);
+        // A file this cannot make sense of reads as logged out, so that
+        // login can write over it and logout remove it.
+        if (lines.Length < 2
+            || !DateTimeOffset.TryParse(lines[1], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var expires))
+        {
+            return (string.Empty, DateTimeOffset.MinValue, string.Empty);
+        }
 
-        static DateTimeOffset ParseExpires(string text) =>
-            DateTimeOffset.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+        return (lines[0], expires, lines.Length == 2 ? string.Empty : lines[2]);
     }
 
     public static async Task Write(string accessToken, int expiresInSeconds, string refreshToken, string? path = null, CancellationToken cancellationToken = default)
