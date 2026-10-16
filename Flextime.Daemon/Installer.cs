@@ -38,7 +38,10 @@ public class Installer(DeviceCode deviceCode)
 
     private static string Schtasks => Path.Combine(Environment.SystemDirectory, "schtasks.exe");
 
-    [DllImport("libc")]
+    // Called on macOS only.  By full path, as the tools above: a bare
+    // "libc" is looked for in the application's folder first, and
+    // macOS's dlopen tries the current directory for a leaf name.
+    [DllImport("/usr/lib/libSystem.B.dylib")]
     private static extern uint getuid();
 
     public async Task<int> Install(string? timeZone, TimeSpan every)
