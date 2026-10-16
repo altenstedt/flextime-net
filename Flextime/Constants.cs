@@ -5,7 +5,14 @@ public static class Constants
     public static readonly string MeasurementsFolder =
         $"{Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify)}/Flextime/measurements";
 
-    public static readonly Uri ApiUri = new Uri("https://api.mangoground-e628dd34.swedencentral.azurecontainerapps.io/", UriKind.Absolute);
+    // FLEXTIME_API_URI lets an installed client follow the API to a new host
+    // without a rebuild. Only an https origin is accepted; anything else falls
+    // back to the built-in default.
+    public static readonly Uri ApiUri =
+        Uri.TryCreate(Environment.GetEnvironmentVariable("FLEXTIME_API_URI"), UriKind.Absolute, out var uri)
+        && uri.Scheme == Uri.UriSchemeHttps
+            ? new Uri(uri.GetLeftPart(UriPartial.Authority) + "/", UriKind.Absolute)
+            : new Uri("https://api.mangoground-e628dd34.swedencentral.azurecontainerapps.io/", UriKind.Absolute);
 
     public static readonly Uri AuthorityUri = new Uri($"https://login.microsoftonline.com/{TenantId}/oauth2/v2.0/", UriKind.Absolute);
 
