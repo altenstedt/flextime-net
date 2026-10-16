@@ -54,8 +54,8 @@ public class PlaceSyncTests : IDisposable
     private static HttpResponseMessage Json(string json) =>
         new(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
 
-    private Sync CreateSync(FakeApi api) =>
-        new(new Factory(api), new Computer(ComputerId, "Test"))
+    private Sync CreateSync(FakeApi api, string computerId = ComputerId) =>
+        new(new Factory(api), new Computer(computerId, "Test"))
         {
             Folder = Measurements,
             ReconcilePath = Path.Combine(folder, "reconcile.txt"),
@@ -109,6 +109,29 @@ public class PlaceSyncTests : IDisposable
         Assert.Equal(
             """{"zone":"Europe/Stockholm","items":[{"kind":1,"timestamp":1760256000},{"kind":1,"timestamp":1760256060}]}""",
             api.Requests[1].Body);
+    }
+
+    [Fact]
+    public async Task Computer_id_is_escaped_in_every_request_path()
+    {
+        Location.SetOn(true, Path.Combine(folder, "location.txt"));
+        WriteFile("2026-10-12T080000.bin", [Morning, Morning + 60], (Morning, 0x95313127c39c, 0));
+
+        var api = new FakeApi
+        {
+            Respond = request => request.Method == HttpMethod.Get ? Json("""{"name":"Old","items":[]}""") : new HttpResponseMessage(HttpStatusCode.NoContent),
+        };
+
+        await CreateSync(api, "a/b c?").SyncAndLog(NullLogger.Instance);
+
+        Assert.Equal(
+            [
+                (HttpMethod.Get, "/a%2Fb%20c%3F/summary?api-version=1.5"),
+                (HttpMethod.Patch, "/a%2Fb%20c%3F/name"),
+                (HttpMethod.Patch, "/a%2Fb%20c%3F"),
+                (HttpMethod.Patch, "/a%2Fb%20c%3F/places?api-version=1.5"),
+            ],
+            Calls(api));
     }
 
     [Fact]

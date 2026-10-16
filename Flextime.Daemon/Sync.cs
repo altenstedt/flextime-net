@@ -149,8 +149,8 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
 
     private string SummaryUri(string version, DateOnly? since) =>
         since.HasValue
-            ? $"/{computer.Id}/summary?api-version={version}&since={since.Value:yyyy-MM-dd}"
-            : $"/{computer.Id}/summary?api-version={version}";
+            ? $"/{Uri.EscapeDataString(computer.Id!)}/summary?api-version={version}&since={since.Value:yyyy-MM-dd}"
+            : $"/{Uri.EscapeDataString(computer.Id!)}/summary?api-version={version}";
 
     // The 1.5 summary is the 1.4 one with place watermarks.  An API
     // without it answers 400 or 404; activity then syncs from 1.4 and
@@ -193,7 +193,7 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
             // only when the server holds something else — once after a
             // rename, instead of on every pass.
             var response = await httpClient.PatchAsJsonAsync(
-                $"/{computer.Id}/name",
+                $"/{Uri.EscapeDataString(computer.Id!)}/name",
                 computer.Name,
                 StringSourceGenerationContext.Default.String);
 
@@ -323,7 +323,7 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
                 .ToArray());
 
         var response = await httpClient.PatchAsJsonAsync(
-            $"/{computer.Id}",
+            $"/{Uri.EscapeDataString(computer.Id!)}",
             payload,
             MeasurementsSourceGenerationContext.Default.MeasurementsDataContract);
 

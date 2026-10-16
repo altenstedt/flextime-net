@@ -121,7 +121,7 @@ public sealed class PlaceSync(HttpClient httpClient, string computerId, string f
                             .ToArray());
 
                     var response = await httpClient.PatchAsJsonAsync(
-                        $"/{computerId}/places?api-version=1.5",
+                        $"/{Uri.EscapeDataString(computerId)}/places?api-version=1.5",
                         payload,
                         PlacesSourceGenerationContext.Default.PlacesDataContract);
 

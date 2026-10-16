@@ -59,7 +59,7 @@ public static class Reader
         PagedMeasurementsDataContract? pagedMeasurements = null;
 
         try {
-            pagedMeasurements = await httpClient.GetFromJsonAsync($"/{computerId}", PagedMeasurementsSourceGenerationContext.Default.PagedMeasurementsDataContract);
+            pagedMeasurements = await httpClient.GetFromJsonAsync($"/{Uri.EscapeDataString(computerId)}", PagedMeasurementsSourceGenerationContext.Default.PagedMeasurementsDataContract);
         } catch (HttpRequestException exception) {
             Console.WriteLine($"Error contacting backend: {TerminalText.Clean(exception.Message)}.");
 
