@@ -12,5 +12,8 @@ internal static partial class CGSession
     
     [LibraryImport("/System/Library/Frameworks/Foundation.framework/Foundation", EntryPoint = "CFStringCreateWithCharacters")]
     internal static partial IntPtr CFStringCreateWithCharacters(IntPtr allocator, IntPtr str, nint count);
+
+    [LibraryImport("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation", EntryPoint = "CFRelease")]
+    internal static partial void CFRelease(IntPtr reference);
 }
 

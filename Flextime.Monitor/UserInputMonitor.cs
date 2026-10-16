@@ -217,12 +217,31 @@ public class UserInputMonitor(
                     CGEventSource.CGEventSourceStateID.HidSystemState,
                     CGEventSource.CGEventType.MouseAndKeyboard));
 
-            // Figure out if the screen is locked or not.
+            // Figure out if the screen is locked or not.  The key is only
+            // there while it is.
             var dictionary = CGSession.CGSessionCopyCurrentDictionary();
 
-            var sessionScreenIsLocked = CGSession.CFDictionaryGetValue(dictionary, sessionScreenIsLockedString);
+            if (dictionary == IntPtr.Zero)
+            {
+                // No GUI session, over SSH for instance: there is no
+                // screen to lock, so idle time alone decides, as when
+                // the session lock is ignored.
+                sessionLocked = false;
+            }
+            else
+            {
+                try
+                {
+                    // Owned by the dictionary; not released here.
+                    var sessionScreenIsLocked = CGSession.CFDictionaryGetValue(dictionary, sessionScreenIsLockedString);
 
-            sessionLocked = sessionScreenIsLocked != IntPtr.Zero;
+                    sessionLocked = sessionScreenIsLocked != IntPtr.Zero;
+                }
+                finally
+                {
+                    CGSession.CFRelease(dictionary);
+                }
+            }
         } else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) {
             if (idleMonitor == null)
             {
