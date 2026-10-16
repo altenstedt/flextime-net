@@ -19,13 +19,15 @@ public static class Reader
                 using var stream = File.OpenRead(file);
                 measurements = Measurements.Parser.ParseFrom(stream);
             }
-            catch (InvalidProtocolBufferException exception)
+            catch (Exception exception) when (exception is InvalidProtocolBufferException
+                                                   or FileNotFoundException or DirectoryNotFoundException)
             {
                 // A file cut short — listen killed midway through a write
                 // before writes went through a rename, say.  Losing its
                 // hour is better than every sync, data and report failing
                 // for good.  Standard error, so data's JSON stays clean
-                // and the services' logs have it.
+                // and the services' logs have it.  A file gone since the
+                // folder was listed is skipped the same way.
                 Console.Error.WriteLine($"Skipping unreadable measurement file {TerminalText.Clean(Path.GetFileName(file))}: {TerminalText.Clean(exception.Message)}");
 
                 continue;

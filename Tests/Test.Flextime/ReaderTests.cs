@@ -230,6 +230,27 @@ public class ReaderTests : IDisposable
     }
 
     [Fact]
+    public void VanishedFileIsSkipped()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var timestamp = DateTimeOffset.Parse("2024-01-01T10:00:00+00:00");
+
+        WriteFile(folder, "UTC", timestamp);
+
+        // Listed but gone by the time it is opened: a link to nothing
+        // stands in for a file deleted between the two.
+        File.CreateSymbolicLink(Path.Combine(folder, "999.bin"), Path.Combine(folder, "gone"));
+
+        var byDates = Reader.ReadFiles(folder, TimeSpan.MinValue);
+
+        Assert.Equal(new[] { new DateOnly(2024, 1, 1) }, byDates.Keys);
+    }
+
+    [Fact]
     public void TruncatedFileIsSkipped()
     {
         var timestamp = DateTimeOffset.Parse("2024-01-01T10:00:00+00:00");
