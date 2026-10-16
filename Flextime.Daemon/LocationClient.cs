@@ -280,7 +280,7 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
 
     public static async Task Delete(HttpClient httpClient, string computerId, CancellationToken cancellationToken)
     {
-        var response = await httpClient.DeleteAsync($"/{computerId}/places?api-version=1.5", cancellationToken);
+        var response = await httpClient.DeleteAsync($"/{Uri.EscapeDataString(computerId)}/places?api-version=1.5", cancellationToken);
 
         response.EnsureSuccessStatusCode();
     }

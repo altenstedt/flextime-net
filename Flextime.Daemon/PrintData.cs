@@ -149,7 +149,7 @@ public class PrintData(
                 // days are regrouped here with each timestamp interpreted in
                 // the zone its group reports.
                 var zones = await httpClient.GetFromJsonAsync(
-                    $"/ids?api-version=1.2&id={target.Id}",
+                    $"/ids?api-version=1.2&id={Uri.EscapeDataString(target.Id)}",
                     PrintDataSourceGenerationContext.Default.ZonesDataContract);
 
                 var items = new List<ZoneDataContract>();

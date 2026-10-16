@@ -256,7 +256,7 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
         Marks marks,
         CancellationToken cancellationToken)
     {
-        var query = string.Join("&", selected.Select(item => $"id={item.Id}"));
+        var query = string.Join("&", selected.Select(item => $"id={Uri.EscapeDataString(item.Id)}"));
 
         var zones = await httpClient.GetFromJsonAsync(
             $"/ids?api-version=1.2&{query}",

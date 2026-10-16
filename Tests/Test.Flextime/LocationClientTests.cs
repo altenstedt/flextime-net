@@ -133,4 +133,26 @@ public class LocationClientTests : IDisposable
 
         Assert.True(Location.ReadClear(MarkerPath)!.Pending);
     }
+    [Fact]
+    public async Task DeleteEscapesTheComputerId()
+    {
+        var handler = new RecordingHandler();
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://api.example/") };
+
+        await LocationClient.Delete(httpClient, "../a b?c#d", TestContext.Current.CancellationToken);
+
+        Assert.Equal("/..%2Fa%20b%3Fc%23d/places?api-version=1.5", handler.PathAndQuery);
+    }
+
+    private sealed class RecordingHandler : HttpMessageHandler
+    {
+        public string? PathAndQuery { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            PathAndQuery = request.RequestUri!.PathAndQuery;
+
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NoContent));
+        }
+    }
 }
