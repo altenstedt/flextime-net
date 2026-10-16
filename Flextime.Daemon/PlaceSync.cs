@@ -17,6 +17,9 @@ public sealed class PlaceSync(HttpClient httpClient, string computerId, string f
     /// <summary>The most change points the API takes in one request.</summary>
     public const int MaxItems = 1000;
 
+    /// <summary>How far ahead of this clock the server's may run.</summary>
+    public static readonly TimeSpan ClockSkew = TimeSpan.FromDays(1);
+
     /// <param name="placesClearedAt">When the server's place history was last cleared, from the summary.</param>
     /// <param name="remote">The summary items by (date, zone).</param>
     /// <param name="since">First day to compare; null compares every day.</param>
@@ -43,6 +46,16 @@ public sealed class PlaceSync(HttpClient httpClient, string computerId, string f
             }
 
             var floor = marker?.At ?? 0u;
+
+            if (placesClearedAt > DateTimeOffset.UtcNow.Add(ClockSkew).ToUnixTimeSeconds())
+            {
+                // Adopted, it would be the floor for listen and sync
+                // alike, and every place point from now on would be
+                // dropped until that day came.
+                note("Place history clear time is in the future; ignored.", true);
+
+                placesClearedAt = null;
+            }
 
             if (placesClearedAt is { } cleared && cleared > floor)
             {

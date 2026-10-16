@@ -398,6 +398,61 @@ public class PlaceSyncTests : IDisposable
         Assert.Equal([Morning + 20], items.EnumerateArray().Select(item => item.GetProperty("timestamp").GetUInt32()));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_clear_in_the_future_is_ignored(bool farAhead)
+    {
+        var markerPath = Path.Combine(folder, "location-clear.txt");
+
+        // As far as the marker goes, or just past the clock skew.
+        var cleared = farAhead
+            ? uint.MaxValue
+            : DateTimeOffset.UtcNow.Add(PlaceSync.ClockSkew).AddHours(1).ToUnixTimeSeconds();
+
+        Location.SetOn(true, Path.Combine(folder, "location.txt"));
+        WriteFile("2026-10-12T080000.bin", [Morning, Morning + 60], (Morning, 1, 0), (Morning + 20, 2, 0));
+
+        var summary = $$"""{"name":"Test","placesClearedAt":{{cleared}},"items":[]}""";
+
+        var api = new FakeApi
+        {
+            Respond = request => request.Method == HttpMethod.Get ? Json(summary) : new HttpResponseMessage(HttpStatusCode.NoContent),
+        };
+
+        await CreateSync(api).SyncAndLog(NullLogger.Instance);
+
+        Assert.Null(Location.ReadClear(markerPath));
+        Assert.Equal([Morning, Morning + 20], PlaceFiles.Read(Measurements).Select(item => item.Place.Timestamp));
+
+        var upload = api.Requests.Single(request => request.Uri.EndsWith("/places?api-version=1.5"));
+        var items = JsonDocument.Parse(upload.Body!).RootElement.GetProperty("items");
+
+        Assert.Equal([Morning, Morning + 20], items.EnumerateArray().Select(item => item.GetProperty("timestamp").GetUInt32()));
+    }
+
+    [Fact]
+    public async Task A_clear_within_the_clock_skew_is_adopted()
+    {
+        var markerPath = Path.Combine(folder, "location-clear.txt");
+
+        var cleared = (uint)DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds();
+
+        Location.SetOn(true, Path.Combine(folder, "location.txt"));
+        WriteFile("2026-10-12T080000.bin", [Morning], (Morning, 1, 0));
+
+        var summary = $$"""{"name":"Test","placesClearedAt":{{cleared}},"items":[]}""";
+
+        var api = new FakeApi
+        {
+            Respond = request => request.Method == HttpMethod.Get ? Json(summary) : new HttpResponseMessage(HttpStatusCode.NoContent),
+        };
+
+        await CreateSync(api).SyncAndLog(NullLogger.Instance);
+
+        Assert.Equal(new ClearMarker(cleared, Pending: false), Location.ReadClear(markerPath));
+    }
+
     [Fact]
     public async Task Change_points_are_grouped_by_local_date()
     {
