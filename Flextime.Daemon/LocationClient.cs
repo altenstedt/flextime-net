@@ -46,7 +46,7 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
 
             Console.WriteLine(router == null
                 ? "Place           :  Recorded"
-                : $"Place           :  Router {router.Address} on {router.Interface}");
+                : $"Place           :  Router {router.Address} on {TerminalText.Clean(router.Interface)}");
 
             if (router?.NetworkLine is { } line)
             {

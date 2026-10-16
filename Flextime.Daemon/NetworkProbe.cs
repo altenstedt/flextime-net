@@ -35,7 +35,7 @@ public sealed record Router(
         ? null
         : Hint != null
             ? $"Network         :  {Hint}"
-            : $"Network         :  none (router default {Domain})";
+            : $"Network         :  none (router default {TerminalText.Clean(Domain)})";
 }
 
 // One network service's router as configd recorded it on macOS.
@@ -531,7 +531,7 @@ public static class PrintNetwork
 
             Console.WriteLine(route == null
                 ? $"Internet ({family}) :  No route"
-                : $"Internet ({family}) :  {route.Interface}, {route.Kind}, local address {route.LocalAddress}");
+                : $"Internet ({family}) :  {TerminalText.Clean(route.Interface)}, {route.Kind}, local address {route.LocalAddress}");
         }
 
         if (report.VpnServices == null)
@@ -560,10 +560,10 @@ public static class PrintNetwork
         foreach (var router in report.Routers)
         {
             Console.WriteLine(router.Mac == null
-                ? $"Router          :  {router.Address} on {router.Interface}, hardware address not known yet"
+                ? $"Router          :  {router.Address} on {TerminalText.Clean(router.Interface)}, hardware address not known yet"
                 : router.Id == null
-                    ? $"Router          :  {router.Address} on {router.Interface}"
-                    : $"Router          :  {router.Address} on {router.Interface} (hashed id {router.Id})");
+                    ? $"Router          :  {router.Address} on {TerminalText.Clean(router.Interface)}"
+                    : $"Router          :  {router.Address} on {TerminalText.Clean(router.Interface)} (hashed id {router.Id})");
 
             if (router.NetworkLine is { } line)
             {
