@@ -12,7 +12,7 @@ public static class Constants
         Uri.TryCreate(Environment.GetEnvironmentVariable("FLEXTIME_API_URI"), UriKind.Absolute, out var uri)
         && uri.Scheme == Uri.UriSchemeHttps
             ? new Uri(uri.GetLeftPart(UriPartial.Authority) + "/", UriKind.Absolute)
-            : new Uri("https://api.mangoground-e628dd34.swedencentral.azurecontainerapps.io/", UriKind.Absolute);
+            : new Uri("https://api.flextime.inhill.com/", UriKind.Absolute);
 
     public static readonly Uri AuthorityUri = new Uri($"https://login.microsoftonline.com/{TenantId}/oauth2/v2.0/", UriKind.Absolute);
 
