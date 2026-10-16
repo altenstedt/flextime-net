@@ -47,6 +47,11 @@ hours.  Months and years are not accepted: neither has a fixed length.
 Just make sure that the Flextime daemon, is started every time you
 log in.
 
+Once you log in, `flextimed sync` uploads the measurements with their
+time zone, a random id for the computer, and the computer's name as the
+system reports it (`Environment.MachineName`), so the web client can
+tell your computers apart.
+
 The program use D-Bus on Linux, and
 `CGEventSourceSecondsSinceLastEventType` on macOS, and
 `GetLastInputInfo` on Windows.
@@ -101,17 +106,21 @@ day by place.  It is off until you turn it on:
 
 `listen` reads the setting every minute, so no restart is needed.  A
 place is written into the measurement files only when it changes, as a
-48-bit hash of your user id and the router's hardware address; the API
-keys that hash again before it stores anything.  The first time a file
-records a router it also notes the network's DNS domain, if the network
-gives one (like `omegapoint.se`), as a hint for naming the place; sync
-sends it with that change point.  Router defaults such as `localdomain`,
-`lan` or `home` name no place and are left out.  With location off the
-files are exactly what they were before places existed, and sync sends
-exactly what it did.  `clear --all-computers` clears every computer on
-the account on the server; the others clear their own files when they
-next sync.  `flextimed network` shows what the daemon can tell about
-the network, and stores nothing.
+48-bit hash of your user id and the router's hardware address, with
+flags for a connected VPN and for traffic through a tunnel; sync sends
+both with each change point.  The API keys that hash again before it
+stores anything.  The hash hides the router's address from anyone
+without your user id, but not from the server: it knows the id, and
+can try every address within the known vendor prefixes.  The first
+time a file records a router it also notes the network's DNS domain,
+if the network gives one (like `omegapoint.se`), as a hint for naming
+the place; sync sends it with that change point.  Router defaults such
+as `localdomain`, `lan` or `home` name no place and are left out.
+With location off the files are exactly what they were before places
+existed, and sync sends exactly what it did.  `clear --all-computers`
+clears every computer on the account on the server; the others clear
+their own files when they next sync.  `flextimed network` shows what
+the daemon can tell about the network, and stores nothing.
 
 # protobuf
 

@@ -51,8 +51,9 @@ public sealed record NetworkReport(
 // What flextimed can tell about where it is on the network without any
 // permission prompt: the interface internet traffic leaves through,
 // whether that is a VPN tunnel, and a fingerprint of the router on the
-// physical network.  A diagnostic for the location feature — nothing
-// here is stored or sent.
+// physical network.  The network command only prints it; with location
+// on, listen reads it too and records the router hash, the VPN and
+// tunnel flags and the domain hint, which sync then sends.
 public static partial class NetworkProbe
 {
     // Public resolvers, used only to ask the routing table which way
