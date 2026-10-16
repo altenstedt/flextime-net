@@ -8,10 +8,14 @@ public static class Constants
     // FLEXTIME_API_URI lets an installed client follow the API to a new host
     // without a rebuild. Only an https origin is accepted; anything else falls
     // back to the built-in default.
-    public static readonly Uri ApiUri =
-        Uri.TryCreate(Environment.GetEnvironmentVariable("FLEXTIME_API_URI"), UriKind.Absolute, out var uri)
+    public static readonly Uri ApiUri = ApiUriFrom(Environment.GetEnvironmentVariable("FLEXTIME_API_URI"));
+
+    // Scheme, host and port only: a path is dropped, and so is any user
+    // info, which would otherwise be printed by info.
+    public static Uri ApiUriFrom(string? value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri)
         && uri.Scheme == Uri.UriSchemeHttps
-            ? new Uri(uri.GetLeftPart(UriPartial.Authority) + "/", UriKind.Absolute)
+            ? new Uri(uri.GetComponents(UriComponents.SchemeAndServer, UriFormat.UriEscaped) + "/", UriKind.Absolute)
             : new Uri("https://api.flextime.inhill.com/", UriKind.Absolute);
 
     public static readonly Uri AuthorityUri = new Uri($"https://login.microsoftonline.com/{TenantId}/oauth2/v2.0/", UriKind.Absolute);
