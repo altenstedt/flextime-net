@@ -10,7 +10,7 @@ namespace Test.Flextime;
 
 public class PlaceSyncTests : IDisposable
 {
-    private const string ComputerId = "f204899922822897";
+    private const string ComputerId = "0123456789abcdef";
 
     // 2025-10-12 08:00 UTC, 10:00 in Stockholm.
     private const uint Morning = 1760256000;

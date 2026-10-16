@@ -32,8 +32,8 @@ PATH, use it directly instead — it starts faster.)
 {
   "items": [
     {
-      "id": "f204899922822897",
-      "name": "MacBook Pro M4, Omegapoint",
+      "id": "0123456789abcdef",
+      "name": "Work laptop",
       "days": [
         {
           "date": "2026-07-17",
