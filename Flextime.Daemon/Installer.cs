@@ -80,6 +80,13 @@ public class Installer(DeviceCode deviceCode)
 
         List<string> syncCommand = [executable, "sync", "--once"];
 
+        // The service files cannot carry them; ServiceFiles refuses too.
+        if (listenCommand.Any(argument => argument.Any(char.IsControl)))
+        {
+            Console.Error.WriteLine("The path of this executable holds control characters.");
+            return 1;
+        }
+
         int result;
 
         if (OperatingSystem.IsMacOS())

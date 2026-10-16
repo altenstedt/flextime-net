@@ -119,7 +119,9 @@ public static class ServiceFiles
         // PT0S means no limit.
         var limit = XmlConvert.ToString(executionTimeLimit ?? TimeSpan.Zero);
 
-        var arguments = string.Join(' ', command.Skip(1).Select(item => item.Contains(' ') ? $"\"{item}\"" : item));
+        var arguments = string.Join(' ', command.Skip(1).Select(WindowsArgument));
+
+        RejectControlCharacters(command[0]);
 
         return $"""
                 <?xml version="1.0" encoding="UTF-16"?>
@@ -166,5 +168,71 @@ public static class ServiceFiles
     }
 
     private static string SystemdCommand(IReadOnlyList<string> command) =>
-        string.Join(' ', command.Select(item => item.Contains(' ') ? $"\"{item}\"" : item));
+        string.Join(' ', command.Select(SystemdArgument));
+
+    /// <summary>
+    /// One word of an ExecStart line.  systemd expands % specifiers and
+    /// $ variables everywhere on the line, and reads C escapes inside
+    /// quotes; each is escaped so the word arrives as written.
+    /// </summary>
+    public static string SystemdArgument(string argument)
+    {
+        RejectControlCharacters(argument);
+
+        var escaped = argument.Replace("%", "%%").Replace("$", "$$");
+
+        var quote = argument.Length == 0
+                    || argument.Any(character => char.IsWhiteSpace(character) || character is '"' or '\'' or '\\' or ';');
+
+        return quote
+            ? $"\"{escaped.Replace("\\", "\\\\").Replace("\"", "\\\"")}\""
+            : escaped;
+    }
+
+    /// <summary>
+    /// One argument of a Windows command line, quoted the way the C
+    /// runtime's parser (CommandLineToArgvW) splits it back: backslashes
+    /// count only before a quote, where they are doubled.
+    /// </summary>
+    public static string WindowsArgument(string argument)
+    {
+        RejectControlCharacters(argument);
+
+        if (argument.Length > 0 && !argument.Any(character => character is ' ' or '\t' or '"'))
+        {
+            return argument;
+        }
+
+        var builder = new StringBuilder("\"");
+        var backslashes = 0;
+
+        foreach (var character in argument)
+        {
+            if (character == '\\')
+            {
+                backslashes++;
+                continue;
+            }
+
+            builder.Append('\\', character == '"' ? backslashes * 2 + 1 : backslashes);
+            builder.Append(character);
+            backslashes = 0;
+        }
+
+        // Before the closing quote, so that it stays a quote.
+        builder.Append('\\', backslashes * 2);
+        builder.Append('"');
+
+        return builder.ToString();
+    }
+
+    // A line break would end the unit's line, or the task's argument
+    // list, and start one the argument was never meant to write.
+    private static void RejectControlCharacters(string argument)
+    {
+        if (argument.Any(char.IsControl))
+        {
+            throw new ArgumentException("A service command cannot hold control characters.", nameof(argument));
+        }
+    }
 }

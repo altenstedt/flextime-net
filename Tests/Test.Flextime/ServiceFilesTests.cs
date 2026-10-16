@@ -103,4 +103,53 @@ public class ServiceFilesTests
 
         Assert.Contains("<Arguments>listen --time-zone &quot;My Zone &amp; Co&quot;</Arguments>", xml);
     }
+    [Theory]
+    [InlineData("plain", "plain")]
+    [InlineData("/opt/my tools/flextimed", "\"/opt/my tools/flextimed\"")]
+    [InlineData("100%", "100%%")]
+    [InlineData("$HOME", "$$HOME")]
+    [InlineData("${HOME}", "$${HOME}")]
+    [InlineData("a\"b", "\"a\\\"b\"")]
+    [InlineData("a\\b", "\"a\\\\b\"")]
+    [InlineData("it's", "\"it's\"")]
+    [InlineData(";", "\";\"")]
+    [InlineData("", "\"\"")]
+    [InlineData("/a b/%h $x", "\"/a b/%%h $$x\"")]
+    public void SystemdArgumentEscapes(string argument, string expected)
+    {
+        Assert.Equal(expected, ServiceFiles.SystemdArgument(argument));
+    }
+
+    [Fact]
+    public void SystemdServiceEscapesSpecifiers()
+    {
+        var unit = ServiceFiles.SystemdSyncService(["/home/a%nb/$USER/flextimed", "sync", "--once"]);
+
+        Assert.Contains("ExecStart=/home/a%%nb/$$USER/flextimed sync --once", unit);
+    }
+
+    [Theory]
+    [InlineData("/opt/flex\ntimed")]
+    [InlineData("/opt/flex\rtimed")]
+    [InlineData("/opt/flex\u001btimed")]
+    public void ServiceFilesRejectControlCharacters(string path)
+    {
+        Assert.Throws<ArgumentException>(() => ServiceFiles.SystemdSyncService([path, "sync", "--once"]));
+        Assert.Throws<ArgumentException>(() => ServiceFiles.WindowsTaskXml("d", "u", [path, "sync"], null, null));
+        Assert.Throws<ArgumentException>(() => ServiceFiles.WindowsTaskXml("d", "u", [@"C:\f.exe", path], null, null));
+    }
+
+    [Theory]
+    [InlineData("plain", "plain")]
+    [InlineData("a b", "\"a b\"")]
+    [InlineData("", "\"\"")]
+    [InlineData("a\"b", "\"a\\\"b\"")]
+    [InlineData("a\\\"b", "\"a\\\\\\\"b\"")]
+    [InlineData(@"C:\dir\", @"C:\dir\")]
+    [InlineData(@"C:\my dir\", "\"C:\\my dir\\\\\"")]
+    [InlineData(@"a\\b c", "\"a\\\\b c\"")]
+    public void WindowsArgumentQuotes(string argument, string expected)
+    {
+        Assert.Equal(expected, ServiceFiles.WindowsArgument(argument));
+    }
 }
