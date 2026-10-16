@@ -45,8 +45,8 @@ public static class TerminalText
         '\n' or '\t' => false,
         < ' ' => true,
         >= '\u007f' and <= '\u009f' => true,
-        >= '‪' and <= '‮' => true,
-        >= '⁦' and <= '⁩' => true,
+        >= '\u202a' and <= '\u202e' => true,
+        >= '\u2066' and <= '\u2069' => true,
         _ => false,
     };
 }
