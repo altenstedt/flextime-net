@@ -570,7 +570,7 @@ public static class PrintNetwork
             }
         }
 
-        Console.WriteLine($"Position        :  {(report.Dependable ? "Dependable" : "Not dependable")}. {report.Reason}");
+        Console.WriteLine($"Position        :  {(report.Dependable ? "Dependable" : "Not dependable")}. {TerminalText.Clean(report.Reason)}");
 
         if (userId != null)
         {

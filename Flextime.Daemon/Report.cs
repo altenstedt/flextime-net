@@ -274,7 +274,7 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
             if (!TimeZones.TryGet(row.Zone, out var zone))
             {
                 throw new InvalidOperationException(
-                    $"The server returned measurements in time zone {row.Zone}, which this machine cannot resolve.");
+                    $"The server returned measurements in time zone {TerminalText.Clean(row.Zone)}, which this machine cannot resolve.");
             }
 
             var timestamps = row.Timestamps

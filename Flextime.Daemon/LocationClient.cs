@@ -54,7 +54,7 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
             }
         }
 
-        Console.WriteLine($"Position        :  {(report.Dependable ? "Dependable" : "Not dependable")}. {report.Reason}");
+        Console.WriteLine($"Position        :  {(report.Dependable ? "Dependable" : "Not dependable")}. {TerminalText.Clean(report.Reason)}");
 
         var connected = report.VpnServices?.Where(service => service.Status == "Connected").Select(service => service.Name).ToArray();
 
