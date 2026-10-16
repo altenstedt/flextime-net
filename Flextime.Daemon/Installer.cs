@@ -28,6 +28,16 @@ public class Installer(DeviceCode deviceCode)
     private const int BootoutPolls = 100;
     private const int BootstrapAttempts = 10;
 
+    // System tools are named by full path: on Unix a bare name is looked
+    // up in the application's folder and the current directory before
+    // PATH, so a planted launchctl there would run instead.
+    private const string Launchctl = "/bin/launchctl";
+
+    private static string Systemctl =>
+        new[] { "/usr/bin/systemctl", "/bin/systemctl" }.FirstOrDefault(File.Exists) ?? "/usr/bin/systemctl";
+
+    private static string Schtasks => Path.Combine(Environment.SystemDirectory, "schtasks.exe");
+
     [DllImport("libc")]
     private static extern uint getuid();
 
@@ -243,7 +253,7 @@ public class Installer(DeviceCode deviceCode)
             // enable clears a persisted stop, without which bootstrap
             // refuses the label.
             await Bootout(domain, label);
-            await Run("launchctl", "enable", $"{domain}/{label}");
+            await Run(Launchctl, "enable", $"{domain}/{label}");
 
             var (code, error) = await Bootstrap(domain, path);
 
@@ -296,7 +306,7 @@ public class Installer(DeviceCode deviceCode)
         // The disable persists across logons; launchd stores it outside
         // the plist, which stays in place.  Bootout fails harmlessly
         // when nothing is loaded.
-        await Run("launchctl", "disable", $"{domain}/{ListenLabel}");
+        await Run(Launchctl, "disable", $"{domain}/{ListenLabel}");
         await Bootout(domain, ListenLabel);
 
         Console.WriteLine("Stopped listening. Sync keeps running and uploads any remaining data.");
@@ -309,7 +319,7 @@ public class Installer(DeviceCode deviceCode)
         var agents = Path.Combine(home, "Library", "LaunchAgents");
         var domain = $"gui/{getuid()}";
 
-        await Run("launchctl", "enable", $"{domain}/{ListenLabel}");
+        await Run(Launchctl, "enable", $"{domain}/{ListenLabel}");
 
         // Unload first so that start doubles as restart.  Fails
         // harmlessly when nothing is loaded.
@@ -347,7 +357,7 @@ public class Installer(DeviceCode deviceCode)
             Console.WriteLine($"Wrote {path}");
         }
 
-        var (reloadCode, reloadError) = await Run("systemctl", "--user", "daemon-reload");
+        var (reloadCode, reloadError) = await Run(Systemctl, "--user", "daemon-reload");
 
         if (reloadCode != 0)
         {
@@ -355,7 +365,7 @@ public class Installer(DeviceCode deviceCode)
             return 1;
         }
 
-        var (code, error) = await Run("systemctl", "--user", "enable", "--now", ListenUnit, SyncTimer);
+        var (code, error) = await Run(Systemctl, "--user", "enable", "--now", ListenUnit, SyncTimer);
 
         if (code != 0)
         {
@@ -372,7 +382,7 @@ public class Installer(DeviceCode deviceCode)
     {
         var units = SystemdUnitDirectory();
 
-        await Run("systemctl", "--user", "disable", "--now", ListenUnit, SyncTimer);
+        await Run(Systemctl, "--user", "disable", "--now", ListenUnit, SyncTimer);
 
         foreach (var name in new[] { ListenUnit, SyncUnit, SyncTimer })
         {
@@ -385,7 +395,7 @@ public class Installer(DeviceCode deviceCode)
             }
         }
 
-        await Run("systemctl", "--user", "daemon-reload");
+        await Run(Systemctl, "--user", "daemon-reload");
 
         Console.WriteLine("Measurements and tokens are kept.");
         return 0;
@@ -393,7 +403,7 @@ public class Installer(DeviceCode deviceCode)
 
     private static async Task<int> StopLinux()
     {
-        var (code, error) = await Run("systemctl", "--user", "disable", "--now", ListenUnit);
+        var (code, error) = await Run(Systemctl, "--user", "disable", "--now", ListenUnit);
 
         if (code != 0)
         {
@@ -407,7 +417,7 @@ public class Installer(DeviceCode deviceCode)
 
     private static async Task<int> StartLinux()
     {
-        var (code, error) = await Run("systemctl", "--user", "enable", "--now", ListenUnit);
+        var (code, error) = await Run(Systemctl, "--user", "enable", "--now", ListenUnit);
 
         if (code != 0)
         {
@@ -436,7 +446,7 @@ public class Installer(DeviceCode deviceCode)
                 // Task Scheduler expects task XML in UTF-16.
                 await File.WriteAllTextAsync(path, xml, Encoding.Unicode);
 
-                var (code, error) = await Run("schtasks", "/Create", "/TN", name, "/XML", path, "/F");
+                var (code, error) = await Run(Schtasks, "/Create", "/TN", name, "/XML", path, "/F");
 
                 if (code != 0)
                 {
@@ -452,7 +462,7 @@ public class Installer(DeviceCode deviceCode)
             }
 
             // The logon trigger fires at the next logon; start now as well.
-            await Run("schtasks", "/Run", "/TN", name);
+            await Run(Schtasks, "/Run", "/TN", name);
         }
 
         Console.WriteLine("The sync repetition schedule takes full effect at the next logon.");
@@ -464,9 +474,9 @@ public class Installer(DeviceCode deviceCode)
     {
         foreach (var name in new[] { ListenTask, SyncTask })
         {
-            await Run("schtasks", "/End", "/TN", name);
+            await Run(Schtasks, "/End", "/TN", name);
 
-            var (code, _) = await Run("schtasks", "/Delete", "/TN", name, "/F");
+            var (code, _) = await Run(Schtasks, "/Delete", "/TN", name, "/F");
 
             if (code == 0)
             {
@@ -480,7 +490,7 @@ public class Installer(DeviceCode deviceCode)
 
     private static async Task<int> StopWindows()
     {
-        var (code, error) = await Run("schtasks", "/Change", "/TN", ListenTask, "/DISABLE");
+        var (code, error) = await Run(Schtasks, "/Change", "/TN", ListenTask, "/DISABLE");
 
         if (code != 0)
         {
@@ -488,7 +498,7 @@ public class Installer(DeviceCode deviceCode)
             return 1;
         }
 
-        await Run("schtasks", "/End", "/TN", ListenTask);
+        await Run(Schtasks, "/End", "/TN", ListenTask);
 
         Console.WriteLine("Stopped listening. Sync keeps running and uploads any remaining data.");
         return 0;
@@ -496,7 +506,7 @@ public class Installer(DeviceCode deviceCode)
 
     private static async Task<int> StartWindows()
     {
-        var (code, error) = await Run("schtasks", "/Change", "/TN", ListenTask, "/ENABLE");
+        var (code, error) = await Run(Schtasks, "/Change", "/TN", ListenTask, "/ENABLE");
 
         if (code != 0)
         {
@@ -504,7 +514,7 @@ public class Installer(DeviceCode deviceCode)
             return 1;
         }
 
-        await Run("schtasks", "/Run", "/TN", ListenTask);
+        await Run(Schtasks, "/Run", "/TN", ListenTask);
 
         Console.WriteLine("Started.");
         return 0;
@@ -519,7 +529,7 @@ public class Installer(DeviceCode deviceCode)
     /// </summary>
     private static async Task Bootout(string domain, string label)
     {
-        await Run("launchctl", "bootout", $"{domain}/{label}");
+        await Run(Launchctl, "bootout", $"{domain}/{label}");
 
         for (var poll = 0; poll < BootoutPolls && await IsLoaded(domain, label); poll++)
         {
@@ -529,7 +539,7 @@ public class Installer(DeviceCode deviceCode)
 
     private static async Task<bool> IsLoaded(string domain, string label)
     {
-        var (code, _) = await Run("launchctl", "print", $"{domain}/{label}");
+        var (code, _) = await Run(Launchctl, "print", $"{domain}/{label}");
 
         return code == 0;
     }
@@ -541,13 +551,13 @@ public class Installer(DeviceCode deviceCode)
     /// </summary>
     private static async Task<(int code, string error)> Bootstrap(string domain, string path)
     {
-        var result = await Run("launchctl", "bootstrap", domain, path);
+        var result = await Run(Launchctl, "bootstrap", domain, path);
 
         for (var attempt = 0; attempt < BootstrapAttempts && result.code != 0; attempt++)
         {
             await Task.Delay(Poll);
 
-            result = await Run("launchctl", "bootstrap", domain, path);
+            result = await Run(Launchctl, "bootstrap", domain, path);
         }
 
         return result;
