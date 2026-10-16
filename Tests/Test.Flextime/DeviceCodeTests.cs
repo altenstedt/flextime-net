@@ -111,6 +111,25 @@ public class DeviceCodeTests : IDisposable
         Assert.False(deviceCode.IsAuthenticated);
         Assert.Empty(delays);
     }
+    [Fact]
+    public async Task PollErrorWithoutJsonEndsWithoutLogin()
+    {
+        var handler = new DeviceCodeHandler(
+            DeviceCodeHandler.DeviceCode(interval: 5),
+            () => new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = new StringContent("<html>bad request</html>")
+            });
+
+        var deviceCode = new DeviceCode(handler, TokenPath, Delay);
+
+        await deviceCode.LogOn(TestContext.Current.CancellationToken);
+
+        Assert.False(deviceCode.IsAuthenticated);
+        Assert.Equal(2, handler.Count);
+        Assert.Empty(delays);
+        Assert.False(File.Exists(TokenPath));
+    }
 }
 
 /// <summary>Answers each request with the next response, in order.</summary>

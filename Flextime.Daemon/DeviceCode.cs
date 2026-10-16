@@ -84,7 +84,8 @@ public class DeviceCode(
         {
             var pollResponseMessage = await httpClient.PostAsync("token", new FormUrlEncodedContent(pullCollection), cancellationToken);
 
-            var pollResponse = await pollResponseMessage.Content.ReadFromJsonAsync(PollResponseSourceGenerationContext.Default.PollResponse, cancellationToken: cancellationToken);
+            // Null when the body is not JSON -- a proxy's error page, say.
+            var pollResponse = await TryReadPoll(pollResponseMessage, cancellationToken);
 
             if (pollResponseMessage.StatusCode == HttpStatusCode.BadRequest)
             {
@@ -99,9 +100,15 @@ public class DeviceCode(
 
                     await delay(interval, cancellationToken);
                 }
+                else if (pollResponse == null)
+                {
+                    Console.WriteLine(TerminalText.Clean($"Unexpected response {(int)pollResponseMessage.StatusCode} {pollResponseMessage.ReasonPhrase}."));
+
+                    return;
+                }
                 else
                 {
-                    Console.WriteLine(TerminalText.Clean($"Unexpected response {pollResponse?.error}. {pollResponse?.error_description}"));
+                    Console.WriteLine(TerminalText.Clean($"Unexpected response {pollResponse.error}. {pollResponse.error_description}"));
 
                     return;
                 }
@@ -136,16 +143,21 @@ public class DeviceCode(
 
     private static async Task<string> TryReadError(HttpResponseMessage responseMessage, CancellationToken cancellationToken)
     {
+        var error = await TryReadPoll(responseMessage, cancellationToken);
+
+        return $"{error?.error} {error?.error_description}".Trim();
+    }
+
+    private static async Task<PollResponse?> TryReadPoll(HttpResponseMessage responseMessage, CancellationToken cancellationToken)
+    {
         try
         {
-            var error = await responseMessage.Content.ReadFromJsonAsync(PollResponseSourceGenerationContext.Default.PollResponse, cancellationToken: cancellationToken);
-
-            return $"{error?.error} {error?.error_description}".Trim();
+            return await responseMessage.Content.ReadFromJsonAsync(PollResponseSourceGenerationContext.Default.PollResponse, cancellationToken: cancellationToken);
         }
         catch (Exception exception) when (exception is System.Text.Json.JsonException or NotSupportedException)
         {
             // Not JSON, or not this shape; the status says enough.
-            return string.Empty;
+            return null;
         }
     }
 }
