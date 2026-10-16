@@ -75,22 +75,22 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
                     break;
 
                 case DayStatus.ServerHasMore:
-                    logger.LogWarning(TerminalText.Clean(line));
+                    logger.LogWarning("{Line}", TerminalText.Clean(line));
                     break;
 
                 default:
-                    logger.LogInformation(TerminalText.Clean(line));
+                    logger.LogInformation("{Line}", TerminalText.Clean(line));
                     break;
             }
         }, since: DueWindow(), note: (line, warning) =>
         {
             if (warning)
             {
-                logger.LogWarning(TerminalText.Clean(line));
+                logger.LogWarning("{Line}", TerminalText.Clean(line));
             }
             else
             {
-                logger.LogInformation(TerminalText.Clean(line));
+                logger.LogInformation("{Line}", TerminalText.Clean(line));
             }
         });
     }
