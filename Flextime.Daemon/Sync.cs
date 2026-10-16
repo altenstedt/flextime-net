@@ -206,8 +206,14 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
 
         // (Date, Zone) is unique in the response — the server stores one
         // row per day and zone — so a dictionary probes each group in
-        // constant time.
-        var remoteByKey = remoteSummary?.Items.ToDictionary(item => (item.Date, item.Zone)) ?? new();
+        // constant time.  Should a response repeat one anyway, the first
+        // is kept rather than failing every pass.
+        var remoteByKey = new Dictionary<(DateOnly, string), SummaryItemDataContract>();
+
+        foreach (var item in remoteSummary?.Items ?? [])
+        {
+            remoteByKey.TryAdd((item.Date, item.Zone), item);
+        }
 
         // A windowed summary knows nothing about days before it, so those
         // days must not be compared against it: every one of them would

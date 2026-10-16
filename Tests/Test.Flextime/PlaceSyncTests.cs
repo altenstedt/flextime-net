@@ -194,6 +194,27 @@ public class PlaceSyncTests : IDisposable
         Assert.Equal([(HttpMethod.Get, $"/{ComputerId}/summary?api-version=1.5")], Calls(api));
     }
 
+    [Fact]
+    public async Task A_summary_repeating_a_day_does_not_fail_the_sync()
+    {
+        Location.SetOn(true, Path.Combine(folder, "location.txt"));
+        WriteFile("2026-10-12T080000.bin", [Morning], (Morning, 0x95313127c39c, 0), (Morning + 30, 0, 0));
+
+        var item = $$"""
+            {"date":"2025-10-12","zone":"Europe/Stockholm",
+             "count":1,"last":{{Morning}},"sum":{{Morning}},
+             "placesCount":2,"placesLast":{{Morning + 30}},"placesSum":{{2L * Morning + 30}}}
+            """;
+
+        var summary = $$"""{"name":"Test","placesClearedAt":null,"items":[{{item}},{{item}}]}""";
+
+        var api = new FakeApi { Respond = _ => Json(summary) };
+
+        await CreateSync(api).SyncAndLog(NullLogger.Instance);
+
+        Assert.Equal([(HttpMethod.Get, $"/{ComputerId}/summary?api-version=1.5")], Calls(api));
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.BadRequest)]
     [InlineData(HttpStatusCode.NotFound)]
