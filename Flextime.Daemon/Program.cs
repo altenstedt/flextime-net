@@ -48,6 +48,7 @@ if (OperatingSystem.IsWindows())
 
 var app = builder.ToConsoleAppBuilder();
 
+app.UseFilter<UnknownCommandFilter>();
 app.Add<DaemonCommands>();
 
 await app.RunAsync(args);

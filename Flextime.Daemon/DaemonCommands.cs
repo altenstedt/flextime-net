@@ -19,6 +19,7 @@ public class DaemonCommands(
     LocationClient locationClient)
 {
     /// <summary>Flextime -- track working hours. Without a command, show the installation.</summary>
+    [ConsoleAppFilter<NoArgumentsFilter>]
     [Command("")]
     public async Task Root()
     {
@@ -26,6 +27,7 @@ public class DaemonCommands(
     }
 
     /// <summary>Log in to the Flextime server, so sync can upload</summary>
+    [ConsoleAppFilter<NoArgumentsFilter>]
     public async Task Login(CancellationToken cancellationToken)
     {
         logger.LogDebug("Login invoked.");
@@ -33,6 +35,7 @@ public class DaemonCommands(
     }
 
     /// <summary>Remove the sign-in from this computer; measurements are kept</summary>
+    [ConsoleAppFilter<NoArgumentsFilter>]
     public int Logout()
     {
         logger.LogDebug("Logout invoked.");
@@ -145,6 +148,7 @@ public class DaemonCommands(
     }
 
     /// <summary>Show whether the place is recorded, and the place now</summary>
+    [ConsoleAppFilter<NoArgumentsFilter>]
     [Command("location")]
     public Task<int> Location()
     {
@@ -154,6 +158,7 @@ public class DaemonCommands(
     }
 
     /// <summary>Record the place, a hash of the router. Requires login</summary>
+    [ConsoleAppFilter<NoArgumentsFilter>]
     [Command("location on")]
     public Task<int> LocationOn()
     {
@@ -163,6 +168,7 @@ public class DaemonCommands(
     }
 
     /// <summary>Stop recording the place; the history is kept</summary>
+    [ConsoleAppFilter<NoArgumentsFilter>]
     [Command("location off")]
     public int LocationOff()
     {
@@ -458,6 +464,7 @@ public class DaemonCommands(
     }
 
     /// <summary>Uninstall the services; measurements and tokens are kept</summary>
+    [ConsoleAppFilter<NoArgumentsFilter>]
     public async Task<int> Uninstall()
     {
         logger.LogDebug("Uninstall invoked.");
@@ -466,6 +473,7 @@ public class DaemonCommands(
     }
 
     /// <summary>Stop listen, across logons, until start; sync keeps going</summary>
+    [ConsoleAppFilter<NoArgumentsFilter>]
     public async Task<int> Stop()
     {
         logger.LogDebug("Stop invoked.");
@@ -474,6 +482,7 @@ public class DaemonCommands(
     }
 
     /// <summary>Start listen after a stop</summary>
+    [ConsoleAppFilter<NoArgumentsFilter>]
     public async Task<int> Start()
     {
         logger.LogDebug("Start invoked.");
