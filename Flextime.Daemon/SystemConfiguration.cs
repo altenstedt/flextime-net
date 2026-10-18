@@ -67,6 +67,30 @@ internal static unsafe partial class SystemConfiguration
         }
     }
 
+    /// <summary>
+    /// The computer name from System Settings, General, About — "Martin's
+    /// MacBook Pro" — which the user chose, unlike the host name, which
+    /// can follow the network.  Null when it is unset or cannot be read.
+    /// </summary>
+    public static string? ReadComputerName()
+    {
+        var name = SCDynamicStoreCopyComputerName(IntPtr.Zero, IntPtr.Zero);
+
+        if (name == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        try
+        {
+            return CFGetTypeID(name) == CFStringGetTypeID() ? ToString(name) : null;
+        }
+        finally
+        {
+            CFRelease(name);
+        }
+    }
+
     private static void ReadPattern(IntPtr store, string text, Dictionary<string, IReadOnlyDictionary<string, string>> values)
     {
         var pattern = CreateString(text);
@@ -193,6 +217,9 @@ internal static unsafe partial class SystemConfiguration
 
     [LibraryImport(SystemConfigurationFramework)]
     private static partial IntPtr SCDynamicStoreCopyValue(IntPtr store, IntPtr key);
+
+    [LibraryImport(SystemConfigurationFramework)]
+    private static partial IntPtr SCDynamicStoreCopyComputerName(IntPtr store, IntPtr nameEncoding);
 
     [LibraryImport(CoreFoundation, StringMarshalling = StringMarshalling.Utf8)]
     private static partial IntPtr CFStringCreateWithCString(IntPtr allocator, string text, uint encoding);

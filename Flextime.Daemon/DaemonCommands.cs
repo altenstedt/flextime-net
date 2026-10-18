@@ -16,7 +16,8 @@ public class DaemonCommands(
     DeviceCode deviceCode,
     Sync sync,
     Installer installer,
-    LocationClient locationClient)
+    LocationClient locationClient,
+    ComputerClient computerClient)
 {
     /// <summary>Flextime -- track working hours. Without a command, show the installation.</summary>
     [ConsoleAppFilter<NoArgumentsFilter>]
@@ -135,7 +136,28 @@ public class DaemonCommands(
     {
         logger.LogDebug("Computers invoked.");
 
-        return printData.InvokeComputers(json);
+        return computerClient.List(json);
+    }
+
+    /// <summary>Show this computer's name, hostname and former names</summary>
+    [ConsoleAppFilter<NoArgumentsFilter>]
+    [Command("computer")]
+    public Task<int> Computer()
+    {
+        logger.LogDebug("Computer invoked.");
+
+        return computerClient.Show();
+    }
+
+    /// <summary>Give a computer a name of your own, or "" for none</summary>
+    /// <param name="name">The name, or "" to go by the hostname again.</param>
+    /// <param name="id">Another computer's id, from the computers command.</param>
+    [Command("computer rename")]
+    public Task<int> ComputerRename([Argument] string name, [HideDefaultValue] string? id = null)
+    {
+        logger.LogDebug("Computer rename invoked.");
+
+        return computerClient.Rename(name, id);
     }
 
     /// <summary>Show the network as seen without permissions; sends nothing</summary>

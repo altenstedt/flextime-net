@@ -33,13 +33,26 @@ public class PlaceSyncTests : IDisposable
     {
         public List<(HttpMethod Method, string Uri, string? Body)> Requests { get; } = [];
 
+        // The hostname a pass reports, kept apart: it is not what these
+        // tests are about, and every pass sends one.
+        public List<(HttpMethod Method, string Uri, string? Body)> Hostnames { get; } = [];
+
         public Func<HttpRequestMessage, HttpResponseMessage> Respond { get; set; } = _ => new HttpResponseMessage(HttpStatusCode.NoContent);
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var body = request.Content == null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
 
-            Requests.Add((request.Method, request.RequestUri!.PathAndQuery, body));
+            var uri = request.RequestUri!.PathAndQuery;
+
+            if (uri.Contains("/hostname?") || uri.EndsWith("/name"))
+            {
+                Hostnames.Add((request.Method, uri, body));
+
+                return request.Method == HttpMethod.Put ? new HttpResponseMessage(HttpStatusCode.NoContent) : Respond(request);
+            }
+
+            Requests.Add((request.Method, uri, body));
 
             return Respond(request);
         }
@@ -127,11 +140,12 @@ public class PlaceSyncTests : IDisposable
         Assert.Equal(
             [
                 (HttpMethod.Get, "/a%2Fb%20c%3F/summary?api-version=1.5"),
-                (HttpMethod.Patch, "/a%2Fb%20c%3F/name"),
                 (HttpMethod.Patch, "/a%2Fb%20c%3F"),
                 (HttpMethod.Patch, "/a%2Fb%20c%3F/places?api-version=1.5"),
             ],
             Calls(api));
+        Assert.Equal([(HttpMethod.Put, "/a%2Fb%20c%3F/hostname?api-version=1.7")],
+            api.Hostnames.Select(request => (request.Method, request.Uri)));
     }
 
     [Fact]

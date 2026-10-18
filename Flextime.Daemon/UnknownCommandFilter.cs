@@ -6,14 +6,17 @@ namespace Flextime.Daemon;
 /// Rejects a word that is not a command.  ConsoleAppFramework routes an
 /// unknown first word to the root command, and commands without options
 /// never look at their arguments, so "flextimed typo" would otherwise show
-/// the installation and exit 0.  No command takes positional arguments, so
-/// a first argument that is not an option is always an unknown command.
+/// the installation and exit 0.  Only the commands named here take
+/// positional arguments; for every other one, a first argument that is not
+/// an option is always an unknown command.
 /// </summary>
 internal sealed class UnknownCommandFilter(ConsoleAppFilter next) : ConsoleAppFilter(next)
 {
+    private static readonly HashSet<string> WithArguments = ["computer rename"];
+
     public override Task InvokeAsync(ConsoleAppContext context, CancellationToken cancellationToken)
     {
-        if (context.CommandArguments is [var first, ..] && !first.StartsWith('-'))
+        if (context.CommandArguments is [var first, ..] && !first.StartsWith('-') && !WithArguments.Contains(context.CommandName))
         {
             var command = string.IsNullOrEmpty(context.CommandName) ? first : $"{context.CommandName} {first}";
 

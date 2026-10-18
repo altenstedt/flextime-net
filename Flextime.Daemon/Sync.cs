@@ -1,7 +1,9 @@
 using System.Globalization;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using Polly.Timeout;
 using Spectre.Console;
 
 namespace Flextime.Daemon;
@@ -169,6 +171,70 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         return (await GetSummary("1.4", since), false);
     }
 
+    // The hostname this process last had taken, and the day; the server
+    // moves the day it was last seen at most once a day, so asking more
+    // often than that only costs requests.
+    private (string Hostname, DateOnly Day)? reported;
+
+    // The hostname, read live, goes to the server, which decides whether
+    // it is worth a write; a renamed machine is known by its new hostname
+    // after one pass.  The name the user gives the computer belongs to
+    // the server and is never sent from here.  An API from before 1.7
+    // takes the hostname the old way, as the name, and only when the
+    // summary says it holds something else.  A failure is noted and the
+    // pass goes on: the activity matters more than a hostname.
+    private async Task ReportHostname(string? held, Action<string, bool> note)
+    {
+        var hostname = computer.Hostname;
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        if (string.IsNullOrEmpty(hostname) || reported == (hostname, today))
+        {
+            return;
+        }
+
+        var path = $"/{Uri.EscapeDataString(computer.Id!)}";
+
+        try
+        {
+            using var response = await httpClient.PutAsJsonAsync(
+                $"{path}/hostname?api-version=1.7", hostname, StringSourceGenerationContext.Default.String);
+
+            if (response.IsSuccessStatusCode)
+            {
+                reported = (hostname, today);
+
+                return;
+            }
+
+            if (response.StatusCode is not (HttpStatusCode.BadRequest or HttpStatusCode.NotFound or HttpStatusCode.MethodNotAllowed))
+            {
+                note($"Hostname not sent, trying again next sync: the server answered {(int)response.StatusCode}.", true);
+
+                return;
+            }
+
+            if (held != hostname)
+            {
+                using var legacy = await httpClient.PatchAsJsonAsync(
+                    $"{path}/name", hostname, StringSourceGenerationContext.Default.String);
+
+                if (!legacy.IsSuccessStatusCode)
+                {
+                    note($"Hostname not sent, trying again next sync: the server answered {(int)legacy.StatusCode}.", true);
+
+                    return;
+                }
+            }
+
+            reported = (hostname, today);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
+        {
+            note($"Hostname not sent, trying again next sync: {exception.Message}", true);
+        }
+    }
+
     private async Task ActOnRemoteStatus(bool upload, Action<string, DayStatus> output, int limit = int.MaxValue,
         DateOnly? since = null, Action<string, bool>? note = null)
     {
@@ -187,17 +253,9 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
             remoteSummary = await GetSummary("1.4", since);
         }
 
-        if (upload && !string.IsNullOrEmpty(computer.Name) && remoteSummary?.Name != computer.Name)
+        if (upload)
         {
-            // The name comes back with the summary, so it is written
-            // only when the server holds something else — once after a
-            // rename, instead of on every pass.
-            var response = await httpClient.PatchAsJsonAsync(
-                $"/{Uri.EscapeDataString(computer.Id!)}/name",
-                computer.Name,
-                StringSourceGenerationContext.Default.String);
-
-            response.EnsureSuccessStatusCode();
+            await ReportHostname(remoteSummary?.Name, note);
         }
 
         // A windowed pass compares only days from since on, so only the

@@ -22,7 +22,7 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
         var version = VersionHelper.GetVersion();
 
         AnsiConsole.MarkupLineInterpolated($"Client version  :  {version ?? "Unknown"}");
-        AnsiConsole.MarkupLineInterpolated($"Computer name   :  {computer.Name}");
+        AnsiConsole.MarkupLineInterpolated($"Hostname        :  {TerminalText.Clean(computer.Hostname)}");
         AnsiConsole.MarkupLineInterpolated($"Computer id     :  {computer.Id}");
         AnsiConsole.MarkupLineInterpolated($"Time zone       :  {PrintTimeZone()}");
         AnsiConsole.MarkupLineInterpolated($"Measurements    :  {Path.GetFullPath(computer.MeasurementsFolder)}");

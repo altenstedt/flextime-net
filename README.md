@@ -48,9 +48,24 @@ Just make sure that the Flextime daemon, is started every time you
 log in.
 
 Once you log in, `flextimed sync` uploads the measurements with their
-time zone, a random id for the computer, and the computer's name as the
-system reports it (`Environment.MachineName`), so the web client can
-tell your computers apart.
+time zone, a random id for the computer, and the computer's hostname,
+read afresh on every pass: on macOS the computer name from System
+Settings, elsewhere `Environment.MachineName`.  The server keeps the
+hostnames each computer reported.
+
+A computer can also have a name of your own, kept on the server, which
+the web and these commands show in place of the hostname:
+
+```sh
+flextimed computers                       # every computer, dormant ones last
+flextimed computer                        # this one: name, hostname, former names
+flextimed computer rename "Work 2024"     # this computer
+flextimed computer rename "Old iMac" --id 0a1b2c3d4e5f6a7b
+flextimed computer rename ""              # back to the hostname
+```
+
+A computer with no data in 90 days is dormant; `computers` lists it
+last.  Its data is all still there.
 
 The program use D-Bus on Linux, and
 `CGEventSourceSecondsSinceLastEventType` on macOS, and

@@ -13,69 +13,6 @@ public class PrintData(
 {
     private readonly HttpClient httpClient = httpClientFactory.CreateClient("ApiHttpClient");
 
-    /// <summary>
-    /// Lists the computers this account has, name and id.  The ids are
-    /// what the report command's --machines option takes, and they are
-    /// otherwise only visible as headings above activity data.
-    /// </summary>
-    public async Task<int> InvokeComputers(bool json)
-    {
-        if (!deviceCode.IsAuthenticated)
-        {
-            Console.Error.WriteLine("You need to log on first. Use the login command to log in.");
-
-            return 2;
-        }
-
-        try
-        {
-            var known = await httpClient.GetFromJsonAsync(
-                "/computers?api-version=1.1",
-                PrintDataSourceGenerationContext.Default.ComputersDataContract);
-
-            var items = known?.Items ?? [];
-
-            if (json)
-            {
-                Console.WriteLine(JsonSerializer.Serialize(
-                    new ComputersDataContract(items),
-                    PrintDataSourceGenerationContext.Default.ComputersDataContract));
-
-                return 0;
-            }
-
-            if (items.Length == 0)
-            {
-                Console.WriteLine("No computers.");
-
-                return 0;
-            }
-
-            foreach (var item in items)
-            {
-                // The computer running this is worth pointing out: it
-                // is the one whose id is hardest to look up elsewhere.
-                var here = item.Id == computer.Id ? " *" : string.Empty;
-
-                Console.WriteLine(TerminalText.Clean($"{item.Id}  {item.Name}") + here);
-            }
-
-            return 0;
-        }
-        catch (TokenRefreshException exception)
-        {
-            Console.Error.WriteLine(TerminalText.Clean(exception.Message));
-
-            return 2;
-        }
-        catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
-        {
-            Console.Error.WriteLine($"Network error: {TerminalText.Clean(exception.Message)}");
-
-            return 1;
-        }
-    }
-
     public async Task<int> Invoke(
         int days,
         string[] computers,
@@ -136,7 +73,7 @@ public class PrintData(
             {
                 targets.Add(
                     known?.Items.SingleOrDefault(item => item.Id == computer.Id)
-                    ?? new ComputerDataContract(computer.Id!, computer.Name));
+                    ?? new ComputerDataContract(computer.Id!, computer.Hostname));
             }
 
             var result = new List<ComputerActivityDataContract>();
