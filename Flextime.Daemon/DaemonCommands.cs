@@ -10,6 +10,7 @@ namespace Flextime.Daemon;
 public class DaemonCommands(
     PrintInfo printInfo,
     PrintData printData,
+    Export export,
     Report report,
     ILogger<DaemonCommands> logger,
     ILogger<UserInputMonitor> monitorLogger,
@@ -236,6 +237,15 @@ public class DaemonCommands(
         logger.LogDebug("Data invoked.");
 
         return printData.Invoke(days, computer ?? [], allComputers, idle, noProfile, timestamps, json);
+    }
+
+    /// <summary>Save all your data on the server to one JSON file</summary>
+    /// <param name="output">-o, File to write, or - for standard out.</param>
+    public Task<int> Export([HideDefaultValue] string? output = null, CancellationToken cancellationToken = default)
+    {
+        logger.LogDebug("Export invoked.");
+
+        return export.Invoke(output, cancellationToken);
     }
 
     /// <summary>Compare reported hours with measured activity</summary>

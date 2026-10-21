@@ -19,6 +19,7 @@ builder.Services.AddSingleton(deviceCode);
 builder.Services.AddSingleton<Sync>();
 builder.Services.AddSingleton<PrintInfo>();
 builder.Services.AddSingleton<PrintData>();
+builder.Services.AddSingleton<Export>();
 builder.Services.AddSingleton<PolicyClient>();
 builder.Services.AddSingleton<Report>();
 builder.Services.AddSingleton<Installer>();
