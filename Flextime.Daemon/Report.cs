@@ -635,6 +635,11 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
 
                 break;
 
+            case TagLayout.Months:
+                PrintMonths(report);
+
+                break;
+
             default:
                 Totals(report);
 
@@ -734,6 +739,40 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
         }
     }
 
+    private static void PrintMonths(ReportDataContract report)
+    {
+        var months = report.Rollup
+            .SelectMany(tag => tag.Days.Select(day => (tag.Tag, day.Date, day.Minutes)))
+            .GroupBy(item => new DateOnly(item.Date.Year, item.Date.Month, 1))
+            .OrderBy(group => group.Key)
+            .ToArray();
+
+        foreach (var month in months)
+        {
+            // The same columns as the weeks layout, with the month's
+            // sum in the tags' column so one column reads every total.
+            Console.WriteLine(
+                $"{month.Key.ToString("yyyy-MM", CultureInfo.InvariantCulture),-(TagWidth + 2)}"
+                + $"{Format(TimeSpan.FromMinutes(month.Sum(item => item.Minutes))),7}");
+
+            foreach (var tag in month
+                .GroupBy(item => item.Tag)
+                .OrderByDescending(group => group.Sum(item => item.Minutes)))
+            {
+                Console.WriteLine(
+                    $"  {Fit(tag.Key),-TagWidth}{Format(TimeSpan.FromMinutes(tag.Sum(item => item.Minutes))),7}");
+            }
+        }
+
+        // One month is its own total; repeating it would only add a line.
+        if (months.Length > 1)
+        {
+            Console.WriteLine(
+                $"{"total",-(TagWidth + 2)}"
+                + $"{Format(TimeSpan.FromMinutes(months.Sum(month => month.Sum(item => item.Minutes)))),7}");
+        }
+    }
+
     private static string Name(MachineDataContract machine) =>
         TerminalText.Clean(string.IsNullOrEmpty(machine.Name) ? machine.Id : $"{machine.Name} ({machine.Id})");
 }
@@ -758,6 +797,9 @@ public enum TagLayout
 
     /// <summary>A week per block, each tag's days as columns Monday to Sunday.</summary>
     Weeks,
+
+    /// <summary>A month per block: its sum, then each tag's share of it.</summary>
+    Months,
 }
 public record FindingDataContract(string Kind, DateOnly Date, string Message);
 public record DeltaDataContract(DateOnly Date, int Week, int ReportedMinutes, int MeasuredMinutes);

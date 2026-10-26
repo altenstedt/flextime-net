@@ -257,7 +257,7 @@ public class DaemonCommands(
     /// <param name="idle">-i, Flat idle limit when there are no profiles.</param>
     /// <param name="noProfile">Ignore idle profiles and marks.</param>
     /// <param name="threshold">Minutes a day may differ quietly.</param>
-    /// <param name="tags">Layout: total (default), matrix, days, weeks.</param>
+    /// <param name="tags">Total (default), matrix, days, weeks or months.</param>
     /// <param name="verbose">-v, Also list machines and uncounted activity.</param>
     /// <param name="json">Write JSON to standard out.</param>
     public async Task<int> Report(
