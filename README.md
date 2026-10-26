@@ -108,6 +108,31 @@ wrote the hours down.  `report --help` describes the window, machine
 and layout options; running `flextimed report` with no timesheet
 prints a primer much like this section.
 
+The reported hours are summed per tag under `Tags:`, and `--tags`
+picks the layout:
+
+    total     one line per tag over the whole window (the default)
+    matrix    days down, tags across; one week and five tags at most
+    days      each tag's sum, then the days that make it up
+    weeks     a block per week, each tag's days as columns Mon to Sun
+    months    a block per month, its sum, then each tag's share of it
+
+The other sections are the same whichever layout you pick.  Over more
+than one month, `months` ends with a total for the window:
+
+    flextimed report --timesheet hours.json --month jun-aug --tags months
+
+    Tags:
+    2026-06              168:00
+      ClientA            160:00
+      ClientB             08:00
+    2026-07               84:00
+      ClientA             84:00
+    2026-08              176:00
+      ClientA            152:00
+      ClientB             24:00
+    total                428:00
+
 # Places
 
 The daemon can record where the measured time was spent — not a
