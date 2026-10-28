@@ -430,13 +430,14 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
     /// Whether the server refused what was sent rather than the request:
     /// a zone it does not know, a row it would overfill, a computer too
     /// many.  Sending the same day again gets the same answer, so it is
-    /// skipped and the pass goes on.  A sign-in problem (401), a timeout
-    /// (408), being told to slow down (429) and every 5xx are worth
-    /// trying again later instead, and end the pass.
+    /// skipped and the pass goes on.  A sign-in problem (401), no right
+    /// to write (403, the same for every day), a timeout (408), being
+    /// told to slow down (429) and every 5xx are worth trying again
+    /// later instead, and end the pass.
     /// </summary>
     public static bool IsRefusal(HttpStatusCode status) =>
         (int)status is >= 400 and < 500
-        && status is not (HttpStatusCode.Unauthorized or HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests);
+        && status is not (HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests);
 
     private const int MaxReasonLength = 80;
 

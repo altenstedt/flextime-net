@@ -91,7 +91,6 @@ public class SyncRefusalTests : IDisposable
 
     [Theory]
     [InlineData(HttpStatusCode.BadRequest)]
-    [InlineData(HttpStatusCode.Forbidden)]
     [InlineData(HttpStatusCode.NotFound)]
     [InlineData(HttpStatusCode.UnprocessableEntity)]
     public void A_refusal_of_the_day_is_skipped(HttpStatusCode status)
@@ -103,6 +102,7 @@ public class SyncRefusalTests : IDisposable
     [InlineData(HttpStatusCode.OK)]
     [InlineData(HttpStatusCode.NoContent)]
     [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
     [InlineData(HttpStatusCode.RequestTimeout)]
     [InlineData(HttpStatusCode.TooManyRequests)]
     [InlineData(HttpStatusCode.InternalServerError)]
