@@ -26,6 +26,30 @@ public static class SingleInstance
         return false;
     }
 
+    /// <summary>
+    /// Like <see cref="TryAcquire"/>, but tries again for a while before
+    /// giving up.  <see cref="IsHeld"/> takes the lock for a moment to
+    /// look at it, so a process starting in that moment would otherwise
+    /// take a probe for a running instance.
+    /// </summary>
+    public static async Task<IDisposable?> TryAcquire(string path, TimeSpan wait, CancellationToken cancellationToken = default)
+    {
+        var retry = TimeSpan.FromMilliseconds(100);
+        var until = DateTimeOffset.UtcNow + wait;
+
+        while (true)
+        {
+            var held = TryAcquire(path);
+
+            if (held != null || DateTimeOffset.UtcNow >= until)
+            {
+                return held;
+            }
+
+            await Task.Delay(retry, cancellationToken);
+        }
+    }
+
     /// <summary>Returns null when another instance holds the lock.</summary>
     public static IDisposable? TryAcquire(string path)
     {

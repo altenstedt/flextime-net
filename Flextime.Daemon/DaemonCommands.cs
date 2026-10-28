@@ -340,8 +340,14 @@ public class DaemonCommands(
             return;
         }
 
-        using var singleInstance = SingleInstance.TryAcquire(SingleInstance.ListenLockPath);
+        // Sync, info and location look at the lock by taking it for a
+        // moment, so a lock that is taken now may be free again shortly.
+        using var singleInstance = await SingleInstance.TryAcquire(SingleInstance.ListenLockPath, TimeSpan.FromSeconds(5), cancellationToken);
 
+        // A clean exit, so that the service manager leaves this one down
+        // and does not restart it every ten seconds against the instance
+        // that holds the lock.  Each manager runs only one of its own, so
+        // the holder is a listen started some other way.
         if (singleInstance == null)
         {
             logger.LogCritical("Another listen instance is already running.");

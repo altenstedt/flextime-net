@@ -77,6 +77,50 @@ public class SingleInstanceTests : IDisposable
     }
 
     [Fact]
+    public async Task WaitingAcquireGetsALockReleasedMeanwhile()
+    {
+        var path = Path.Combine(folder, "listen.lock");
+
+        // Like the probe in IsHeld, only held for longer.
+        var probe = SingleInstance.TryAcquire(path);
+
+        Assert.NotNull(probe);
+
+        var release = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(300), TestContext.Current.CancellationToken);
+            probe!.Dispose();
+        }, TestContext.Current.CancellationToken);
+
+        using var held = await SingleInstance.TryAcquire(path, TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        await release;
+
+        Assert.NotNull(held);
+    }
+
+    [Fact]
+    public async Task WaitingAcquireGivesUpWhileHeld()
+    {
+        var path = Path.Combine(folder, "listen.lock");
+
+        using var first = SingleInstance.TryAcquire(path);
+
+        Assert.NotNull(first);
+        Assert.Null(await SingleInstance.TryAcquire(path, TimeSpan.FromMilliseconds(300), TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task WaitingAcquireReturnsAtOnceWhenFree()
+    {
+        var path = Path.Combine(folder, "listen.lock");
+
+        using var held = await SingleInstance.TryAcquire(path, TimeSpan.Zero, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(held);
+    }
+
+    [Fact]
     public void CreatesMissingDirectory()
     {
         using var held = SingleInstance.TryAcquire(Path.Combine(folder, "missing", "listen.lock"));
