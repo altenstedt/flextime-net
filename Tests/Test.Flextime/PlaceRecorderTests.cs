@@ -21,11 +21,15 @@ public class PlaceRecorderTests
 
         public int Reads { get; private set; }
 
+        // What a read does to the clock, for reads that take a while.
+        public Action? OnRead { get; set; }
+
         public PlaceSettings ReadSettings() => Settings;
 
         public Task<PlaceReading> Read()
         {
             Reads++;
+            OnRead?.Invoke();
 
             return Task.FromResult(Script.Count > 0 ? Script.Dequeue() : Network);
         }
@@ -188,6 +192,21 @@ public class PlaceRecorderTests
         Assert.Equal(Office, place.Router);
         Assert.True(place.Timestamp <= Seconds(clock.Now));
         Assert.True(place.Timestamp >= Seconds(wokeAt));
+    }
+
+    [Fact]
+    public async Task Slow_reads_after_a_wake_stop_within_the_budget()
+    {
+        var (recorder, source, clock) = Create();
+
+        // Each read waits out its tools' timeout.
+        source.Network = new PlaceReading(0, 0, Online: false);
+        source.OnRead = () => clock.Now += TimeSpan.FromSeconds(5);
+
+        await recorder.Tick(wake: true);
+
+        Assert.Equal(3, source.Reads);
+        Assert.True(clock.Now - Start <= TimeSpan.FromSeconds(25));
     }
 
     [Fact]

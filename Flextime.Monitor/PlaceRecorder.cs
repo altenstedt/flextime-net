@@ -51,6 +51,10 @@ public sealed class PlaceRecorder(IPlaceSource source, ILogger logger)
     private static readonly TimeSpan WakeRetryDelay = TimeSpan.FromSeconds(3);
     private const int WakeRetries = 5;
 
+    // All the retries together, reads that time out included: the
+    // minute's measurement waits for them.
+    private static readonly TimeSpan WakeBudget = TimeSpan.FromSeconds(20);
+
     private readonly List<Place> places = [];
 
     // The last change point recorded, the off marker included.
@@ -206,10 +210,13 @@ public sealed class PlaceRecorder(IPlaceSource source, ILogger logger)
 
     private async Task<PlaceUpdate> Sample(bool wake)
     {
+        var started = Now();
         var number = Interlocked.Increment(ref readsStarted);
         var reading = await source.Read();
 
-        for (var retry = 0; wake && retry < WakeRetries && (!reading.Online || reading.Pending); retry++)
+        for (var retry = 0;
+             wake && retry < WakeRetries && (!reading.Online || reading.Pending) && Now() - started + WakeRetryDelay < WakeBudget;
+             retry++)
         {
             await Delay(WakeRetryDelay);
 
