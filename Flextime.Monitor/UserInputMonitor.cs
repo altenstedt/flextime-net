@@ -394,6 +394,11 @@ public class UserInputMonitor(
     }
 
     public static string GetTimeZoneInfo() {
+        // .NET reads the local zone once per process and keeps it, so a
+        // computer that travels would go on writing the zone it started
+        // in.  Read once a minute at most, so dropping the cache is cheap.
+        TimeZoneInfo.ClearCachedData();
+
         var zone = TimeZoneInfo.Local.Id;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
