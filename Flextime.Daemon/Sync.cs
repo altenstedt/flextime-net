@@ -19,7 +19,16 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         InSync,
         ServerHasMore,
         Refused,
+        // Refused on an earlier pass and not sent again: nothing about
+        // the day has changed here since.
+        StillRefused,
     }
+
+    // The days the server refused, with the local watermark each was
+    // refused at.  This instance lives across the passes of a recurring
+    // sync, so a day is not sent and logged again every minute: only
+    // once its data changes here, or on the next pass over every day.
+    private readonly Dictionary<(DateOnly Date, string Zone), (int Count, long Last, long Sum)> refusedDays = new();
 
     // A day this old cannot change on this machine any more, so a pass
     // that only wants to notice new local data needs no more than this.
@@ -76,6 +85,11 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
             {
                 case DayStatus.InSync:
                     // Logging every day as in sync on every pass would be noise.
+                    break;
+
+                case DayStatus.StillRefused:
+                    // Warned about when it was refused.
+                    logger.LogDebug("{Line}", TerminalText.Clean(line));
                     break;
 
                 case DayStatus.ServerHasMore:
@@ -245,6 +259,10 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
 
         var places = upload && PlacesActive();
 
+        // Set once the server refuses this computer, for the rest of the
+        // pass.
+        var computerRefused = false;
+
         SummaryDataContract? remoteSummary;
 
         if (places)
@@ -293,7 +311,7 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
             // server holds the day.  Sets agreeing on all three can
             // still differ in principle, but only by trading multiple
             // timestamps that cancel out exactly.
-            var stale = new List<IGrouping<string, MeasurementWithZone>>();
+            var stale = new List<(IGrouping<string, MeasurementWithZone> Measurements, (int, long, long) Watermark)>();
             var serverHasMore = false;
             var known = false;
 
@@ -309,9 +327,12 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
 
                 known |= match != null;
 
+                var sum = timestamps.Sum(item => (long)item);
+
                 if (match != null && match.Count == timestamps.Length && match.Last == timestamps[^1]
-                    && match.Sum == timestamps.Sum(item => (long)item))
+                    && match.Sum == sum)
                 {
+                    refusedDays.Remove((date.Key, byZone.Key));
                     continue;
                 }
 
@@ -327,7 +348,7 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
                     continue;
                 }
 
-                stale.Add(byZone);
+                stale.Add((byZone, (timestamps.Length, timestamps[^1], sum)));
             }
 
             if (stale.Count == 0)
@@ -343,19 +364,50 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
                 // The whole day is sent; the server merge is idempotent,
                 // so anything it already holds is deduplicated there.
                 var refused = new List<string>();
+                var held = 0;
 
-                foreach (var byZone in stale)
+                foreach (var (byZone, watermark) in stale)
                 {
-                    if (await Upload(byZone.Key, [.. byZone]) is { } refusal)
+                    var key = (date.Key, byZone.Key);
+
+                    // Refused before with this very data: the server would
+                    // say the same again.  A pass over every day asks once
+                    // more, in case what made it refuse has changed.
+                    if (computerRefused
+                        || (since is not null && refusedDays.TryGetValue(key, out var before) && before == watermark))
                     {
-                        refused.Add(refusal);
+                        held++;
+                        continue;
+                    }
+
+                    var (refusal, computerWide) = await Upload(byZone.Key, [.. byZone]);
+
+                    if (refusal == null)
+                    {
+                        refusedDays.Remove(key);
+                        continue;
+                    }
+
+                    refused.Add(refusal);
+                    refusedDays[key] = watermark;
+
+                    if (computerWide)
+                    {
+                        // Every day would get the same answer: the rest
+                        // are not sent this pass, and nor are places.
+                        computerRefused = true;
+                        note($"The server refused this computer ({refusal}); other days are not sent until the next pass.", true);
                     }
                 }
 
                 // A refused zone is left as it was, so its watermark still
-                // differs and the next pass that covers the day tries it
-                // again; the days after it are not held back by it.
-                if (refused.Count == 0)
+                // differs and a later pass tries it again; the days after
+                // it are not held back by it.
+                if (refused.Count == 0 && held > 0)
+                {
+                    output($"{summary} [refused earlier, not sent]", DayStatus.StillRefused);
+                }
+                else if (refused.Count == 0)
                 {
                     output($"{summary} [synced]", DayStatus.Synced);
                 }
@@ -378,10 +430,12 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
             }
         }
 
-        if (places)
+        if (places && !computerRefused)
         {
             // After the activity, which is uploaded by now whatever
-            // happens to the places.
+            // happens to the places.  Not for a computer the server
+            // refused: places would be stored for a computer it does not
+            // keep.
             await new PlaceSync(httpClient, computer.Id!, Folder, LocationClearPath, ListenRunning())
                 .Run(remoteSummary?.PlacesClearedAt, remoteByKey, since, note);
         }
@@ -396,10 +450,10 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         }
     }
 
-    // Null when the server took the upload, otherwise what it said.  A
-    // refusal of the day itself comes back; anything else throws and
-    // ends the pass, as before.
-    private async Task<string?> Upload(string zone, List<MeasurementWithZone> measurements)
+    // Null when the server took the upload, otherwise what it said, and
+    // whether the refusal is of this computer rather than of the day.  A
+    // refusal comes back; anything else throws and ends the pass.
+    private async Task<(string? Refusal, bool ComputerWide)> Upload(string zone, List<MeasurementWithZone> measurements)
     {
         var payload = new MeasurementsDataContract(
             zone,
@@ -416,15 +470,25 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         {
             response.EnsureSuccessStatusCode();
 
-            return null;
+            return (null, false);
         }
 
         var reason = Reason(await response.Content.ReadAsStringAsync());
 
-        return reason == null
-            ? $"{zone} {(int)response.StatusCode}"
-            : $"{zone} {(int)response.StatusCode}: {reason}";
+        return (
+            reason == null
+                ? $"{zone} {(int)response.StatusCode}"
+                : $"{zone} {(int)response.StatusCode}: {reason}",
+            IsComputerRefusal(response.StatusCode));
     }
+
+    /// <summary>
+    /// A refusal of the computer, not of one day: 422 is the server
+    /// keeping no more computers for the user, the same answer for every
+    /// day this computer sends.
+    /// </summary>
+    public static bool IsComputerRefusal(HttpStatusCode status) =>
+        status == HttpStatusCode.UnprocessableEntity;
 
     /// <summary>
     /// Whether the server refused what was sent rather than the request:

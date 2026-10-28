@@ -195,6 +195,51 @@ public class SyncRefusalTests : IDisposable
         Assert.False(File.Exists(ReconcilePath));
     }
 
+    [Fact]
+    public async Task A_refused_computer_sends_no_more_days_that_pass()
+    {
+        var api = RefusingMonday(HttpStatusCode.UnprocessableEntity);
+        var lines = new List<string>();
+
+        await CreateSync(api).SyncAndLog(new ListLogger(lines));
+
+        Assert.Single(api.Uploads);
+        Assert.Contains(lines, line => line.StartsWith("2025-10-13", StringComparison.Ordinal)
+                                       && line.EndsWith("[refused earlier, not sent]", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_day_refused_with_the_same_data_is_not_sent_every_pass()
+    {
+        // Yesterday, inside the window a recurring pass looks at.
+        var yesterday = (uint)DateTimeOffset.UtcNow.AddDays(-1).ToUnixTimeSeconds();
+        var file = new Measurements { Interval = 60, Zone = "Europe/Stockholm" };
+
+        file.Measurements_.AddRange(new[] { yesterday, yesterday + 60 }
+            .Select(timestamp => new Measurement { Timestamp = timestamp, Kind = Measurement.Types.Kind.Measurement }));
+
+        using (var stream = File.Create(Path.Combine(Measurements, $"{DateTimeOffset.FromUnixTimeSeconds(yesterday):yyyy-MM-ddTHHmmss}.bin")))
+        {
+            file.WriteTo(stream);
+        }
+
+        var api = new FakeApi(upload => upload.Contains($"{yesterday}")
+            ? new HttpResponseMessage(HttpStatusCode.BadRequest)
+            : new HttpResponseMessage(HttpStatusCode.NoContent));
+        var sync = CreateSync(api);
+
+        // The first pass covers every day and writes the stamp.
+        await sync.SyncAndLog(NullLogger.Instance);
+
+        Assert.Contains(api.Uploads, upload => upload.Contains($"{yesterday}"));
+
+        api.Uploads.Clear();
+
+        await sync.SyncAndLog(NullLogger.Instance);
+
+        Assert.DoesNotContain(api.Uploads, upload => upload.Contains($"{yesterday}"));
+    }
+
     private sealed class ListLogger(List<string> lines) : Microsoft.Extensions.Logging.ILogger
     {
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
