@@ -374,6 +374,16 @@ public class UserInputMonitor(
             idle = LastInputInfo.GetIdleTimeSinceLastInputInMilliSeconds() is { } milliseconds
                 ? TimeSpan.FromMilliseconds(milliseconds)
                 : TimeSpan.MaxValue;
+
+            // Asked every minute as well as told by the events: a session
+            // left by fast user switching or a dropped remote desktop can
+            // come back without an unlock event, and would stay locked.
+            // Not at the lock event's own measurement, which is taken
+            // just before the lock and must count.
+            if (scheduled && !options.IgnoreSessionLocked && SessionLockState.IsLocked() is { } locked)
+            {
+                SessionLockChanged(locked);
+            }
         } else {
             throw new InvalidOperationException($"OS {RuntimeInformation.OSDescription} is not supported");
         }
