@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
@@ -41,6 +42,14 @@ public class UserInputMonitor(
     private IntPtr sessionScreenIsLockedString = IntPtr.Zero;
 
     private bool sessionLocked;
+
+    // When the Run loop's last idle read began: a minute is active when
+    // there was input since then.  On both clocks, because each can
+    // overstate the time: the wall clock across a step forward, and the
+    // monotonic one, on some systems, across a sleep.  None after a
+    // locked read, so the first read after unlocking keeps the old
+    // limit, for an unlock that took no key or mouse input.
+    private (DateTimeOffset Wall, long Monotonic)? lastScheduledRead;
 
     private int networkGeneration;
 
@@ -159,11 +168,8 @@ public class UserInputMonitor(
             // hours, we want the end time to match the clock.  Since we typically
             // resolve down to a minute, we want each measurement /and/ flush to disk
             // to happen /just/ as a new minute on the clock starts.
-            var now = DateTime.Now;
-            var next = new DateTime(
-                now.Add(interval).Ticks / interval.Ticks // Round to nearest interval
-                * interval.Ticks // Convert back to ticks
-                + TimeSpan.FromMilliseconds(1).Ticks); // Add a small interval to ensure we're in the next minute
+            var now = DateTime.UtcNow;
+            var next = NextTick(now, interval);
 
             await Task.Delay(next.Subtract(now), token);
 
@@ -176,9 +182,46 @@ public class UserInputMonitor(
 
             lastTick = tick;
 
-            await Mark(Measurement.Types.Kind.Measurement, wake);
+            await Mark(Measurement.Types.Kind.Measurement, wake, scheduled: true);
 
         } while (!token.IsCancellationRequested);
+    }
+
+    // Idle timers and the reads of them are not exact; input this close
+    // before the previous read may count in both minutes.
+    public static readonly TimeSpan ReadMargin = TimeSpan.FromSeconds(2);
+
+    // Past the start of the minute by enough to absorb a delay that ends
+    // early: it runs on the monotonic clock, which drifts against the
+    // wall clock, and timers are coarse (about 16 ms on Windows).  With
+    // a millisecond, a delay could end at :59.99, be measured there, and
+    // be measured again at :00.  Timestamps are whole seconds, so this
+    // still stores :00.
+    public static readonly TimeSpan TickMargin = TimeSpan.FromMilliseconds(250);
+
+    // The start of the next interval on the clock, plus the margin.
+    public static DateTime NextTick(DateTime now, TimeSpan interval) => new(
+        (now.Ticks / interval.Ticks + 1) * interval.Ticks + TickMargin.Ticks,
+        now.Kind);
+
+    // How recent the last input must be for a measurement to count as
+    // active.  A scheduled measurement counts input since the previous
+    // scheduled read: a late one, after a busy minute, covers more than
+    // an interval, and a fixed limit would either miss input or count
+    // one input in two minutes.  The window stays between one and three
+    // intervals, past which the loop calls it a wake.  Anything else
+    // (start, a wake, the first read, the read after a locked one) keeps
+    // the old, generous limit.
+    public static TimeSpan ActiveLimit(TimeSpan interval, TimeSpan? sinceLastRead, bool wake)
+    {
+        if (wake || sinceLastRead is not { } elapsed)
+        {
+            return interval * 1.2;
+        }
+
+        var window = elapsed < interval ? interval : elapsed > interval * 3 ? interval * 3 : elapsed;
+
+        return window + ReadMargin;
     }
 
     public Task MarkStart()
@@ -192,13 +235,13 @@ public class UserInputMonitor(
         return Mark(Measurement.Types.Kind.Stop);
     }
 
-    private async Task Mark(Measurement.Types.Kind kind, bool wake = false)
+    private async Task Mark(Measurement.Types.Kind kind, bool wake = false, bool scheduled = false)
     {
         await markSemaphore.WaitAsync();
 
         try
         {
-            await MarkCore(kind, wake);
+            await MarkCore(kind, wake, scheduled);
         }
         finally
         {
@@ -206,9 +249,14 @@ public class UserInputMonitor(
         }
     }
 
-    private async Task MarkCore(Measurement.Types.Kind kind, bool wake)
+    private async Task MarkCore(Measurement.Types.Kind kind, bool wake, bool scheduled)
     {
         var placesChanged = kind != Measurement.Types.Kind.Stop && await TickPlaces(wake);
+
+        // Stamped before the read and measured after it, so that a slow
+        // read (D-Bus, on a busy desktop) widens the window rather than
+        // leaving input between two windows.
+        var readStarted = (Wall: DateTimeOffset.UtcNow, Monotonic: Stopwatch.GetTimestamp());
 
         TimeSpan idle;
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) {
@@ -264,6 +312,22 @@ public class UserInputMonitor(
             throw new InvalidOperationException($"OS {RuntimeInformation.OSDescription} is not supported");
         }
 
+        // Right after the read, before a locked minute returns.
+        TimeSpan? sinceLastRead = null;
+
+        if (scheduled)
+        {
+            if (lastScheduledRead is { } last)
+            {
+                var wall = DateTimeOffset.UtcNow - last.Wall;
+                var monotonic = Stopwatch.GetElapsedTime(last.Monotonic);
+
+                sinceLastRead = wall < monotonic ? wall : monotonic;
+            }
+
+            lastScheduledRead = sessionLocked ? null : readStarted;
+        }
+
         if (kind == Measurement.Types.Kind.Start) {
             logger.LogDebug("Start measurement at {Now:o}", DateTimeOffset.Now);
         }
@@ -285,9 +349,7 @@ public class UserInputMonitor(
 
         logger.LogTrace("Mark {Kind} with {Seconds}s idle.", kind, idle);
 
-        // The time between measurements is not perfect, so be on the safe side,
-        // we compare to a somewhat larger value.
-        var active = idle < interval * 1.2;
+        var active = idle < ActiveLimit(interval, sinceLastRead, wake);
 
         if (active) {
             var measurement = new Measurement
