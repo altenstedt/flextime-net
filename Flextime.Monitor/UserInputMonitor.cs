@@ -32,6 +32,11 @@ public class UserInputMonitor(
 
     private DateTimeOffset? lastFlush;
     private string? lastPath;
+
+    // The zone the current file was started in.  A file holds one zone,
+    // and sync uploads it under that zone: relabelling a file that was
+    // already uploaded would send its minutes again, under another day.
+    private string? lastZone;
     private DateTimeOffset lastLogSummary = DateTimeOffset.UtcNow;
     private int lastLogSummaryCount;
 
@@ -509,6 +514,17 @@ public class UserInputMonitor(
 
         var zone = options.TimeZone ?? GetTimeZoneInfo();
 
+        // The computer changed zone: this file is finished in the zone it
+        // began in, and the next one begins in the new zone.
+        var zoneChanged = lastPath != null && lastZone != null && zone != lastZone;
+
+        if (zoneChanged)
+        {
+            logger.LogInformation("Time zone changed from {Old} to {New}.", lastZone, zone);
+
+            zone = lastZone!;
+        }
+
         logger.LogTrace("Use time zone {Zone}.", zone);
 
         var measurement = new Measurements
@@ -538,6 +554,7 @@ public class UserInputMonitor(
 
             lastPath = path;
             lastFlush = DateTimeOffset.Now;
+            lastZone = zone;
         } else {
             // Rewrite the existing file with all measurements collected so
             // far.  Replaced whole, so a crash or a full disk midway never
@@ -546,9 +563,12 @@ public class UserInputMonitor(
 
             logger.LogTrace("Flushed {Path}.", lastPath);
 
-            if (lastFlush < DateTimeOffset.Now.Subtract(fileTimeLimit))
+            if (zoneChanged || lastFlush < DateTimeOffset.Now.Subtract(fileTimeLimit))
             {
-                logger.LogDebug("File time limit {Limit} reached for file {File}.", fileTimeLimit, Path.GetFileName(lastPath));
+                if (!zoneChanged)
+                {
+                    logger.LogDebug("File time limit {Limit} reached for file {File}.", fileTimeLimit, Path.GetFileName(lastPath));
+                }
 
                 // Create a new file for subsequent writes so that we do not create big files
                 lastFlush = null;
