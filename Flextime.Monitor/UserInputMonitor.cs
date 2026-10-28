@@ -24,7 +24,7 @@ public class UserInputMonitor(
 
     private readonly TimeSpan interval = TimeSpan.FromMinutes(1);
     private readonly TimeSpan fileTimeLimit = TimeSpan.FromHours(1);
-    private readonly IList<Measurement> measurements = [];
+    private readonly List<Measurement> measurements = [];
 
     // Mark is called both from the Run loop and from session switch events,
     // which arrive on other threads.
@@ -37,6 +37,16 @@ public class UserInputMonitor(
     // and sync uploads it under that zone: relabelling a file that was
     // already uploaded would send its minutes again, under another day.
     private string? lastZone;
+
+    // How many of the measurements in memory the current file holds, and
+    // how many rewrites of it in a row have failed.
+    private int writtenCount;
+    private int failedRewrites;
+
+    // A file that cannot be rewritten this many times in a row, held by
+    // another program or behind a permission change, is given up: what
+    // it already holds stays there, and the rest goes to a new file.
+    private const int MaxFailedRewrites = 5;
     private DateTimeOffset lastLogSummary = DateTimeOffset.UtcNow;
     private int lastLogSummaryCount;
 
@@ -628,6 +638,8 @@ public class UserInputMonitor(
             lastPath = path;
             lastFlush = DateTimeOffset.Now;
             lastZone = zone;
+            writtenCount = measurements.Count;
+            failedRewrites = 0;
         } else {
             // Rewrite the existing file with all measurements collected so
             // far.  Replaced whole, so a crash or a full disk midway never
@@ -635,10 +647,29 @@ public class UserInputMonitor(
             // until it is written, so no measurement is cleared unwritten.
             if (!TryReplace(lastPath, null, measurement))
             {
+                if (++failedRewrites >= MaxFailedRewrites)
+                {
+                    logger.LogError("Giving up on {File} after {Count} failed writes; going on in a new file.",
+                        Path.GetFileName(lastPath), failedRewrites);
+
+                    // What the file already holds is not written twice.
+                    measurements.RemoveRange(0, writtenCount);
+
+                    lastFlush = null;
+                    lastPath = null;
+                    writtenCount = 0;
+                    failedRewrites = 0;
+
+                    placeRecorder?.StartFile();
+                }
+
                 return;
             }
 
             logger.LogTrace("Flushed {Path}.", lastPath);
+
+            writtenCount = measurements.Count;
+            failedRewrites = 0;
 
             if (zoneChanged || lastFlush < DateTimeOffset.Now.Subtract(fileTimeLimit))
             {
@@ -650,6 +681,7 @@ public class UserInputMonitor(
                 // Create a new file for subsequent writes so that we do not create big files
                 lastFlush = null;
                 lastPath = null;
+                writtenCount = 0;
 
                 measurements.Clear();
 
