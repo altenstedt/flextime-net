@@ -514,6 +514,16 @@ public class UserInputMonitor(
 
         var zone = options.TimeZone ?? GetTimeZoneInfo();
 
+        // A zone .NET cannot name ("Local", when it cannot find the zone
+        // files) is no zone to move to: readers would refuse the file.
+        // The file goes on in the zone it began in.
+        if (lastZone != null && zone != lastZone && !TimeZones.TryGet(zone, out _))
+        {
+            logger.LogWarning("Time zone {Zone} is unknown; keeping {Last}.", zone, lastZone);
+
+            zone = lastZone;
+        }
+
         // The computer changed zone: this file is finished in the zone it
         // began in, and the next one begins in the new zone.
         var zoneChanged = lastPath != null && lastZone != null && zone != lastZone;
