@@ -4,6 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
+Flextime.TimeZones.UseMacZoneDirectory();
+
 var (accessToken, expires, refreshToken) = await TokenStorage.Read();
 
 var deviceCode = new DeviceCode();

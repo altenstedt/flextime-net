@@ -27,4 +27,23 @@ public class TimeZonesTests
     {
         Assert.False(TimeZones.TryGet("Not/AZone", out _));
     }
+
+    [Theory]
+    // The layout macOS uses now.
+    [InlineData(null, "/var/db/timezone/zoneinfo/Europe/Stockholm", true)]
+    [InlineData("", "/var/db/timezone/zoneinfo/America/Phoenix", true)]
+    // A TZDIR someone set is theirs.
+    [InlineData("/usr/share/zoneinfo", "/var/db/timezone/zoneinfo/Europe/Stockholm", false)]
+    // Any other layout is left to .NET.
+    [InlineData(null, "/usr/share/zoneinfo/Europe/Stockholm", false)]
+    [InlineData(null, "/var/db/timezone/tz/2026e.1.0/zoneinfo/Europe/Stockholm", false)]
+    [InlineData(null, "/var/db/timezone/zoneinfo", false)]
+    [InlineData(null, "/var/db/timezone/zoneinfo-old/Europe/Stockholm", false)]
+    [InlineData(null, "../var/db/timezone/zoneinfo/Europe/Stockholm", false)]
+    // Not a link at all.
+    [InlineData(null, null, false)]
+    public void Mac_zone_folder_is_named_only_for_its_own_links(string? tzdir, string? target, bool expected)
+    {
+        Assert.Equal(expected, TimeZones.PointsIntoMacZones(tzdir, target));
+    }
 }
