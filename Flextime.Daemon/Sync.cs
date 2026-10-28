@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Polly.Timeout;
@@ -17,6 +18,7 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         CanSync,
         InSync,
         ServerHasMore,
+        Refused,
     }
 
     // A day this old cannot change on this machine any more, so a pass
@@ -77,6 +79,7 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
                     break;
 
                 case DayStatus.ServerHasMore:
+                case DayStatus.Refused:
                     logger.LogWarning("{Line}", TerminalText.Clean(line));
                     break;
 
@@ -339,12 +342,31 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
             {
                 // The whole day is sent; the server merge is idempotent,
                 // so anything it already holds is deduplicated there.
+                var refused = new List<string>();
+
                 foreach (var byZone in stale)
                 {
-                    await Upload(byZone.Key, [.. byZone]);
+                    if (await Upload(byZone.Key, [.. byZone]) is { } refusal)
+                    {
+                        refused.Add(refusal);
+                    }
                 }
 
-                output($"{summary} [synced]", DayStatus.Synced);
+                // A refused zone is left as it was, so its watermark still
+                // differs and the next pass that covers the day tries it
+                // again; the days after it are not held back by it.
+                if (refused.Count == 0)
+                {
+                    output($"{summary} [synced]", DayStatus.Synced);
+                }
+                else
+                {
+                    output(
+                        refused.Count == stale.Count
+                            ? $"{summary} [refused {string.Join(", ", refused)}]"
+                            : $"{summary} [partly synced, refused {string.Join(", ", refused)}]",
+                        DayStatus.Refused);
+                }
             }
             else if (known)
             {
@@ -367,12 +389,17 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         if (upload && since is null)
         {
             // Only a pass over every day proves the whole history was
-            // compared, so only that one moves the reconcile stamp.
+            // compared, so only that one moves the reconcile stamp.  A
+            // refused day does not stop it: the server would refuse it
+            // again on every pass until something changes.
             StateFiles.Write(ReconcilePath, DateTimeOffset.UtcNow.ToString("O"));
         }
     }
 
-    private async Task Upload(string zone, List<MeasurementWithZone> measurements)
+    // Null when the server took the upload, otherwise what it said.  A
+    // refusal of the day itself comes back; anything else throws and
+    // ends the pass, as before.
+    private async Task<string?> Upload(string zone, List<MeasurementWithZone> measurements)
     {
         var payload = new MeasurementsDataContract(
             zone,
@@ -380,12 +407,81 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
                 .Select(item => new MeasurementDataContract((int)item.Measurement.Kind, item.Measurement.Timestamp))
                 .ToArray());
 
-        var response = await httpClient.PatchAsJsonAsync(
+        using var response = await httpClient.PatchAsJsonAsync(
             $"/{Uri.EscapeDataString(computer.Id!)}",
             payload,
             MeasurementsSourceGenerationContext.Default.MeasurementsDataContract);
 
-        response.EnsureSuccessStatusCode();
+        if (!IsRefusal(response.StatusCode))
+        {
+            response.EnsureSuccessStatusCode();
+
+            return null;
+        }
+
+        var reason = Reason(await response.Content.ReadAsStringAsync());
+
+        return reason == null
+            ? $"{zone} {(int)response.StatusCode}"
+            : $"{zone} {(int)response.StatusCode}: {reason}";
+    }
+
+    /// <summary>
+    /// Whether the server refused what was sent rather than the request:
+    /// a zone it does not know, a row it would overfill, a computer too
+    /// many.  Sending the same day again gets the same answer, so it is
+    /// skipped and the pass goes on.  A sign-in problem (401), a timeout
+    /// (408), being told to slow down (429) and every 5xx are worth
+    /// trying again later instead, and end the pass.
+    /// </summary>
+    public static bool IsRefusal(HttpStatusCode status) =>
+        (int)status is >= 400 and < 500
+        && status is not (HttpStatusCode.Unauthorized or HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests);
+
+    private const int MaxReasonLength = 80;
+
+    /// <summary>
+    /// A short reason from a refusal's body, if it has one: the detail or
+    /// title of a problem document, otherwise its first line.
+    /// </summary>
+    public static string? Reason(string? body)
+    {
+        var text = body?.Trim();
+
+        if (string.IsNullOrEmpty(text))
+        {
+            return null;
+        }
+
+        if (text.StartsWith('{'))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(text);
+
+                if (document.RootElement.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var name in (string[])["detail", "title"])
+                    {
+                        if (document.RootElement.TryGetProperty(name, out var value)
+                            && value.ValueKind == JsonValueKind.String
+                            && value.GetString()?.Trim() is { Length: > 0 } found)
+                        {
+                            text = found;
+                            break;
+                        }
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+                // Not JSON after all; the text is the reason.
+            }
+        }
+
+        text = text.Split('\n')[0].Trim();
+
+        return text.Length > MaxReasonLength ? $"{text[..(MaxReasonLength - 3)]}..." : text;
     }
 }
 
