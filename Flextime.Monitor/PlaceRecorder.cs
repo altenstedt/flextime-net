@@ -28,6 +28,9 @@ public interface IPlaceSource
 /// <param name="Pending">The router's hardware address was not known yet; sample again shortly.</param>
 public readonly record struct PlaceUpdate(bool Changed, uint? ClearedAt = null, bool Pending = false);
 
+/// <summary>A reading taken by <see cref="PlaceRecorder.ReadNetwork"/>, numbered in the order the reads started.</summary>
+public readonly record struct PlaceSample(PlaceReading Reading, long Number);
+
 /// <summary>
 /// Keeps the place change points for the measurement file listen is
 /// writing.  A change point is recorded when (router, flags) changes,
@@ -59,6 +62,12 @@ public sealed class PlaceRecorder(IPlaceSource source, ILogger logger)
 
     private DateTimeOffset? lastSample;
     private uint clearedAt;
+
+    // Reads are numbered as they start, and the network may be read
+    // outside the caller's lock: a slow read that is recorded after a
+    // later one would otherwise put back the place that was left.
+    private long readsStarted;
+    private long recorded;
 
     public Func<DateTimeOffset> Now { get; init; } = () => DateTimeOffset.UtcNow;
 
@@ -103,7 +112,7 @@ public sealed class PlaceRecorder(IPlaceSource source, ILogger logger)
     }
 
     /// <summary>
-    /// Called every minute, before the measurement is taken, so that a
+    /// Called every minute, before the measurement is stamped, so that a
     /// measurement after a wake or a change already has its place.
     /// </summary>
     public async Task<PlaceUpdate> Tick(bool wake)
@@ -160,27 +169,60 @@ public sealed class PlaceRecorder(IPlaceSource source, ILogger logger)
     }
 
     /// <summary>The network changed: sample now, whatever the timer says.</summary>
-    public async Task<PlaceUpdate> NetworkChanged()
+    public async Task<PlaceUpdate> NetworkChanged() =>
+        await ReadNetwork() is { } sample ? Apply(sample) : new PlaceUpdate(false);
+
+    /// <summary>
+    /// The first half of <see cref="NetworkChanged"/>: reads the network
+    /// and changes nothing here, so the caller need not hold the lock
+    /// the measurements share while the network is probed.  Null when
+    /// location is off.
+    /// </summary>
+    public async Task<PlaceSample?> ReadNetwork()
     {
         if (!source.ReadSettings().On)
+        {
+            return null;
+        }
+
+        var number = Interlocked.Increment(ref readsStarted);
+
+        return new PlaceSample(await source.Read(), number);
+    }
+
+    /// <summary>
+    /// The second half: records the reading, unless location was turned
+    /// off meanwhile or a read that started later was recorded first.
+    /// </summary>
+    public PlaceUpdate Apply(PlaceSample sample)
+    {
+        if (!source.ReadSettings().On || sample.Number <= recorded)
         {
             return new PlaceUpdate(false);
         }
 
-        return await Sample(wake: false);
+        return Record(sample.Reading, sample.Number);
     }
 
     private async Task<PlaceUpdate> Sample(bool wake)
     {
+        var number = Interlocked.Increment(ref readsStarted);
         var reading = await source.Read();
 
         for (var retry = 0; wake && retry < WakeRetries && (!reading.Online || reading.Pending); retry++)
         {
             await Delay(WakeRetryDelay);
 
+            number = Interlocked.Increment(ref readsStarted);
             reading = await source.Read();
         }
 
+        return Record(reading, number);
+    }
+
+    private PlaceUpdate Record(PlaceReading reading, long number)
+    {
+        recorded = number;
         lastSample = Now();
 
         var readingHint = reading.Router == 0 ? string.Empty : reading.Hint ?? string.Empty;

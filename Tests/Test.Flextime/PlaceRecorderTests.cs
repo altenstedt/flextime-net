@@ -432,6 +432,67 @@ public class PlaceRecorderTests
     }
 
     [Fact]
+    public async Task A_network_read_that_a_tick_overtook_is_not_recorded()
+    {
+        var (recorder, source, clock) = Create();
+
+        source.Network = new PlaceReading(Home, 0);
+        var stale = await recorder.ReadNetwork();
+
+        clock.Now += TimeSpan.FromMinutes(1);
+        source.Network = new PlaceReading(Office, 0);
+        Assert.True((await recorder.Tick(wake: false)).Changed);
+
+        clock.Now += TimeSpan.FromSeconds(5);
+        Assert.False(recorder.Apply(stale!.Value).Changed);
+
+        Assert.Equal([(Seconds(Start.AddMinutes(1)), Office, 0u)], Points(recorder));
+    }
+
+    [Fact]
+    public async Task A_network_read_is_recorded_after_an_earlier_one()
+    {
+        var (recorder, source, clock) = Create();
+
+        source.Network = new PlaceReading(Home, 0);
+        var earlier = await recorder.ReadNetwork();
+
+        source.Network = new PlaceReading(Office, 0);
+        var later = await recorder.ReadNetwork();
+
+        Assert.True(recorder.Apply(later!.Value).Changed);
+        Assert.False(recorder.Apply(earlier!.Value).Changed);
+
+        clock.Now += TimeSpan.FromMinutes(1);
+        source.Network = new PlaceReading(Home, 0);
+        Assert.True(recorder.Apply((await recorder.ReadNetwork())!.Value).Changed);
+
+        Assert.Equal([(Seconds(Start), Office, 0u), (Seconds(Start.AddMinutes(1)), Home, 0u)], Points(recorder));
+    }
+
+    [Fact]
+    public async Task A_network_read_is_not_recorded_once_location_is_off()
+    {
+        var (recorder, source, clock) = Create();
+
+        await recorder.Tick(wake: false);
+
+        source.Network = new PlaceReading(Office, 0);
+        var sample = await recorder.ReadNetwork();
+
+        clock.Now += TimeSpan.FromMinutes(1);
+        source.Settings = new PlaceSettings(false, 0);
+        Assert.True((await recorder.Tick(wake: false)).Changed);
+
+        Assert.False(recorder.Apply(sample!.Value).Changed);
+        Assert.Null(await recorder.ReadNetwork());
+
+        Assert.Equal(
+            [(Seconds(Start), Home, 0u), (Seconds(Start.AddMinutes(1)), 0ul, PlaceFlags.LocationOff)],
+            Points(recorder));
+    }
+
+    [Fact]
     public async Task Without_hints_change_points_are_what_they_were()
     {
         var (recorder, source, _) = Create();

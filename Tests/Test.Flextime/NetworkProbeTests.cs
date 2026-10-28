@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.NetworkInformation;
 using Flextime.Daemon;
 
@@ -185,5 +186,61 @@ public class NetworkProbeTests
         Assert.Equal(
             new Dictionary<string, string> { ["en0"] = "omegapoint.se", ["utun4"] = "vpn.example" },
             NetworkProbe.ParseServiceDomains(values));
+    }
+
+    [Fact]
+    public async Task A_tool_that_answers_in_time_is_read()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "No /bin/sh on Windows.");
+
+        Assert.Equal("yes\n", await NetworkProbe.Run("/bin/sh", ["-c", "echo yes"], TimeSpan.FromSeconds(30)));
+    }
+
+    [Fact]
+    public async Task A_tool_that_hangs_is_killed_with_its_children()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "No /bin/sh on Windows.");
+
+        var file = Path.Combine(Path.GetTempPath(), $"flextime-probe-tests-{Guid.NewGuid():N}");
+
+        try
+        {
+            // A child that holds the output open, as a hung helper might.
+            var started = Stopwatch.StartNew();
+            var output = await NetworkProbe.Run("/bin/sh", ["-c", $"sleep 60 & echo $! > '{file}'; wait"], TimeSpan.FromMilliseconds(500));
+
+            Assert.Null(output);
+            Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(10));
+
+            var child = int.Parse(await File.ReadAllTextAsync(file, TestContext.Current.CancellationToken));
+
+            // Killed, but the kernel may take a moment to say so.
+            var deadline = Stopwatch.StartNew();
+
+            while (IsRunning(child) && deadline.Elapsed < TimeSpan.FromSeconds(5))
+            {
+                await Task.Delay(50, TestContext.Current.CancellationToken);
+            }
+
+            Assert.False(IsRunning(child));
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
+    private static bool IsRunning(int id)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(id);
+
+            return !process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
     }
 }

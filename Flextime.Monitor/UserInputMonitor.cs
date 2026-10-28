@@ -256,8 +256,6 @@ public class UserInputMonitor(
 
     private async Task MarkCore(Measurement.Types.Kind kind, bool wake, bool scheduled)
     {
-        var placesChanged = kind != Measurement.Types.Kind.Stop && await TickPlaces(wake);
-
         // Stamped before the read and measured after it, so that a slow
         // read (D-Bus, on a busy desktop) widens the window rather than
         // leaving input between two windows.
@@ -332,6 +330,12 @@ public class UserInputMonitor(
 
             lastScheduledRead = sessionLocked ? null : readStarted;
         }
+
+        // After the idle read, which a wait for the network after a wake
+        // would otherwise push past the input that woke the computer, and
+        // before the measurement is stamped, so that the measurement comes
+        // at or after the place it was taken at.
+        var placesChanged = kind != Measurement.Types.Kind.Stop && await TickPlaces(wake);
 
         if (kind == Measurement.Types.Kind.Start) {
             logger.LogDebug("Start measurement at {Now:o}", DateTimeOffset.Now);
@@ -468,13 +472,20 @@ public class UserInputMonitor(
             // A newer event restarts the wait; the last one samples.
             for (var attempt = 0; attempt < PendingRetries && generation == Volatile.Read(ref networkGeneration); attempt++)
             {
+                // Read outside the lock: a slow probe must not hold up
+                // the minute's measurement.
+                if (await placeRecorder.ReadNetwork() is not { } sample)
+                {
+                    return;
+                }
+
                 PlaceUpdate update;
 
                 await markSemaphore.WaitAsync();
 
                 try
                 {
-                    update = await placeRecorder.NetworkChanged();
+                    update = placeRecorder.Apply(sample);
 
                     if (update.Changed)
                     {

@@ -452,9 +452,17 @@ public static partial class NetworkProbe
         return null;
     }
 
+    // These tools answer in milliseconds.  One that hangs would hold up
+    // the measurement waiting for its place, so past this it is killed
+    // and counts as no answer.
+    public static readonly TimeSpan ToolTimeout = TimeSpan.FromSeconds(5);
+
     // System tools are named by full path where they have a fixed home:
     // a bare name is looked up in the application's own folder first.
-    private static async Task<string?> Run(string fileName, params string[] arguments)
+    private static Task<string?> Run(string fileName, params string[] arguments) =>
+        Run(fileName, arguments, ToolTimeout);
+
+    public static async Task<string?> Run(string fileName, string[] arguments, TimeSpan timeout)
     {
         var info = new ProcessStartInfo(fileName)
         {
@@ -479,7 +487,16 @@ public static partial class NetworkProbe
             var output = process.StandardOutput.ReadToEndAsync();
             var error = process.StandardError.ReadToEndAsync();
 
-            await Task.WhenAll(output, error, process.WaitForExitAsync());
+            try
+            {
+                await Task.WhenAll(output, error, process.WaitForExitAsync()).WaitAsync(timeout);
+            }
+            catch (TimeoutException)
+            {
+                Kill(process);
+
+                return null;
+            }
 
             return process.ExitCode == 0 ? output.Result : null;
         }
@@ -487,6 +504,20 @@ public static partial class NetworkProbe
         {
             // Not installed here, like nmcli without NetworkManager.
             return null;
+        }
+    }
+
+    // The whole tree: a child left behind would keep the output open.
+    private static void Kill(Process process)
+    {
+        try
+        {
+            process.Kill(entireProcessTree: true);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception or AggregateException)
+        {
+            // It exited meanwhile, or a child could not be killed; either
+            // way there is no answer to wait for.
         }
     }
 
