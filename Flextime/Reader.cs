@@ -16,7 +16,7 @@ public static class Reader
 
             try
             {
-                using var stream = File.OpenRead(file);
+                using var stream = MeasurementFiles.OpenRead(file);
                 measurements = Measurements.Parser.ParseFrom(stream);
             }
             catch (Exception exception) when (exception is InvalidProtocolBufferException

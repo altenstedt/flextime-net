@@ -231,7 +231,7 @@ public static class PlaceFiles
     {
         try
         {
-            using var stream = File.OpenRead(file);
+            using var stream = MeasurementFiles.OpenRead(file);
 
             return Measurements.Parser.ParseFrom(stream);
         }

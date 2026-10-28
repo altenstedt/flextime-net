@@ -553,12 +553,11 @@ public class UserInputMonitor(
             var path = GetPath();
             var directory = Path.GetDirectoryName(path);
 
-            if (!string.IsNullOrEmpty(directory))
+            // A file that was never written is no file to go on with.
+            if (!TryReplace(path, directory, measurement))
             {
-                PrivateFolder.Ensure(directory);
+                return;
             }
-
-            MeasurementFiles.Replace(path, measurement);
 
             logger.LogTrace("Flushed {Path}.", path);
 
@@ -568,8 +567,12 @@ public class UserInputMonitor(
         } else {
             // Rewrite the existing file with all measurements collected so
             // far.  Replaced whole, so a crash or a full disk midway never
-            // leaves a truncated file for sync to trip over.
-            MeasurementFiles.Replace(lastPath, measurement);
+            // leaves a truncated file for sync to trip over.  Not rotated
+            // until it is written, so no measurement is cleared unwritten.
+            if (!TryReplace(lastPath, null, measurement))
+            {
+                return;
+            }
 
             logger.LogTrace("Flushed {Path}.", lastPath);
 
@@ -588,6 +591,31 @@ public class UserInputMonitor(
 
                 placeRecorder?.StartFile();
             }
+        }
+    }
+
+    // Another process holding the file open (a reader, on Windows) or a
+    // full disk must not end listen.  The caller changes nothing when
+    // this fails, so the measurements stay in memory and the next flush
+    // writes them.
+    private bool TryReplace(string path, string? directory, Measurements measurement)
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(directory))
+            {
+                PrivateFolder.Ensure(directory);
+            }
+
+            MeasurementFiles.Replace(path, measurement);
+
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning("Writing {File} failed, trying again at the next flush: {Message}", Path.GetFileName(path), exception.Message);
+
+            return false;
         }
     }
 

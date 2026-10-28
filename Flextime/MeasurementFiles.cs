@@ -106,6 +106,15 @@ public static class MeasurementFiles
         }
     }
 
+    /// <summary>
+    /// Opens a measurement file for reading, sharing it so that listen
+    /// can replace or delete it meanwhile.  Without delete sharing,
+    /// Windows refuses listen's rename for as long as a reader has the
+    /// file open.
+    /// </summary>
+    public static FileStream OpenRead(string path) =>
+        new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
     private static void TryDelete(string path)
     {
         try

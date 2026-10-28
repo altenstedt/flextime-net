@@ -291,6 +291,44 @@ public class ReaderTests : IDisposable
     }
 
     [Fact]
+    public void ReplaceWorksWhileAReaderHasTheFileOpen()
+    {
+        var path = Path.Combine(folder, "2024-01-01T100000.bin");
+        var timestamp = DateTimeOffset.Parse("2024-01-01T10:00:00+00:00");
+
+        var first = new Measurements { Interval = 60, Zone = "UTC" };
+        first.Measurements_.Add(new Measurement { Timestamp = (uint)timestamp.ToUnixTimeSeconds() });
+
+        var second = first.Clone();
+        second.Measurements_.Add(new Measurement { Timestamp = (uint)timestamp.AddMinutes(1).ToUnixTimeSeconds() });
+
+        MeasurementFiles.Replace(path, first);
+
+        using var reader = MeasurementFiles.OpenRead(path);
+
+        MeasurementFiles.Replace(path, second);
+
+        // The reader goes on with the file it opened; the next one sees
+        // the new file.
+        Assert.Equal(first, Measurements.Parser.ParseFrom(reader));
+        Assert.Equal(second.ToByteArray(), File.ReadAllBytes(path));
+    }
+
+    [Fact]
+    public void FailedReplaceThrowsAndLeavesNoTemporaryFile()
+    {
+        // A folder where the file should be: the rename cannot replace it.
+        var path = Path.Combine(folder, "2024-01-01T100000.bin");
+        Directory.CreateDirectory(path);
+        File.WriteAllText(Path.Combine(path, "keep"), "");
+
+        var exception = Assert.ThrowsAny<Exception>(() => MeasurementFiles.Replace(path, new Measurements { Interval = 60, Zone = "UTC" }));
+
+        Assert.True(exception is IOException or UnauthorizedAccessException, exception.GetType().Name);
+        Assert.Empty(Directory.GetFiles(folder));
+    }
+
+    [Fact]
     public void ReplaceWritesFilePrivateToUser()
     {
         if (OperatingSystem.IsWindows())
