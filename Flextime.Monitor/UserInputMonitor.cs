@@ -48,6 +48,11 @@ public class UserInputMonitor(
 
     private bool sessionLocked;
 
+    // Set by the first lock or unlock event, so that the state read at
+    // start does not overwrite an event that arrived while it was read.
+    private readonly Lock sessionLockGate = new();
+    private bool sessionLockChanged;
+
     // When the Run loop's last idle read began: a minute is active when
     // there was input since then.  On both clocks, because each can
     // overstate the time: the wall clock across a step forward, and the
@@ -109,11 +114,11 @@ public class UserInputMonitor(
 
                             await Mark(Measurement.Types.Kind.SessionLock);
 
-                            sessionLocked = true;
+                            SessionLockChanged(true);
                         }
                         else if (e.Reason == SessionSwitchReason.SessionUnlock)
                         {
-                            sessionLocked = false;
+                            SessionLockChanged(false);
 
                             // Since we marked a measurement at lock, we just mark unlock now
                             await Mark(Measurement.Types.Kind.SessionUnlock);
@@ -126,6 +131,19 @@ public class UserInputMonitor(
                         logger.LogError(exception, "Session switch handling failed.");
                     }
                 };
+
+                // The events only tell of a change: a listener restarted
+                // while the screen is locked would count input at the
+                // lock screen until the next unlock and lock.
+                if (SessionLockState.IsLocked() is { } locked)
+                {
+                    SessionLockedAtStart(locked);
+                    logger.LogDebug(locked ? "Session is locked at start." : "Session is unlocked at start.");
+                }
+                else
+                {
+                    logger.LogDebug("Session lock state is unknown at start; taken as unlocked.");
+                }
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
@@ -140,7 +158,7 @@ public class UserInputMonitor(
                     {
                         var active = notification.Value;
 
-                        sessionLocked = active;
+                        SessionLockChanged(active);
                         logger.LogTrace(active ? "ScreenSaver switched to active" : "ScreenSaver switched to inactive");
                     }
                     else
@@ -149,6 +167,21 @@ public class UserInputMonitor(
                     }
                 }, ObserverFlags.None);
 
+                // The signal only tells of a change, as on Windows.  Read
+                // after subscribing, so that no change falls in between.
+                try
+                {
+                    var active = await screenSaverMonitor.GetActiveAsync();
+
+                    SessionLockedAtStart(active);
+                    logger.LogDebug(active ? "ScreenSaver is active at start" : "ScreenSaver is inactive at start");
+                }
+                catch (Exception exception)
+                {
+                    // As before there was a read: unlocked until a signal
+                    // says otherwise.
+                    logger.LogWarning(exception, "Reading the ScreenSaver state failed; taken as inactive.");
+                }
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
@@ -158,6 +191,26 @@ public class UserInputMonitor(
                 const string Key = "CGSSessionScreenIsLocked";
                 var pointer = Marshal.StringToHGlobalUni(Key);
                 sessionScreenIsLockedString = CGSession.CFStringCreateWithCharacters(IntPtr.Zero, pointer, Key.Length);
+            }
+        }
+    }
+
+    private void SessionLockChanged(bool locked)
+    {
+        lock (sessionLockGate)
+        {
+            sessionLocked = locked;
+            sessionLockChanged = true;
+        }
+    }
+
+    private void SessionLockedAtStart(bool locked)
+    {
+        lock (sessionLockGate)
+        {
+            if (!sessionLockChanged)
+            {
+                sessionLocked = locked;
             }
         }
     }
