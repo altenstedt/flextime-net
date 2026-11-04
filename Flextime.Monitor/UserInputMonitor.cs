@@ -38,6 +38,10 @@ public class UserInputMonitor(
     // already uploaded would send its minutes again, under another day.
     private string? lastZone;
 
+    // The zone last handed to ZoneChanged.  Null at start, so the first
+    // file publishes its zone too, whatever listen wrote before it.
+    private string? publishedZone;
+
     // How many of the measurements in memory the current file holds, and
     // how many rewrites of it in a row have failed.
     private int writtenCount;
@@ -616,15 +620,8 @@ public class UserInputMonitor(
         {
             logger.LogInformation("Time zone changed from {Old} to {New}.", lastZone, zone);
 
-            try
-            {
-                options.ZoneChanged?.Invoke(zone);
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-                // Only the info command reads it; the measurements matter more.
-                logger.LogWarning("Could not publish the new time zone: {Message}", exception.Message);
-            }
+            // The next file begins in it.
+            PublishZone(zone);
 
             zone = lastZone!;
         }
@@ -658,6 +655,10 @@ public class UserInputMonitor(
             lastPath = path;
             lastFlush = DateTimeOffset.Now;
             lastZone = zone;
+
+            // A zone change found as a new file begins, after a rotation
+            // or the first flush, never passes the zoneChanged branch.
+            PublishZone(zone);
             writtenCount = measurements.Count;
             failedRewrites = 0;
         } else {
@@ -707,6 +708,26 @@ public class UserInputMonitor(
 
                 placeRecorder?.StartFile();
             }
+        }
+    }
+
+    private void PublishZone(string zone)
+    {
+        if (zone == publishedZone || options.ZoneChanged == null)
+        {
+            return;
+        }
+
+        try
+        {
+            options.ZoneChanged(zone);
+            publishedZone = zone;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Only the info command reads it; the measurements matter
+            // more.  The next new file tries again.
+            logger.LogWarning("Could not publish the time zone {Zone}: {Message}", zone, exception.Message);
         }
     }
 
