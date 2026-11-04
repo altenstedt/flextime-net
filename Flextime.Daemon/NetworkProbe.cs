@@ -20,7 +20,7 @@ public sealed record VpnService(string Name, string Status);
 // sends, which needs the user id and so a login.  Domain is the DNS
 // domain of the router's network, normalized and valid, or null; the
 // hint is that domain unless it is a router default like localdomain.
-// Mobile is a network the system marks as metered, like a phone's
+// Metered is a network the system marks so, usually a phone's
 // hotspot.
 public sealed record Router(
     string Address,
@@ -28,16 +28,16 @@ public sealed record Router(
     string? Id,
     [property: JsonIgnore] string? Mac = null,
     string? Domain = null,
-    bool Mobile = false)
+    bool Metered = false)
 {
     public string? Hint => PlaceHints.IsHint(Domain) ? Domain : null;
 
     /// <summary>The Network line of location and network; null when there is nothing to say.</summary>
     [JsonIgnore]
-    public string? NetworkLine => Mobile
+    public string? NetworkLine => Metered
         ? Hint != null
-            ? $"Network         :  Mobile network (metered), {Hint}."
-            : "Network         :  Mobile network (metered)."
+            ? $"Network         :  Metered network, {Hint}."
+            : "Network         :  Metered network."
         : Domain == null
             ? null
             : Hint != null
@@ -122,9 +122,9 @@ public static partial class NetworkProbe
 
                 var domain = domains != null ? domains.GetValueOrDefault(nic.Name) : SuffixDomain(nic, routes);
 
-                var mobile = OperatingSystem.IsLinux() ? await IsMeteredOnLinux(nic.Name) : metered.Contains(nic.Name);
+                var isMetered = OperatingSystem.IsLinux() ? await IsMeteredOnLinux(nic.Name) : metered.Contains(nic.Name);
 
-                routers.Add(new Router(address.ToString(), nic.Name, null, mac, domain, mobile));
+                routers.Add(new Router(address.ToString(), nic.Name, null, mac, domain, isMetered));
             }
         }
 

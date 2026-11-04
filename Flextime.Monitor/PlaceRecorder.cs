@@ -297,9 +297,9 @@ public sealed class PlaceRecorder(IPlaceSource source, ILogger logger)
             parts.Add("VPN connected");
         }
 
-        if ((flags & PlaceFlags.Mobile) != 0)
+        if ((flags & PlaceFlags.Metered) != 0)
         {
-            parts.Add("mobile network");
+            parts.Add("metered network");
         }
 
         return parts.Count == 0 ? string.Empty : $" ({string.Join(", ", parts)})";

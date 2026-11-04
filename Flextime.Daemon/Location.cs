@@ -139,9 +139,9 @@ public static class Location
             return new PlaceReading(0, flags, Pending: router != null && router.Mac == null);
         }
 
-        if (router.Mobile)
+        if (router.Metered)
         {
-            flags |= PlaceFlags.Mobile;
+            flags |= PlaceFlags.Metered;
         }
 
         return new PlaceReading(ClientHash(userId, router.Mac), flags, Hint: router.Hint);

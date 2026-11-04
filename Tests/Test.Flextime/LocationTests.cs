@@ -148,19 +148,19 @@ public class LocationTests : IDisposable
     }
 
     [Fact]
-    public void Reading_on_a_metered_network_is_mobile()
+    public void Reading_on_a_metered_network_is_metered()
     {
-        var reading = Location.ToReading(Report([WiFi], [HomeRouter with { Mobile = true }], []), UserId);
+        var reading = Location.ToReading(Report([WiFi], [HomeRouter with { Metered = true }], []), UserId);
 
         Assert.Equal(Location.ClientHash(UserId, Mac), reading.Router);
-        Assert.Equal(PlaceFlags.Mobile, reading.Flags);
+        Assert.Equal(PlaceFlags.Metered, reading.Flags);
     }
 
     [Fact]
-    public void The_network_line_names_a_mobile_network()
+    public void The_network_line_names_a_metered_network()
     {
-        Assert.Equal("Network         :  Mobile network (metered).", (HomeRouter with { Mobile = true }).NetworkLine);
-        Assert.Equal("Network         :  Mobile network (metered), fritz.box.", (HomeRouter with { Mobile = true, Domain = "fritz.box" }).NetworkLine);
+        Assert.Equal("Network         :  Metered network.", (HomeRouter with { Metered = true }).NetworkLine);
+        Assert.Equal("Network         :  Metered network, fritz.box.", (HomeRouter with { Metered = true, Domain = "fritz.box" }).NetworkLine);
     }
 
     [Fact]

@@ -15,11 +15,11 @@ public static class PlaceFlags
     public const uint LocationOff = 4;
 
     /// <summary>
-    /// The network is metered, as the system marks a phone's hotspot or a
-    /// cellular modem: it goes wherever the computer goes, so its router
-    /// names the phone, not where the computer is.
+    /// The system marks the network as metered.  Usually a phone's
+    /// hotspot or a cellular modem, which goes wherever the computer
+    /// goes, so its router names the phone, not where the computer is.
     /// </summary>
-    public const uint Mobile = 8;
+    public const uint Metered = 8;
 }
 
 /// <summary>
