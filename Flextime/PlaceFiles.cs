@@ -13,6 +13,13 @@ public static class PlaceFlags
 
     /// <summary>Location was turned off at this point; the time after it has no place.</summary>
     public const uint LocationOff = 4;
+
+    /// <summary>
+    /// The network is metered, as the system marks a phone's hotspot or a
+    /// cellular modem: it goes wherever the computer goes, so its router
+    /// names the phone, not where the computer is.
+    /// </summary>
+    public const uint Mobile = 8;
 }
 
 /// <summary>

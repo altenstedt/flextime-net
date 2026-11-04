@@ -126,6 +126,33 @@ public class NetworkProbeTests
             services);
     }
 
+    [Fact]
+    public void ParseMeteredInterfaces_reads_expensive_links()
+    {
+        // As configd answered on an iPhone's hotspot, 2026-11-04.
+        var values = new Dictionary<string, IReadOnlyDictionary<string, string>>
+        {
+            ["State:/Network/Interface/en0/Link"] = new Dictionary<string, string> { ["Active"] = "true", ["Expensive"] = "true" },
+            ["State:/Network/Interface/en5/Link"] = new Dictionary<string, string> { ["Active"] = "true", ["Expensive"] = "false" },
+            ["State:/Network/Interface/en6/Link"] = new Dictionary<string, string> { ["Active"] = "true" },
+            ["State:/Network/Service/A/IPv4"] = new Dictionary<string, string> { ["Expensive"] = "true" },
+        };
+
+        Assert.Equal(["en0"], NetworkProbe.ParseMeteredInterfaces(values));
+    }
+
+    [Theory]
+    [InlineData("yes\n", true)]
+    [InlineData("yes (guessed)\n", true)]
+    [InlineData("no\n", false)]
+    [InlineData("no (guessed)\n", false)]
+    [InlineData("unknown\n", false)]
+    [InlineData("", false)]
+    public void ParseNmcliMetered(string output, bool metered)
+    {
+        Assert.Equal(metered, NetworkProbe.ParseNmcliMetered(output));
+    }
+
     [Theory]
     [InlineData("utun4", NetworkInterfaceType.Unknown, "utun4", true)]
     [InlineData("en0", NetworkInterfaceType.Wireless80211, "en0", false)]

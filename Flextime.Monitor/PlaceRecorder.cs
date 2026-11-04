@@ -283,12 +283,25 @@ public sealed class PlaceRecorder(IPlaceSource source, ILogger logger)
 
     private static bool IsOff(Place place) => (place.Flags & PlaceFlags.LocationOff) != 0;
 
-    private static string Describe(uint flags) =>
-        ((flags & PlaceFlags.NotDependable) != 0, (flags & PlaceFlags.Vpn) != 0) switch
+    private static string Describe(uint flags)
+    {
+        var parts = new List<string>();
+
+        if ((flags & PlaceFlags.NotDependable) != 0)
         {
-            (true, true) => " (through a tunnel, VPN connected)",
-            (true, false) => " (through a tunnel)",
-            (false, true) => " (VPN connected)",
-            _ => string.Empty,
-        };
+            parts.Add("through a tunnel");
+        }
+
+        if ((flags & PlaceFlags.Vpn) != 0)
+        {
+            parts.Add("VPN connected");
+        }
+
+        if ((flags & PlaceFlags.Mobile) != 0)
+        {
+            parts.Add("mobile network");
+        }
+
+        return parts.Count == 0 ? string.Empty : $" ({string.Join(", ", parts)})";
+    }
 }

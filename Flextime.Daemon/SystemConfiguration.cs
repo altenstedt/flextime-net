@@ -33,9 +33,16 @@ internal static unsafe partial class SystemConfiguration
     public const string ServiceDnsPattern = "State:/Network/Service/[^/]+/DNS";
 
     /// <summary>
+    /// Each interface's link, with <c>Expensive</c> true on a metered
+    /// network: an iPhone's hotspot, a phone that says it is metered, a
+    /// cellular modem.
+    /// </summary>
+    public const string InterfaceLinkPattern = "State:/Network/Interface/[^/]+/Link";
+
+    /// <summary>
     /// The string values of every dictionary whose key matches one of
-    /// <paramref name="patterns"/>, by key; arrays and other values are
-    /// left out.  Null when the store cannot be opened.
+    /// <paramref name="patterns"/>, by key, booleans as "true" and
+    /// "false"; arrays and other values are left out.  Null when the store cannot be opened.
     /// </summary>
     public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>? ReadValues(params string[] patterns)
     {
@@ -161,12 +168,24 @@ internal static unsafe partial class SystemConfiguration
         }
 
         var stringType = CFStringGetTypeID();
+        var booleanType = CFBooleanGetTypeID();
 
         for (var i = 0; i < count; i++)
         {
-            if (CFGetTypeID(keys[i]) == stringType && CFGetTypeID(values[i]) == stringType)
+            if (CFGetTypeID(keys[i]) != stringType)
+            {
+                continue;
+            }
+
+            var type = CFGetTypeID(values[i]);
+
+            if (type == stringType)
             {
                 result[ToString(keys[i])] = ToString(values[i]);
+            }
+            else if (type == booleanType)
+            {
+                result[ToString(keys[i])] = CFBooleanGetValue(values[i]) ? "true" : "false";
             }
         }
 
@@ -238,6 +257,13 @@ internal static unsafe partial class SystemConfiguration
 
     [LibraryImport(CoreFoundation)]
     private static partial nuint CFDictionaryGetTypeID();
+
+    [LibraryImport(CoreFoundation)]
+    private static partial nuint CFBooleanGetTypeID();
+
+    [LibraryImport(CoreFoundation)]
+    [return: MarshalAs(UnmanagedType.U1)]
+    private static partial bool CFBooleanGetValue(IntPtr boolean);
 
     [LibraryImport(CoreFoundation)]
     private static partial nint CFDictionaryGetCount(IntPtr dictionary);

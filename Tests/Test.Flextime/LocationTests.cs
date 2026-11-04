@@ -148,6 +148,22 @@ public class LocationTests : IDisposable
     }
 
     [Fact]
+    public void Reading_on_a_metered_network_is_mobile()
+    {
+        var reading = Location.ToReading(Report([WiFi], [HomeRouter with { Mobile = true }], []), UserId);
+
+        Assert.Equal(Location.ClientHash(UserId, Mac), reading.Router);
+        Assert.Equal(PlaceFlags.Mobile, reading.Flags);
+    }
+
+    [Fact]
+    public void The_network_line_names_a_mobile_network()
+    {
+        Assert.Equal("Network         :  Mobile network. It goes wherever you go.", (HomeRouter with { Mobile = true }).NetworkLine);
+        Assert.Equal("Network         :  Mobile network, fritz.box. It goes wherever you go.", (HomeRouter with { Mobile = true, Domain = "fritz.box" }).NetworkLine);
+    }
+
+    [Fact]
     public void Reading_with_a_split_tunnel_vpn_is_dependable()
     {
         var reading = Location.ToReading(

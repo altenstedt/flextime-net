@@ -20,22 +20,29 @@ public sealed record VpnService(string Name, string Status);
 // sends, which needs the user id and so a login.  Domain is the DNS
 // domain of the router's network, normalized and valid, or null; the
 // hint is that domain unless it is a router default like localdomain.
+// Mobile is a network the system marks as metered, like a phone's
+// hotspot.
 public sealed record Router(
     string Address,
     string Interface,
     string? Id,
     [property: JsonIgnore] string? Mac = null,
-    string? Domain = null)
+    string? Domain = null,
+    bool Mobile = false)
 {
     public string? Hint => PlaceHints.IsHint(Domain) ? Domain : null;
 
-    /// <summary>The Network line of location and network; null when the network gives no domain.</summary>
+    /// <summary>The Network line of location and network; null when there is nothing to say.</summary>
     [JsonIgnore]
-    public string? NetworkLine => Domain == null
-        ? null
-        : Hint != null
-            ? $"Network         :  {Hint}"
-            : $"Network         :  none (router default {TerminalText.Clean(Domain)})";
+    public string? NetworkLine => Mobile
+        ? Hint != null
+            ? $"Network         :  Mobile network, {Hint}. It goes wherever you go."
+            : "Network         :  Mobile network. It goes wherever you go."
+        : Domain == null
+            ? null
+            : Hint != null
+                ? $"Network         :  {Hint}"
+                : $"Network         :  none (router default {TerminalText.Clean(Domain)})";
 }
 
 // One network service's router as configd recorded it on macOS.
@@ -91,7 +98,7 @@ public static partial class NetworkProbe
         var routers = new List<Router>();
 
         // Read once: every gateway below is looked up in the same table.
-        var (serviceRouters, domains) = OperatingSystem.IsMacOS() ? ReadServices() : ([], null);
+        var (serviceRouters, domains, metered) = OperatingSystem.IsMacOS() ? ReadServices() : ([], null, []);
 
         foreach (var nic in interfaces)
         {
@@ -115,7 +122,9 @@ public static partial class NetworkProbe
 
                 var domain = domains != null ? domains.GetValueOrDefault(nic.Name) : SuffixDomain(nic, routes);
 
-                routers.Add(new Router(address.ToString(), nic.Name, null, mac, domain));
+                var mobile = OperatingSystem.IsLinux() ? await IsMeteredOnLinux(nic.Name) : metered.Contains(nic.Name);
+
+                routers.Add(new Router(address.ToString(), nic.Name, null, mac, domain, mobile));
             }
         }
 
@@ -371,20 +380,65 @@ public static partial class NetworkProbe
         }
     }
 
-    // configd's routers and DNS domains; no domains (null) when the
-    // store cannot be read, so the caller falls back to the DNS suffix.
-    private static (ServiceRouter[] routers, Dictionary<string, string>? domains) ReadServices()
+    /// <summary>
+    /// The interfaces configd marks as expensive, from their
+    /// <c>State:/Network/Interface/&lt;name&gt;/Link</c> dictionaries.
+    /// macOS marks an iPhone's hotspot so, and a cellular modem.
+    /// </summary>
+    public static HashSet<string> ParseMeteredInterfaces(IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> values)
+    {
+        const string prefix = "State:/Network/Interface/";
+        const string suffix = "/Link";
+
+        return values
+            .Where(pair => pair.Key.StartsWith(prefix, StringComparison.Ordinal)
+                           && pair.Key.EndsWith(suffix, StringComparison.Ordinal)
+                           && pair.Key.Length > prefix.Length + suffix.Length
+                           && pair.Value.GetValueOrDefault("Expensive") == "true")
+            .Select(pair => pair.Key[prefix.Length..^suffix.Length])
+            .ToHashSet();
+    }
+
+    /// <summary>
+    /// NetworkManager's answer to <c>nmcli -g GENERAL.METERED device
+    /// show</c>: "yes", or "yes (guessed)" when it took the network's
+    /// word for it, as an Android hotspot gives.
+    /// </summary>
+    public static bool ParseNmcliMetered(string output) =>
+        output.Trim().StartsWith("yes", StringComparison.Ordinal);
+
+    private static async Task<bool> IsMeteredOnLinux(string interfaceName)
+    {
+        var nmcli = new[] { "/usr/bin/nmcli", "/bin/nmcli", "/usr/local/bin/nmcli" }.FirstOrDefault(File.Exists);
+
+        if (nmcli == null)
+        {
+            return false;
+        }
+
+        var output = await Run(nmcli, "-g", "GENERAL.METERED", "device", "show", interfaceName);
+
+        return output != null && ParseNmcliMetered(output);
+    }
+
+    // configd's routers, DNS domains and metered interfaces; no domains
+    // (null) when the store cannot be read, so the caller falls back to
+    // the DNS suffix.
+    private static (ServiceRouter[] routers, Dictionary<string, string>? domains, HashSet<string> metered) ReadServices()
     {
         if (!OperatingSystem.IsMacOS())
         {
-            return ([], null);
+            return ([], null, []);
         }
 
-        var values = SystemConfiguration.ReadValues(SystemConfiguration.ServiceIPv4Pattern, SystemConfiguration.ServiceDnsPattern);
+        var values = SystemConfiguration.ReadValues(
+            SystemConfiguration.ServiceIPv4Pattern,
+            SystemConfiguration.ServiceDnsPattern,
+            SystemConfiguration.InterfaceLinkPattern);
 
         if (values == null)
         {
-            return ([], null);
+            return ([], null, []);
         }
 
         var routers = values
@@ -393,7 +447,7 @@ public static partial class NetworkProbe
             .OfType<ServiceRouter>()
             .ToArray();
 
-        return (routers, ParseServiceDomains(values));
+        return (routers, ParseServiceDomains(values), ParseMeteredInterfaces(values));
     }
 
     private static async Task<string?> CachedMac(IPAddress address)
