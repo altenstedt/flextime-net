@@ -1,4 +1,5 @@
 using Humanizer;
+using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Json;
 using System.Runtime.InteropServices;
@@ -44,7 +45,10 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
         // terminal, written while the spinner is live, leaves the spinner's
         // text behind on the screen.
         string? serverVersion = null;
-        string? unreachable = null;
+        // Why the server was not asked for the days: the version request
+        // already failed, and asking again would fail the same way.
+        string? notFetched = null;
+        var expired = false;
 
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots2)
@@ -57,23 +61,31 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
 
                     serverVersion = TerminalText.Clean(pingResult?.Version);
                 }
-                catch (TokenRefreshException exception)
+                catch (TokenRefreshException)
                 {
-                    unreachable = TerminalText.Clean(exception.Message);
+                    // Every request refreshes the sign-in first; the server
+                    // itself was never asked.
+                    expired = true;
+                    notFetched = "Not fetched, the sign-in has expired";
                 }
                 catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
                 {
-                    unreachable = Unreachable(exception);
+                    notFetched = NotFetched(exception);
+                    serverVersion = Failure(exception);
                 }
             });
 
-        AnsiConsole.MarkupLineInterpolated($"Server version  :  {serverVersion ?? unreachable}");
+        AnsiConsole.MarkupLineInterpolated($"Server version  :  {serverVersion ?? notFetched}");
 
         if (deviceCode.IsAuthenticated)
         {
             var (accessToken, _, _) = await TokenStorage.Read();
 
-            if (string.IsNullOrEmpty(accessToken) || !accessToken.Contains('.'))
+            if (expired)
+            {
+                AnsiConsole.MarkupLine("Signed in       :  Expired. Use the login command to log in again.");
+            }
+            else if (string.IsNullOrEmpty(accessToken) || !accessToken.Contains('.'))
             {
                 AnsiConsole.MarkupLine("Signed in       :  Yes");
             }
@@ -83,11 +95,9 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                 AnsiConsole.MarkupLineInterpolated($"Signed in       :  {TerminalText.Clean(user)}");
             }
 
-            // The days come from the same server; asking again would only
-            // wait out the same timeout.
-            if (unreachable != null)
+            if (notFetched != null)
             {
-                AnsiConsole.MarkupLine("Last 5 days     :  Not fetched, the server is not reachable");
+                AnsiConsole.MarkupLineInterpolated($"Last 5 days     :  {notFetched}");
 
                 return;
             }
@@ -113,7 +123,7 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                         }
                         catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
                         {
-                            failure = Unreachable(exception);
+                            failure = Failure(exception);
                         }
                     });
 
@@ -129,11 +139,20 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
     }
 
     // One short line for the status column.  Polly's timeout message
-    // and its "A task was canceled" inner exception say less than this.
-    private static string Unreachable(Exception exception) =>
-        exception is TimeoutRejectedException timeout
-            ? $"Not reachable, no answer within {timeout.Timeout.Humanize()}"
-            : $"Not reachable, {TerminalText.Clean(exception.Message).TrimEnd('.')}";
+    // and its "A task was canceled" inner exception say less than this,
+    // and a server that answered with an error was reachable.
+    public static string Failure(Exception exception) => exception switch
+    {
+        TimeoutRejectedException timeout =>
+            $"Not reachable, no answer within {timeout.Timeout.Humanize(culture: CultureInfo.InvariantCulture)}",
+        HttpRequestException { StatusCode: { } status } => $"Server error {(int)status}",
+        _ => $"Not reachable, {TerminalText.Clean(exception.Message).TrimEnd('.')}",
+    };
+
+    // Why the days were not asked for, after the version request failed.
+    public static string NotFetched(Exception exception) => exception is HttpRequestException { StatusCode: { } status }
+        ? $"Not fetched, the server answered {(int)status}"
+        : "Not fetched, the server is not reachable";
 
     private static string GetUserInfo(string accessToken)
     {
