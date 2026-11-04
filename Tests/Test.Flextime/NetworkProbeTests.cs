@@ -141,16 +141,17 @@ public class NetworkProbeTests
         Assert.Equal(["en0"], NetworkProbe.ParseMeteredInterfaces(values));
     }
 
-    [Theory]
-    [InlineData("yes\n", true)]
-    [InlineData("yes (guessed)\n", true)]
-    [InlineData("no\n", false)]
-    [InlineData("no (guessed)\n", false)]
-    [InlineData("unknown\n", false)]
-    [InlineData("", false)]
-    public void ParseNmcliMetered(string output, bool metered)
+    [Fact]
+    public void ParseNmcliMetered_reads_every_device()
     {
-        Assert.Equal(metered, NetworkProbe.ParseNmcliMetered(output));
+        const string text =
+            "GENERAL.DEVICE:wlp2s0\nGENERAL.METERED:yes (guessed)\n\n" +
+            "GENERAL.DEVICE:enp0s31f6\nGENERAL.METERED:no (guessed)\n\n" +
+            "GENERAL.DEVICE:wwan0\nGENERAL.METERED:yes\n\n" +
+            "GENERAL.DEVICE:lo\nGENERAL.METERED:unknown\n" +
+            "GENERAL.METERED:yes\n";
+
+        Assert.Equal(["wlp2s0", "wwan0"], NetworkProbe.ParseNmcliMetered(text).Order());
     }
 
     [Theory]

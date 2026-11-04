@@ -36,8 +36,8 @@ public sealed record Router(
     [JsonIgnore]
     public string? NetworkLine => Metered
         ? Hint != null
-            ? $"Network         :  Metered network, {Hint}."
-            : "Network         :  Metered network."
+            ? $"Network         :  Metered network, {Hint}"
+            : "Network         :  Metered network"
         : Domain == null
             ? null
             : Hint != null
@@ -100,6 +100,11 @@ public static partial class NetworkProbe
         // Read once: every gateway below is looked up in the same table.
         var (serviceRouters, domains, metered) = OperatingSystem.IsMacOS() ? ReadServices() : ([], null, []);
 
+        if (OperatingSystem.IsLinux())
+        {
+            metered = await ReadMeteredOnLinux();
+        }
+
         foreach (var nic in interfaces)
         {
             if (nic.OperationalStatus != OperationalStatus.Up
@@ -122,9 +127,7 @@ public static partial class NetworkProbe
 
                 var domain = domains != null ? domains.GetValueOrDefault(nic.Name) : SuffixDomain(nic, routes);
 
-                var isMetered = OperatingSystem.IsLinux() ? await IsMeteredOnLinux(nic.Name) : metered.Contains(nic.Name);
-
-                routers.Add(new Router(address.ToString(), nic.Name, null, mac, domain, isMetered));
+                routers.Add(new Router(address.ToString(), nic.Name, null, mac, domain, metered.Contains(nic.Name)));
             }
         }
 
@@ -400,26 +403,61 @@ public static partial class NetworkProbe
     }
 
     /// <summary>
-    /// NetworkManager's answer to <c>nmcli -g GENERAL.METERED device
-    /// show</c>: "yes", or "yes (guessed)" when it took the network's
-    /// word for it, as an Android hotspot gives.
+    /// The devices NetworkManager calls metered, from <c>nmcli -t -f
+    /// GENERAL.DEVICE,GENERAL.METERED device show</c>: a
+    /// <c>GENERAL.DEVICE:name</c> line, then <c>GENERAL.METERED:</c>
+    /// "yes", or "yes (guessed)" when it took the network's word for it,
+    /// as an Android hotspot gives.  Run in the C locale, so the words
+    /// are never translated.
     /// </summary>
-    public static bool ParseNmcliMetered(string output) =>
-        output.Trim().StartsWith("yes", StringComparison.Ordinal);
-
-    private static async Task<bool> IsMeteredOnLinux(string interfaceName)
+    public static HashSet<string> ParseNmcliMetered(string output)
     {
-        var nmcli = new[] { "/usr/bin/nmcli", "/bin/nmcli", "/usr/local/bin/nmcli" }.FirstOrDefault(File.Exists);
+        var metered = new HashSet<string>();
+        string? device = null;
+
+        foreach (var line in output.Split('\n'))
+        {
+            var text = line.Trim();
+
+            if (text.StartsWith("GENERAL.DEVICE:", StringComparison.Ordinal))
+            {
+                device = text["GENERAL.DEVICE:".Length..];
+            }
+            else if (text.StartsWith("GENERAL.METERED:", StringComparison.Ordinal))
+            {
+                if (!string.IsNullOrEmpty(device) && text["GENERAL.METERED:".Length..].StartsWith("yes", StringComparison.Ordinal))
+                {
+                    metered.Add(device);
+                }
+
+                device = null;
+            }
+        }
+
+        return metered;
+    }
+
+    // One call for every device: a call per router would add up to the
+    // tool timeout each, and a timeout would flip the metered flag and
+    // record a place change that never happened.
+    private static async Task<HashSet<string>> ReadMeteredOnLinux()
+    {
+        var nmcli = FindNmcli();
 
         if (nmcli == null)
         {
-            return false;
+            return [];
         }
 
-        var output = await Run(nmcli, "-g", "GENERAL.METERED", "device", "show", interfaceName);
+        var output = await Run(nmcli, ["-t", "-f", "GENERAL.DEVICE,GENERAL.METERED", "device", "show"], ToolTimeout, cLocale: true);
 
-        return output != null && ParseNmcliMetered(output);
+        return output == null ? [] : ParseNmcliMetered(output);
     }
+
+    // NetworkManager installs nmcli in /usr/bin; a distribution without
+    // it has no VPN list or metered flag to give.
+    private static string? FindNmcli() =>
+        new[] { "/usr/bin/nmcli", "/bin/nmcli", "/usr/local/bin/nmcli" }.FirstOrDefault(File.Exists);
 
     // configd's routers, DNS domains and metered interfaces; no domains
     // (null) when the store cannot be read, so the caller falls back to
@@ -487,16 +525,16 @@ public static partial class NetworkProbe
 
         if (OperatingSystem.IsLinux())
         {
-            // NetworkManager installs nmcli in /usr/bin; a distribution
-            // without it has no VPN list to give.
-            var nmcli = new[] { "/usr/bin/nmcli", "/bin/nmcli", "/usr/local/bin/nmcli" }.FirstOrDefault(File.Exists);
+            var nmcli = FindNmcli();
 
             if (nmcli == null)
             {
                 return null;
             }
 
-            var output = await Run(nmcli, "-t", "-f", "NAME,TYPE,ACTIVE", "connection", "show");
+            // ACTIVE is "yes" or "no", or a translation of them outside
+            // the C locale.
+            var output = await Run(nmcli, ["-t", "-f", "NAME,TYPE,ACTIVE", "connection", "show"], ToolTimeout, cLocale: true);
 
             return output == null ? null : ParseNmcli(output);
         }
@@ -516,13 +554,19 @@ public static partial class NetworkProbe
     private static Task<string?> Run(string fileName, params string[] arguments) =>
         Run(fileName, arguments, ToolTimeout);
 
-    public static async Task<string?> Run(string fileName, string[] arguments, TimeSpan timeout)
+    public static async Task<string?> Run(string fileName, string[] arguments, TimeSpan timeout, bool cLocale = false)
     {
         var info = new ProcessStartInfo(fileName)
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
+
+        if (cLocale)
+        {
+            // Untranslated words; LC_ALL overrides LANG and LC_MESSAGES.
+            info.Environment["LC_ALL"] = "C";
+        }
 
         foreach (var argument in arguments)
         {

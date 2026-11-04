@@ -159,8 +159,8 @@ public class LocationTests : IDisposable
     [Fact]
     public void The_network_line_names_a_metered_network()
     {
-        Assert.Equal("Network         :  Metered network.", (HomeRouter with { Metered = true }).NetworkLine);
-        Assert.Equal("Network         :  Metered network, fritz.box.", (HomeRouter with { Metered = true, Domain = "fritz.box" }).NetworkLine);
+        Assert.Equal("Network         :  Metered network", (HomeRouter with { Metered = true }).NetworkLine);
+        Assert.Equal("Network         :  Metered network, fritz.box", (HomeRouter with { Metered = true, Domain = "fritz.box" }).NetworkLine);
     }
 
     [Fact]
