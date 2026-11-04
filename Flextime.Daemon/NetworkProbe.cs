@@ -36,8 +36,8 @@ public sealed record Router(
     [JsonIgnore]
     public string? NetworkLine => Mobile
         ? Hint != null
-            ? $"Network         :  Mobile network, {Hint}. It goes wherever you go."
-            : "Network         :  Mobile network. It goes wherever you go."
+            ? $"Network         :  Mobile network (metered), {Hint}."
+            : "Network         :  Mobile network (metered)."
         : Domain == null
             ? null
             : Hint != null

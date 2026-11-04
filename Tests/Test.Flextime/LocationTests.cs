@@ -159,8 +159,8 @@ public class LocationTests : IDisposable
     [Fact]
     public void The_network_line_names_a_mobile_network()
     {
-        Assert.Equal("Network         :  Mobile network. It goes wherever you go.", (HomeRouter with { Mobile = true }).NetworkLine);
-        Assert.Equal("Network         :  Mobile network, fritz.box. It goes wherever you go.", (HomeRouter with { Mobile = true, Domain = "fritz.box" }).NetworkLine);
+        Assert.Equal("Network         :  Mobile network (metered).", (HomeRouter with { Mobile = true }).NetworkLine);
+        Assert.Equal("Network         :  Mobile network (metered), fritz.box.", (HomeRouter with { Mobile = true, Domain = "fritz.box" }).NetworkLine);
     }
 
     [Fact]
