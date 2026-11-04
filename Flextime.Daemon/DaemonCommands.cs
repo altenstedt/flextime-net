@@ -426,7 +426,10 @@ public class DaemonCommands(
         {
             IgnoreSessionLocked = ignoreSessionLocked,
             TimeZone = timeZone,
-            LogSummaryInterval = interval
+            LogSummaryInterval = interval,
+            // Seen from use: in Hamburg, listen had moved to Berlin but
+            // the info command still said Stockholm, from the start.
+            ZoneChanged = zone => StateFiles.Write(StateFiles.ListenPath, zone),
         }, placeRecorder);
 
         try

@@ -616,6 +616,16 @@ public class UserInputMonitor(
         {
             logger.LogInformation("Time zone changed from {Old} to {New}.", lastZone, zone);
 
+            try
+            {
+                options.ZoneChanged?.Invoke(zone);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // Only the info command reads it; the measurements matter more.
+                logger.LogWarning("Could not publish the new time zone: {Message}", exception.Message);
+            }
+
             zone = lastZone!;
         }
 
