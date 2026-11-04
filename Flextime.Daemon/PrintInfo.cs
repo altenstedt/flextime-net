@@ -40,6 +40,12 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
         AnsiConsole.MarkupLineInterpolated($"Location        :  {LocationStatus()}");
         AnsiConsole.MarkupLineInterpolated($"Server URL      :  {Constants.ApiUri}");
 
+        // Lines are printed after the spinner stops: a line wider than the
+        // terminal, written while the spinner is live, leaves the spinner's
+        // text behind on the screen.
+        string? serverVersion = null;
+        string? unreachable = null;
+
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots2)
             .SpinnerStyle(Style.Plain) // No colors
@@ -49,22 +55,19 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                 {
                     var pingResult = await httpClient.GetFromJsonAsync("/ping", PingSourceGenerationContext.Default.PingDataContract);
 
-                    AnsiConsole.MarkupLineInterpolated($"Server version  :  {TerminalText.Clean(pingResult?.Version)}");
+                    serverVersion = TerminalText.Clean(pingResult?.Version);
                 }
                 catch (TokenRefreshException exception)
                 {
-                    AnsiConsole.WriteLine(TerminalText.Clean(exception.Message));
+                    unreachable = TerminalText.Clean(exception.Message);
                 }
                 catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
                 {
-                    AnsiConsole.MarkupLineInterpolated($"Error contacting backend: {TerminalText.Clean(exception.Message)}.");
-
-                    if (exception.InnerException != null)
-                    {
-                        AnsiConsole.MarkupLineInterpolated($"  {TerminalText.Clean(exception.InnerException.Message)}");
-                    }
+                    unreachable = Unreachable(exception);
                 }
             });
+
+        AnsiConsole.MarkupLineInterpolated($"Server version  :  {serverVersion ?? unreachable}");
 
         if (deviceCode.IsAuthenticated)
         {
@@ -79,6 +82,17 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                 var user = GetUserInfo(accessToken);
                 AnsiConsole.MarkupLineInterpolated($"Signed in       :  {TerminalText.Clean(user)}");
             }
+
+            // The days come from the same server; asking again would only
+            // wait out the same timeout.
+            if (unreachable != null)
+            {
+                AnsiConsole.MarkupLine("Last 5 days     :  Not fetched, the server is not reachable");
+
+                return;
+            }
+
+            string? failure = null;
 
             await AnsiConsole.Status()
                 .Spinner(Spinner.Known.Dots2)
@@ -95,19 +109,31 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                         }
                         catch (TokenRefreshException exception)
                         {
-                            AnsiConsole.WriteLine(TerminalText.Clean(exception.Message));
+                            failure = TerminalText.Clean(exception.Message);
                         }
                         catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
                         {
-                            AnsiConsole.MarkupLineInterpolated($"Error contacting backend: {TerminalText.Clean(exception.Message)}.");
+                            failure = Unreachable(exception);
                         }
                     });
+
+            if (failure != null)
+            {
+                AnsiConsole.MarkupLineInterpolated($"{failure}");
+            }
         }
         else
         {
             AnsiConsole.MarkupLine("Logged in       :  No. Use login command to log in.");
         }
     }
+
+    // One short line for the status column.  Polly's timeout message
+    // and its "A task was canceled" inner exception say less than this.
+    private static string Unreachable(Exception exception) =>
+        exception is TimeoutRejectedException timeout
+            ? $"Not reachable, no answer within {timeout.Timeout.Humanize()}"
+            : $"Not reachable, {TerminalText.Clean(exception.Message).TrimEnd('.')}";
 
     private static string GetUserInfo(string accessToken)
     {
