@@ -54,7 +54,9 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
             }
         }
 
-        Console.WriteLine($"Position        :  {(report.Dependable ? "Dependable" : "Not dependable")}. {TerminalText.Clean(report.Reason)}");
+        // Only the route: the router comes from a physical interface, so a
+        // VPN on this computer never changes the place.
+        Console.WriteLine($"Route           :  {TerminalText.Clean(report.Reason)}");
 
         var connected = report.VpnServices?.Where(service => service.Status == "Connected").Select(service => service.Name).ToArray();
 

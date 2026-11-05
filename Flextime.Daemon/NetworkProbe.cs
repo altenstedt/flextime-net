@@ -700,7 +700,9 @@ public static class PrintNetwork
             }
         }
 
-        Console.WriteLine($"Position        :  {(report.Dependable ? "Dependable" : "Not dependable")}. {TerminalText.Clean(report.Reason)}");
+        // Only the route: the router comes from a physical interface, so a
+        // VPN on this computer never changes the place.
+        Console.WriteLine($"Route           :  {TerminalText.Clean(report.Reason)}");
 
         if (userId != null)
         {
