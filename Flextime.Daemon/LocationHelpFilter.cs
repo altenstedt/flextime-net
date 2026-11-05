@@ -21,26 +21,10 @@ public static class LocationHelp
                        changes the place.
         VPN            VPN connections that are up.
 
-        How to read Router maker
-
-        Ubiquiti, Cisco, AVM (Fritz!Box) and other network makers
-            Office or home equipment. It stays where it is, so a new place
-            gets a new router.
-        Apple, Samsung, Google and other phone makers
-            Often a phone's hotspot. It goes with you, so every place you
-            use it looks like the same place.
-        GL.iNet
-            A travel router. It also goes with you, VPN or not.
-        VMware, Parallels, VirtualBox, QEMU, Hyper-V
-            A virtual machine's network. It looks the same wherever the
-            computer running the machine is.
-        Unknown, the router uses a random address
-            The router hides its maker. Phone hotspots often do this.
-        Unknown
-            A maker that is not in flextimed's short built-in list.
-
         The maker is a hint. To check a place, look at Here now in the web
         app. A place you have never been should show up as Not named yet.
+        If it shows a name you know, the router travels with you, like a
+        phone's hotspot.
         """;
 }
 
