@@ -120,7 +120,7 @@ public static class Location
 
         if (report.Routes.Any(route => route.Tunnel))
         {
-            flags |= PlaceFlags.NotDependable;
+            flags |= PlaceFlags.Tunnel;
         }
 
         if (report.VpnServices?.Any(service => service.Status == "Connected") == true)

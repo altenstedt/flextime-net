@@ -419,7 +419,7 @@ public sealed partial class Place : pb::IMessage<Place>
   public const int FlagsFieldNumber = 3;
   private uint flags_;
   /// <summary>
-  /// bit 0: not dependable, bit 1: VPN, bit 2: location off
+  /// bit 0: tunnel, bit 1: VPN, bit 2: location off, bit 3: metered
   /// </summary>
   [global::System.Diagnostics.DebuggerNonUserCodeAttribute]
   [global::System.CodeDom.Compiler.GeneratedCode("protoc", null)]

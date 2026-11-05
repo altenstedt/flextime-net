@@ -118,7 +118,7 @@ public class LocationTests : IDisposable
     }
 
     private static NetworkReport Report(InternetRoute[] routes, Router[] routers, VpnService[]? services = null) =>
-        new(routes, services, routers, true, string.Empty);
+        new(routes, services, routers);
 
     private static readonly InternetRoute WiFi = new("IPv4", "192.168.4.20", "en0", "Wi-Fi", false);
     private static readonly InternetRoute Tunnel = new("IPv4", "10.8.0.2", "utun4", "Tunnel", true);
@@ -138,13 +138,13 @@ public class LocationTests : IDisposable
     }
 
     [Fact]
-    public void Reading_through_a_tunnel_keeps_the_physical_router_and_is_not_dependable()
+    public void Reading_through_a_tunnel_keeps_the_physical_router()
     {
         var reading = Location.ToReading(
             Report([Tunnel], [HomeRouter], [new VpnService("Office", "Connected")]), UserId);
 
         Assert.Equal(Location.ClientHash(UserId, Mac), reading.Router);
-        Assert.Equal(PlaceFlags.NotDependable | PlaceFlags.Vpn, reading.Flags);
+        Assert.Equal(PlaceFlags.Tunnel | PlaceFlags.Vpn, reading.Flags);
     }
 
     [Fact]
@@ -164,7 +164,7 @@ public class LocationTests : IDisposable
     }
 
     [Fact]
-    public void Reading_with_a_split_tunnel_vpn_is_dependable()
+    public void Reading_with_a_split_tunnel_vpn_is_only_vpn()
     {
         var reading = Location.ToReading(
             Report([WiFi], [HomeRouter], [new VpnService("Tailscale", "Connected"), new VpnService("Other", "Disconnected")]), UserId);

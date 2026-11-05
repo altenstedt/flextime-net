@@ -169,32 +169,28 @@ public class NetworkProbeTests
     }
 
     [Fact]
-    public void Judge_tunnel_is_not_dependable()
+    public void DescribeRoute_names_the_tunnel()
     {
-        var (dependable, reason) = NetworkProbe.Judge(
+        var text = NetworkProbe.DescribeRoute(
             [new InternetRoute("IPv4", "10.0.0.2", "utun4", "Tunnel", true)], null);
 
-        Assert.False(dependable);
-        Assert.Contains("utun4", reason);
+        Assert.Equal("Internet traffic goes through utun4, a VPN or other tunnel.", text);
     }
 
     [Fact]
-    public void Judge_split_tunnel_is_dependable()
+    public void DescribeRoute_names_a_split_tunnel_vpn()
     {
-        var (dependable, reason) = NetworkProbe.Judge(
+        var text = NetworkProbe.DescribeRoute(
             [new InternetRoute("IPv4", "192.168.4.20", "en0", "Wi-Fi", false)],
             [new VpnService("Tailscale", "Connected")]);
 
-        Assert.True(dependable);
-        Assert.Contains("Tailscale carries only its own networks", reason);
+        Assert.Contains("Tailscale carries only its own networks", text);
     }
 
     [Fact]
-    public void Judge_offline_is_not_dependable()
+    public void DescribeRoute_offline()
     {
-        var (dependable, _) = NetworkProbe.Judge([], null);
-
-        Assert.False(dependable);
+        Assert.Equal("No route to the internet.", NetworkProbe.DescribeRoute([], null));
     }
 
     [Fact]

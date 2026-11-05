@@ -54,9 +54,7 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
             }
         }
 
-        // Only the route: the router comes from a physical interface, so a
-        // VPN on this computer never changes the place.
-        Console.WriteLine($"Route           :  {TerminalText.Clean(report.Reason)}");
+        Console.WriteLine($"Route           :  {TerminalText.Clean(NetworkProbe.DescribeRoute(report.Routes, report.VpnServices))}");
 
         var connected = report.VpnServices?.Where(service => service.Status == "Connected").Select(service => service.Name).ToArray();
 

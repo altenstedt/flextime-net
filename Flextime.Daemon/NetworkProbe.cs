@@ -51,9 +51,7 @@ public sealed record ServiceRouter(string? Interface, string Router, string? Mac
 public sealed record NetworkReport(
     InternetRoute[] Routes,
     VpnService[]? VpnServices,
-    Router[] Routers,
-    bool Dependable,
-    string Reason);
+    Router[] Routers);
 
 // What flextimed can tell about where it is on the network without any
 // permission prompt: the interface internet traffic leaves through,
@@ -133,23 +131,24 @@ public static partial class NetworkProbe
 
         var services = await ReadVpnServices();
 
-        var (dependable, reason) = Judge(routes, services);
-
-        return new NetworkReport(routes, services, routers.ToArray(), dependable, reason);
+        return new NetworkReport(routes, services, routers.ToArray());
     }
 
-    public static (bool dependable, string reason) Judge(InternetRoute[] routes, VpnService[]? services)
+    // The route in words.  Only the route: the router comes from a
+    // physical interface, so a VPN on this computer never changes the
+    // place.
+    public static string DescribeRoute(InternetRoute[] routes, VpnService[]? services)
     {
         if (routes.Length == 0)
         {
-            return (false, "No route to the internet.");
+            return "No route to the internet.";
         }
 
         var tunnel = routes.FirstOrDefault(route => route.Tunnel);
 
         if (tunnel != null)
         {
-            return (false, $"Internet traffic goes through {tunnel.Interface}, a VPN or other tunnel.");
+            return $"Internet traffic goes through {tunnel.Interface}, a VPN or other tunnel.";
         }
 
         var direct = routes[0].Interface;
@@ -158,8 +157,8 @@ public static partial class NetworkProbe
         // A split-tunnel VPN carries only its own networks; traffic to
         // the internet still leaves from where the computer is.
         return connected.Length > 0
-            ? (true, $"Internet traffic leaves through {direct} directly. {string.Join(", ", connected)} carries only its own networks.")
-            : (true, $"Internet traffic leaves through {direct} directly.");
+            ? $"Internet traffic leaves through {direct} directly. {string.Join(", ", connected)} carries only its own networks."
+            : $"Internet traffic leaves through {direct} directly.";
     }
 
     public static bool IsTunnel(string name, NetworkInterfaceType type, string description)
@@ -700,9 +699,7 @@ public static class PrintNetwork
             }
         }
 
-        // Only the route: the router comes from a physical interface, so a
-        // VPN on this computer never changes the place.
-        Console.WriteLine($"Route           :  {TerminalText.Clean(report.Reason)}");
+        Console.WriteLine($"Route           :  {TerminalText.Clean(NetworkProbe.DescribeRoute(report.Routes, report.VpnServices))}");
 
         if (userId != null)
         {

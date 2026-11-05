@@ -287,7 +287,7 @@ public sealed class PlaceRecorder(IPlaceSource source, ILogger logger)
     {
         var parts = new List<string>();
 
-        if ((flags & PlaceFlags.NotDependable) != 0)
+        if ((flags & PlaceFlags.Tunnel) != 0)
         {
             parts.Add("through a tunnel");
         }

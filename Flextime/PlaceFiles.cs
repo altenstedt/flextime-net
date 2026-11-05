@@ -5,8 +5,11 @@ namespace Flextime;
 /// <summary>The bits of <see cref="Place.Flags"/>.</summary>
 public static class PlaceFlags
 {
-    /// <summary>Internet traffic went through a tunnel, so the router says little about where the computer is.</summary>
-    public const uint NotDependable = 1;
+    /// <summary>
+    /// Internet traffic went through a tunnel.  The router is still read
+    /// from a physical interface, so the place stays right.
+    /// </summary>
+    public const uint Tunnel = 1;
 
     /// <summary>A VPN client was connected.</summary>
     public const uint Vpn = 2;
