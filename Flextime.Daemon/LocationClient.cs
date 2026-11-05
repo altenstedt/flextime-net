@@ -52,6 +52,11 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
             {
                 Console.WriteLine(line);
             }
+
+            if (router?.MakerLine is { } maker)
+            {
+                Console.WriteLine(maker);
+            }
         }
 
         Console.WriteLine($"Route           :  {TerminalText.Clean(NetworkProbe.DescribeRoute(report.Routes, report.VpnServices))}");

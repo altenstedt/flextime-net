@@ -171,6 +171,7 @@ public class DaemonCommands(
     }
 
     /// <summary>Show whether the place is recorded, and the place now</summary>
+    [ConsoleAppFilter<LocationHelpFilter>]
     [ConsoleAppFilter<NoArgumentsFilter>]
     [Command("location")]
     public Task<int> Location()

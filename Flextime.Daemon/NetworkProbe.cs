@@ -32,6 +32,16 @@ public sealed record Router(
 {
     public string? Hint => PlaceHints.IsHint(Domain) ? Domain : null;
 
+    /// <summary>Who made the router, from its hardware address; null when unknown.</summary>
+    public string? Maker => Mac == null ? null : RouterMakers.Find(Mac)?.Name;
+
+    /// <summary>The address is random, so it names no maker.</summary>
+    public bool RandomAddress => Mac != null && RouterMakers.Find(Mac) == null && RouterMakers.IsRandom(Mac);
+
+    /// <summary>The Router maker line of location and network; null without an address.</summary>
+    [JsonIgnore]
+    public string? MakerLine => RouterMakers.Describe(Mac) is { } text ? $"Router maker    :  {text}" : null;
+
     /// <summary>The Network line of location and network; null when there is nothing to say.</summary>
     [JsonIgnore]
     public string? NetworkLine => Metered
@@ -696,6 +706,11 @@ public static class PrintNetwork
             if (router.NetworkLine is { } line)
             {
                 Console.WriteLine(line);
+            }
+
+            if (router.MakerLine is { } maker)
+            {
+                Console.WriteLine(maker);
             }
         }
 
