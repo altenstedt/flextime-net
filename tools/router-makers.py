@@ -37,6 +37,8 @@ MAKERS = [
     ("Zyxel", "Network", r"^Zyxel|^ZyXEL"),
     ("Juniper", "Network", r"^Juniper Networks"),
     ("Fortinet", "Network", r"^Fortinet"),
+    # Huawei registers its consumer arm apart: phones and mobile Wi-Fi.
+    ("Huawei", "Phone", r"^Huawei Device"),
     ("Huawei", "Network", r"^Huawei|^HUAWEI"),
     ("ZTE", "Network", r"^zte corporation"),
     ("Sagemcom", "Network", r"^Sagemcom"),

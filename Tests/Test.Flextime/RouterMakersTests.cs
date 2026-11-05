@@ -14,6 +14,8 @@ public class RouterMakersTests
     [InlineData("00:15:5d:12:34:56", "Hyper-V, a virtual machine's network")]
     [InlineData("da:21:f9:12:34:56", "Unknown, the router uses a random address")]
     [InlineData("00:00:00:12:34:56", "Unknown")]
+    [InlineData("70:66:b9:12:34:56", "Huawei, often a phone's hotspot that travels with you")]
+    [InlineData("e0:06:30:12:34:56", "Huawei")]
     public void Describe(string mac, string expected)
     {
         Assert.Equal(expected, RouterMakers.Describe(mac));
