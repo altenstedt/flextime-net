@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Polly.Timeout;
 
 namespace Flextime.Daemon;
@@ -13,7 +14,7 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
 {
     private readonly HttpClient httpClient = httpClientFactory.CreateClient("ApiHttpClient");
 
-    public async Task<int> Status()
+    public async Task<int> Status(bool name, CancellationToken cancellationToken)
     {
         var on = Location.IsOn();
 
@@ -48,6 +49,11 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
                 ? "Place           :  Recorded"
                 : $"Place           :  Router {router.Address} on {TerminalText.Clean(router.Interface)}");
 
+            if (name)
+            {
+                Console.WriteLine($"Name            :  {await LookUpName(on, reading.Router, cancellationToken)}");
+            }
+
             if (router?.NetworkLine is { } line)
             {
                 Console.WriteLine(line);
@@ -80,6 +86,62 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
             : "Use location on to record the place with the measurements.");
 
         return 0;
+    }
+
+    // Two reads on the server, both on demand only: /ids is one of the
+    // rate-limited history reads, so nothing that polls should ask.
+    private async Task<string> LookUpName(bool on, ulong current, CancellationToken cancellationToken)
+    {
+        if (!on)
+        {
+            return "Unknown, location is off";
+        }
+
+        if (!deviceCode.IsAuthenticated || computer.Id == null)
+        {
+            return "Unknown, not logged in";
+        }
+
+        // When the current router took effect, as listen recorded it.
+        var last = PlaceFiles.Last(Constants.MeasurementsFolder, 0);
+
+        if (last == null || last.Router != current)
+        {
+            return "Not recorded yet";
+        }
+
+        try
+        {
+            var from = DateTimeOffset.FromUnixTimeSeconds(last.Timestamp).UtcDateTime.Date.AddDays(-1);
+
+            using var ids = JsonDocument.Parse(await httpClient.GetStringAsync(
+                $"/ids?api-version=1.8&id={Uri.EscapeDataString(computer.Id)}&from={from:yyyy-MM-dd}",
+                cancellationToken));
+
+            var id = PlaceName.RouterAt(ids.RootElement, last.Timestamp);
+
+            if (id == null)
+            {
+                return "Not synced yet";
+            }
+
+            if (id.Length == 0)
+            {
+                return "Unknown, the server has no router for now";
+            }
+
+            using var places = JsonDocument.Parse(await httpClient.GetStringAsync("/store/places?api-version=1.0", cancellationToken));
+
+            return PlaceName.Describe(places.RootElement, id);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException or JsonException)
+        {
+            return "Unknown, the server could not be reached";
+        }
+        catch (TokenRefreshException)
+        {
+            return "Unknown, log in again";
+        }
     }
 
     public async Task<int> On()

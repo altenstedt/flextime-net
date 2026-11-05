@@ -171,14 +171,14 @@ public class DaemonCommands(
     }
 
     /// <summary>Show whether the place is recorded, and the place now</summary>
+    /// <param name="name">Look up the name given in the web app.</param>
     [ConsoleAppFilter<LocationHelpFilter>]
-    [ConsoleAppFilter<NoArgumentsFilter>]
     [Command("location")]
-    public Task<int> Location()
+    public Task<int> Location(bool name = false, CancellationToken cancellationToken = default)
     {
         logger.LogDebug("Location invoked.");
 
-        return locationClient.Status();
+        return locationClient.Status(name, cancellationToken);
     }
 
     /// <summary>Record the place, a hash of the router. Requires login</summary>

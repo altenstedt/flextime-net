@@ -141,6 +141,7 @@ day by place.  It is off until you turn it on:
 
     flextimed location on       # requires login
     flextimed location          # on or off, and the place right now
+    flextimed location --name   # also the name given in the web app
     flextimed location --help   # what each line means
     flextimed location off      # the time after this has no place
     flextimed location clear    # remove the place history, here and on the server
