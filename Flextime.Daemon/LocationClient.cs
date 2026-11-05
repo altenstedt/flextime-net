@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Polly.Timeout;
@@ -13,6 +14,15 @@ namespace Flextime.Daemon;
 public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode deviceCode, Computer computer)
 {
     private readonly HttpClient httpClient = httpClientFactory.CreateClient("ApiHttpClient");
+
+    // Every line fits in 80 columns.  location --help explains the rest.
+    public const string OnFooter = """
+        Name this place under Here now in the web app. See location --help for
+        what each line means. Use location off to stop, and location clear to
+        remove the history.
+        """;
+
+    public const string OffFooter = "Use location on to record the place with the measurements.";
 
     public async Task<int> Status(bool name, CancellationToken cancellationToken)
     {
@@ -83,9 +93,7 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
         }
 
         Console.WriteLine();
-        Console.WriteLine(on
-            ? "The place is the router, not a position; the web marks it \"Here now\", so name it there while you are here. Use location off to stop, location clear to remove the history."
-            : "Use location on to record the place with the measurements.");
+        Console.WriteLine(on ? OnFooter : OffFooter);
 
         return 0;
     }
@@ -140,15 +148,28 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
 
             return PlaceName.Describe(places.RootElement, id);
         }
-        catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException or JsonException)
+        catch (HttpRequestException exception)
         {
-            return "Unknown, the server could not be reached";
+            return ServerTrouble(exception.StatusCode);
+        }
+        catch (Exception exception) when (exception is TimeoutRejectedException or JsonException)
+        {
+            return ServerTrouble(null);
         }
         catch (TokenRefreshException)
         {
             return "Unknown, log in again";
         }
     }
+
+    /// <summary>The Name line when a read failed: no answer, or the status the server gave.</summary>
+    public static string ServerTrouble(HttpStatusCode? status) => status switch
+    {
+        null => "Unknown, the server could not be reached",
+        HttpStatusCode.TooManyRequests => "Unknown, asked too often. Try again in a minute",
+        HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => "Unknown, the server refused the login. Log in again",
+        _ => $"Unknown, the server answered {(int)status}",
+    };
 
     public async Task<int> On()
     {

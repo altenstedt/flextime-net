@@ -41,9 +41,16 @@ internal sealed class LocationHelpFilter(ConsoleAppFilter next) : ConsoleAppFilt
     {
         await Next.InvokeAsync(context, cancellationToken);
 
-        if (context.CommandArguments is ["-h" or "--help"])
+        // ConsoleAppFramework shows the help for -h anywhere among the
+        // arguments, so the key follows it there too.
+        foreach (var argument in context.CommandArguments)
         {
-            Console.WriteLine(LocationHelp.Key);
+            if (argument is "-h" or "--help")
+            {
+                Console.WriteLine(LocationHelp.Key);
+
+                break;
+            }
         }
     }
 }

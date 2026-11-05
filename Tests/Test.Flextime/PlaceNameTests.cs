@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using Flextime;
 using Flextime.Daemon;
@@ -108,5 +109,30 @@ public class PlaceNameTests
     {
         Assert.Equal(300u, PlaceName.StayStart(
             [Point(100, 2), Point(200, 0, PlaceFlags.LocationOff), Point(300, 2)], 2));
+    }
+
+    [Fact]
+    public void RouterAt_skips_a_day_with_a_fractional_delta()
+    {
+        Assert.Null(PlaceName.RouterAt(Json("""{"items":[{"zone":"UTC","deltas":[10.5],"places":[[0,"b9186da7f83b",0]]}]}"""), 0));
+    }
+
+    [Theory]
+    [InlineData(null, "Unknown, the server could not be reached")]
+    [InlineData(HttpStatusCode.TooManyRequests, "Unknown, asked too often. Try again in a minute")]
+    [InlineData(HttpStatusCode.Unauthorized, "Unknown, the server refused the login. Log in again")]
+    [InlineData(HttpStatusCode.Forbidden, "Unknown, the server refused the login. Log in again")]
+    [InlineData(HttpStatusCode.BadGateway, "Unknown, the server answered 502")]
+    public void Server_trouble_says_what_went_wrong(HttpStatusCode? status, string expected)
+    {
+        Assert.Equal(expected, LocationClient.ServerTrouble(status));
+    }
+
+    [Fact]
+    public void The_location_footers_fit_in_80_columns()
+    {
+        Assert.All(
+            (LocationClient.OnFooter + "\n" + LocationClient.OffFooter).Split('\n'),
+            line => Assert.True(line.Length <= 80, line));
     }
 }

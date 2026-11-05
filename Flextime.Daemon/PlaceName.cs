@@ -34,7 +34,7 @@ public static class PlaceName
             if (item.ValueKind != JsonValueKind.Object
                 || !item.TryGetProperty("deltas", out var deltas)
                 || deltas.ValueKind != JsonValueKind.Array
-                || deltas.EnumerateArray().Any(delta => delta.ValueKind != JsonValueKind.Number))
+                || deltas.EnumerateArray().Any(delta => delta.ValueKind != JsonValueKind.Number || !delta.TryGetInt64(out _)))
             {
                 continue;
             }
