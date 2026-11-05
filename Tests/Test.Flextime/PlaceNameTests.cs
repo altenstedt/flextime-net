@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Flextime;
 using Flextime.Daemon;
 
 namespace Test.Flextime;
@@ -62,5 +63,29 @@ public class PlaceNameTests
     public void Describe_without_a_document_is_not_named_yet()
     {
         Assert.Equal("Not named yet", PlaceName.Describe(Json("null"), "b9186da7f83b"));
+    }
+
+    private static Place Point(uint timestamp, ulong router, uint flags = 0) =>
+        new() { Timestamp = timestamp, Router = router, Flags = flags };
+
+    [Fact]
+    public void StayStart_spans_a_vpn_going_off()
+    {
+        Assert.Equal(200u, PlaceName.StayStart(
+            [Point(100, 1), Point(200, 2, PlaceFlags.Tunnel | PlaceFlags.Vpn), Point(300, 2)], 2));
+    }
+
+    [Fact]
+    public void StayStart_is_null_when_listen_has_another_router()
+    {
+        Assert.Null(PlaceName.StayStart([Point(100, 1)], 2));
+        Assert.Null(PlaceName.StayStart([], 2));
+    }
+
+    [Fact]
+    public void StayStart_stops_at_location_off()
+    {
+        Assert.Equal(300u, PlaceName.StayStart(
+            [Point(100, 2), Point(200, 0, PlaceFlags.LocationOff), Point(300, 2)], 2));
     }
 }

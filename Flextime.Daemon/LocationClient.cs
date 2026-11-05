@@ -102,23 +102,27 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
             return "Unknown, not logged in";
         }
 
-        // When the current router took effect, as listen recorded it.
-        var last = PlaceFiles.Last(Constants.MeasurementsFolder, 0);
+        // When the stay at the current router began, as listen recorded
+        // it.  Three days of files cover any file naming and most stays;
+        // a longer one starts at the window, which the server has too.
+        var points = PlaceFiles.Read(Constants.MeasurementsFolder, DateTime.UtcNow.AddDays(-3))
+            .Select(item => item.Place)
+            .ToList();
 
-        if (last == null || last.Router != current)
+        if (PlaceName.StayStart(points, current) is not { } start)
         {
             return "Not recorded yet";
         }
 
         try
         {
-            var from = DateTimeOffset.FromUnixTimeSeconds(last.Timestamp).UtcDateTime.Date.AddDays(-1);
+            var from = DateTimeOffset.FromUnixTimeSeconds(start).UtcDateTime.Date.AddDays(-1);
 
             using var ids = JsonDocument.Parse(await httpClient.GetStringAsync(
                 $"/ids?api-version=1.8&id={Uri.EscapeDataString(computer.Id)}&from={from:yyyy-MM-dd}",
                 cancellationToken));
 
-            var id = PlaceName.RouterAt(ids.RootElement, last.Timestamp);
+            var id = PlaceName.RouterAt(ids.RootElement, start);
 
             if (id == null)
             {

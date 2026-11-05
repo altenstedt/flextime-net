@@ -72,6 +72,30 @@ public static class PlaceName
         return latest >= start ? router : null;
     }
 
+    /// <summary>
+    /// When the stay at <paramref name="current"/> began: the first of the
+    /// change points at the end that all have this router.  A VPN going
+    /// on or off starts a change point of its own, with new flags and the
+    /// same router, and must not start a new stay.  Null when the latest
+    /// point is another router, which listen has not caught up with yet.
+    /// </summary>
+    public static uint? StayStart(IReadOnlyList<Place> points, ulong current)
+    {
+        uint? start = null;
+
+        for (var i = points.Count - 1; i >= 0; i--)
+        {
+            if (points[i].Router != current || (points[i].Flags & PlaceFlags.LocationOff) != 0)
+            {
+                break;
+            }
+
+            start = points[i].Timestamp;
+        }
+
+        return start;
+    }
+
     /// <summary>What the places document says about one router, as the Name line shows it.</summary>
     public static string Describe(JsonElement document, string router)
     {
