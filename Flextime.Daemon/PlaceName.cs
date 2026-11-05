@@ -12,14 +12,14 @@ public static class PlaceName
 {
     /// <summary>
     /// The server's router id in effect at the latest timestamp it has
-    /// for this computer, from an /ids 1.8 answer.  Null when the server
-    /// has nothing at or after <paramref name="start"/>, the time the
-    /// current place took effect, since its latest place is then an
-    /// older one.  An empty string is a stretch without a router.
+    /// for this computer, from an /ids 1.8 answer.  Null unless that run
+    /// began at or after <paramref name="start"/>, the time the current
+    /// stay began, since it is otherwise an older place.  An empty string is a stretch without a router.
     /// </summary>
     public static string? RouterAt(JsonElement ids, uint start)
     {
         var latest = 0L;
+        var runStart = 0L;
         string? router = null;
 
         if (ids.ValueKind != JsonValueKind.Object
@@ -40,16 +40,16 @@ public static class PlaceName
             }
 
             // A running sum of the deltas gives the timestamps back.
+            var timestamps = new List<long>();
             var last = 0L;
-            var count = 0;
 
             foreach (var delta in deltas.EnumerateArray())
             {
                 last += delta.GetInt64();
-                count++;
+                timestamps.Add(last);
             }
 
-            if (count == 0 || last <= latest)
+            if (timestamps.Count == 0 || last <= latest)
             {
                 continue;
             }
@@ -64,12 +64,21 @@ public static class PlaceName
             var run = places[places.GetArrayLength() - 1];
 
             latest = last;
+            runStart = run.ValueKind == JsonValueKind.Array && run.GetArrayLength() > 0
+                       && run[0].TryGetInt32(out var index) && index >= 0 && index < timestamps.Count
+                ? timestamps[index]
+                : 0;
             router = run.ValueKind == JsonValueKind.Array && run.GetArrayLength() > 1 && run[1].ValueKind == JsonValueKind.String
                 ? run[1].GetString()
                 : string.Empty;
         }
 
-        return latest >= start ? router : null;
+        // A run starts at the first timestamp at or after its change
+        // point, so one of this stay starts at or after its start.  The
+        // places are uploaded after the activity and may fail on their
+        // own, so the activity reaching past the start is not enough: the
+        // last run would still be the previous router.
+        return runStart >= start ? router : null;
     }
 
     /// <summary>

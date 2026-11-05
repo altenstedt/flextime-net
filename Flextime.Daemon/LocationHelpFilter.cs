@@ -15,7 +15,7 @@ public static class LocationHelp
                        en0. It is always a physical interface, never a VPN.
         Name           With --name, the name you gave the place in the web app,
                        Not named yet, or Not a place. A new place has no name
-                       until sync has sent it, within a minute.
+                       until the next sync has sent it.
         Network        The network's DNS domain, if it has one. Metered network
                        means the system marks it so, usually a phone's hotspot.
         Router maker   Who made the router, read from the first half of its

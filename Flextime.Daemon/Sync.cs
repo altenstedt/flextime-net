@@ -168,7 +168,7 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
 
     private string SummaryUri(string version, DateOnly? since) =>
         since.HasValue
-            ? $"/{Uri.EscapeDataString(computer.Id!)}/summary?api-version={version}&since={since.Value:yyyy-MM-dd}"
+            ? $"/{Uri.EscapeDataString(computer.Id!)}/summary?api-version={version}&since={since.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
             : $"/{Uri.EscapeDataString(computer.Id!)}/summary?api-version={version}";
 
     // The 1.5 summary is the 1.4 one with place watermarks.  An API

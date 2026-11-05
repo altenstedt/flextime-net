@@ -43,7 +43,9 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
             // Not the hash: the web shows the id the server makes of it,
             // and two ids for one router help nobody.  The web marks the
             // place measured now as "Here now"; name it there.
-            var router = report.Routers.FirstOrDefault(candidate => candidate.Mac != null);
+            // The router the place was taken from, so these lines and
+            // the Name line describe the same one.
+            var router = Location.CurrentRouter(report);
 
             Console.WriteLine(router == null
                 ? "Place           :  Recorded"
@@ -119,7 +121,7 @@ public class LocationClient(IHttpClientFactory httpClientFactory, DeviceCode dev
             var from = DateTimeOffset.FromUnixTimeSeconds(start).UtcDateTime.Date.AddDays(-1);
 
             using var ids = JsonDocument.Parse(await httpClient.GetStringAsync(
-                $"/ids?api-version=1.8&id={Uri.EscapeDataString(computer.Id)}&from={from:yyyy-MM-dd}",
+                $"/ids?api-version=1.8&id={Uri.EscapeDataString(computer.Id)}&from={from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}",
                 cancellationToken));
 
             var id = PlaceName.RouterAt(ids.RootElement, start);

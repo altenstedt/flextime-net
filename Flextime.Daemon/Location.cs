@@ -103,6 +103,19 @@ public static class Location
     public static string Hex(ulong router) => router.ToString("x12", CultureInfo.InvariantCulture);
 
     /// <summary>
+    /// The router the place is taken from: the one on the interface of
+    /// the direct IPv4 route, else the first with a hardware address.
+    /// </summary>
+    public static Router? CurrentRouter(NetworkReport report)
+    {
+        var ipv4 = report.Routes.FirstOrDefault(route => route.Family == "IPv4" && !route.Tunnel);
+
+        return report.Routers.FirstOrDefault(candidate => ipv4 != null && candidate.Interface == ipv4.Interface)
+               ?? report.Routers.FirstOrDefault(candidate => candidate.Mac != null)
+               ?? report.Routers.FirstOrDefault();
+    }
+
+    /// <summary>
     /// What a network report says about the place: the router on the
     /// interface internet traffic leaves through, or, when that is a
     /// tunnel, the router of the physical network under it — a VPN does
@@ -128,11 +141,7 @@ public static class Location
             flags |= PlaceFlags.Vpn;
         }
 
-        var ipv4 = report.Routes.FirstOrDefault(route => route.Family == "IPv4" && !route.Tunnel);
-
-        var router = report.Routers.FirstOrDefault(candidate => ipv4 != null && candidate.Interface == ipv4.Interface)
-                     ?? report.Routers.FirstOrDefault(candidate => candidate.Mac != null)
-                     ?? report.Routers.FirstOrDefault();
+        var router = CurrentRouter(report);
 
         if (router?.Mac == null || userId == null)
         {

@@ -125,6 +125,16 @@ public class LocationTests : IDisposable
     private static readonly Router HomeRouter = new("192.168.4.1", "en0", "95313127c39c", Mac);
 
     [Fact]
+    public void Current_router_is_the_one_the_reading_takes()
+    {
+        // Listed first, with a hardware address, but not where internet
+        // traffic leaves: the lines must not describe it.
+        var other = new Router("172.20.10.1", "en5", "x", "aa:bb:cc:dd:ee:ff");
+
+        Assert.Equal(HomeRouter, Location.CurrentRouter(Report([WiFi], [other, HomeRouter])));
+    }
+
+    [Fact]
     public void Reading_takes_the_router_internet_traffic_leaves_through()
     {
         var other = new Router("10.0.0.1", "en5", "x", "aa:bb:cc:dd:ee:ff");

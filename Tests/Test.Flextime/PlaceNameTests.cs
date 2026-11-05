@@ -8,7 +8,8 @@ public class PlaceNameTests
 {
     private static JsonElement Json(string text) => JsonDocument.Parse(text).RootElement;
 
-    // Two days; the second ends at 1000 + 50 + 50 = 1100.
+    // Two days; the second has timestamps 1000, 1050 and 1100, and its
+    // last run starts at 1050.
     private const string Ids = """
         {"items":[
           {"zone":"Europe/Stockholm","deltas":[500,100],"places":[[0,"aaaaaaaaaaaa",0]]},
@@ -16,16 +17,36 @@ public class PlaceNameTests
         ],"count":2,"continuation":""}
         """;
 
-    [Fact]
-    public void RouterAt_takes_the_last_run_of_the_latest_day()
+    [Theory]
+    [InlineData(1050u)]
+    [InlineData(1001u)]
+    public void RouterAt_takes_the_last_run_when_it_began_in_the_stay(uint start)
     {
-        Assert.Equal("b9186da7f83b", PlaceName.RouterAt(Json(Ids), 1050));
+        Assert.Equal("b9186da7f83b", PlaceName.RouterAt(Json(Ids), start));
     }
 
     [Fact]
     public void RouterAt_is_null_when_the_server_is_behind_the_place()
     {
         Assert.Null(PlaceName.RouterAt(Json(Ids), 1101));
+    }
+
+    [Fact]
+    public void RouterAt_is_null_when_activity_synced_but_places_did_not()
+    {
+        // Activity reaches 1100, past the arrival at 1060, but the last
+        // run is still the router before, from 1050.
+        Assert.Null(PlaceName.RouterAt(Json(Ids), 1060));
+    }
+
+    [Fact]
+    public void RouterAt_counts_a_run_carried_into_a_new_day()
+    {
+        // A stay from the evening before: today's only run starts at its
+        // first timestamp.
+        var ids = """{"items":[{"zone":"UTC","deltas":[2000,60],"places":[[0,"b9186da7f83b",0]]}]}""";
+
+        Assert.Equal("b9186da7f83b", PlaceName.RouterAt(Json(ids), 1500));
     }
 
     [Fact]
