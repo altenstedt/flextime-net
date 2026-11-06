@@ -241,10 +241,8 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
     /// Work per civil date, at a flat idle limit.
     ///
     /// One request carries every selected computer: the server merges
-    /// them, rather than a merge reinvented here.  This reads /ids 1.2,
-    /// one row per zone, where the web reads 1.9, one item per date: on
-    /// a day split across zones each extra row is a block of its own,
-    /// so it can count a minute more than the web.  The response has no date
+    /// them, so this is the same union the web client computes from,
+    /// rather than a merge reinvented here.  The response has no date
     /// field — it is a list of (zone, timestamps) rows — so the day a
     /// row belongs to is the date of its first timestamp read in the
     /// row's own zone.  Rows are computed separately and only their

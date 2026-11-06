@@ -12,101 +12,61 @@ public record DaySummary(
 
 public class MeasurementsFormatter(TimeSpan idle, int blocksPerDay)
 {
-    // A flat limit below the smallest a profile allows would split
-    // neighbours a minute apart, and a negative one would overlap blocks.
-    private readonly TimeSpan limit = TimeSpan.FromMinutes(Math.Max(IdleProfile.LimitMinimum, idle.TotalMinutes));
-
-    /// <summary>
-    /// How much of the clock one stamp stands for.  A stamp t is written
-    /// when there was input during the minute ending at t, so it covers
-    /// (t − 1 min, t]: a block starts a minute before its first stamp.
-    /// </summary>
-    public static readonly TimeSpan Minute = TimeSpan.FromMinutes(1);
-
-    /// <summary>
-    /// The blocks of a day: runs of stamps whose neighbours are bridged,
-    /// each from a minute before its first stamp to its last.  Between
-    /// neighbours the idle time is the step less the minute the later
-    /// stamp covers, and a gap is bridged when that idle time, rounded
-    /// to whole minutes, is shorter than the limit (see <see
-    /// cref="Bridged"/>, matching the web client).  The
-    /// limit is the one in force at the earlier stamp — the second the
-    /// gap starts — not its end or its middle, again as the web does.
-    /// A duplicate or unscheduled stamp less than a minute after the
-    /// previous one has no idle time and is always bridged.
-    ///
-    /// The day's first block alone is clipped at local midnight: its
-    /// leading minute stops at 00:00 in the stamp's own zone, so a day
-    /// never starts on the date before it.  Later blocks cannot reach
-    /// midnight.
-    /// </summary>
-    public static List<(DateTimeOffset Start, DateTimeOffset Stop)> Blocks(
-        IReadOnlyList<DateTimeOffset> timestamps, Func<TimeSpan, TimeSpan> limitAt)
-    {
-        var blocks = new List<(DateTimeOffset Start, DateTimeOffset Stop)>();
-
-        for (var i = 0; i < timestamps.Count; i++)
-        {
-            if (i > 0 && Bridged(timestamps[i] - timestamps[i - 1] - Minute, limitAt(timestamps[i - 1].TimeOfDay)))
-            {
-                blocks[^1] = (blocks[^1].Start, timestamps[i]);
-            }
-            else
-            {
-                var lead = i == 0 && timestamps[i].TimeOfDay < Minute ? timestamps[i].TimeOfDay : Minute;
-
-                blocks.Add((timestamps[i] - lead, timestamps[i]));
-            }
-        }
-
-        return blocks;
-    }
-
-    /// <summary>
-    /// Whether idle time between neighbours is bridged at a limit.  Idle
-    /// time counts in whole minutes, rounded half up as the web's
-    /// Math.round does, so a stamp a second early or late lands on the
-    /// minute it was meant for; a limit of L minutes bridges fewer than
-    /// L idle minutes.  Neighbours with no idle minute between them
-    /// always share a block, whatever the limit.
-    /// </summary>
-    public static bool Bridged(TimeSpan idle, TimeSpan limit)
-    {
-        var minutes = Math.Floor(idle.TotalMinutes + 0.5);
-
-        return minutes <= 0 || TimeSpan.FromMinutes(minutes) < limit;
-    }
-
-    public DaySummary? ComputeDay(IReadOnlyList<DateTimeOffset> timestamps) =>
-        ComputeDay(timestamps, _ => limit);
-
-    /// <summary>
-    /// The same day, computed against a curve rather than one limit.
-    /// See <see cref="Blocks"/> for where along a gap the limit is read.
-    /// </summary>
-    public static DaySummary? ComputeDay(IReadOnlyList<DateTimeOffset> timestamps, IdleProfile profile) =>
-        ComputeDay(timestamps, profile.LimitAt);
-
-    // Work is the sum of the block lengths: a minute for each block (less
-    // for a first block clipped at midnight) plus every bridged step.
-    private static DaySummary? ComputeDay(IReadOnlyList<DateTimeOffset> timestamps, Func<TimeSpan, TimeSpan> limitAt)
+    public DaySummary? ComputeDay(IReadOnlyList<DateTimeOffset> timestamps)
     {
         if (timestamps.Count < 2)
         {
             return null;
         }
 
-        var blocks = Blocks(timestamps, limitAt);
-        var start = blocks[0].Start;
+        var start = timestamps[0];
         var end = timestamps[^1];
         var work = TimeSpan.Zero;
 
-        foreach (var (blockStart, blockStop) in blocks)
+        for (var i = 1; i < timestamps.Count; i++)
         {
-            work += blockStop - blockStart;
+            var diff = timestamps[i] - timestamps[i - 1];
+
+            // Inclusive: a gap counts as active when it is no longer than
+            // the idle limit.  Matches the web client.
+            if (diff <= idle)
+            {
+                work += diff;
+            }
         }
 
-        return new DaySummary(DateOnly.FromDateTime(timestamps[0].Date), start, end, end - start, work, timestamps.Count);
+        return new DaySummary(DateOnly.FromDateTime(start.Date), start, end, end - start, work, timestamps.Count);
+    }
+
+    /// <summary>
+    /// The same day, computed against a curve rather than one limit.
+    /// The limit that decides a gap is the one in force at the second
+    /// the gap starts — not its end, not its middle — because that is
+    /// what the web client does, and a day straddling a step in the
+    /// curve is exactly where the two would otherwise disagree.
+    /// </summary>
+    public static DaySummary? ComputeDay(IReadOnlyList<DateTimeOffset> timestamps, IdleProfile profile)
+    {
+        if (timestamps.Count < 2)
+        {
+            return null;
+        }
+
+        var start = timestamps[0];
+        var end = timestamps[^1];
+        var work = TimeSpan.Zero;
+
+        for (var i = 1; i < timestamps.Count; i++)
+        {
+            var diff = timestamps[i] - timestamps[i - 1];
+
+            if (diff <= profile.LimitAt(timestamps[i - 1].TimeOfDay))
+            {
+                work += diff;
+            }
+        }
+
+        return new DaySummary(DateOnly.FromDateTime(start.Date), start, end, end - start, work, timestamps.Count);
     }
 
     public string FormatDay(DaySummary day) =>
@@ -150,12 +110,27 @@ public class MeasurementsFormatter(TimeSpan idle, int blocksPerDay)
 
         if (blocksPerDay > 0)
         {
-            var blocks = Blocks(measurements.Select(item => item.Timestamp).ToArray(), _ => limit);
+            var blocks = new List<(DateTimeOffset start, DateTimeOffset stop)> { (measurements[0].Timestamp, measurements[0].Timestamp) };
+
+            for (var i = 1; i < measurements.Length; i++)
+            {
+                if (measurements[i].Timestamp - measurements[i - 1].Timestamp <= idle)
+                {
+                    var tmp = blocks[^1];
+                    tmp.stop = measurements[i].Timestamp;
+
+                    blocks[^1] = tmp;
+                }
+                else
+                {
+                    blocks.Add((measurements[i].Timestamp, measurements[i].Timestamp));
+                }
+            }
 
             var suffix = string.Join(", ",
                 Enumerable
                     .Range(2, Math.Min(blocksPerDay, blocks.Count - 1))
-                    .Select(i => $@"{blocks[^i].Stop:HH:mm}/{blocks[^i].Stop - day.Start:hh\:mm}"));
+                    .Select(i => $@"{blocks[^i].stop:HH:mm}/{blocks[^i].stop - day.Start:hh\:mm}"));
 
             return string.IsNullOrEmpty(suffix) ? @base : $"{@base} [{suffix}]";
         }

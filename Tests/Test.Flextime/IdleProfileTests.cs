@@ -75,18 +75,14 @@ public class IdleProfileTests
         Assert.Throws<IdlePolicyException>(() => IdleProfile.Decode(Json(stored)));
 
     [Fact]
-    public void AGapIsBridgedBelowTheLimit()
+    public void AGapIsBridgedWhenItEqualsTheLimit()
     {
-        // Matching the web client.  A 10-minute step is 9 idle minutes,
-        // since the later stamp covers the minute before it; an 11-minute
-        // step is 10 idle minutes, which a 10-minute limit does not bridge.
+        // Inclusive, matching the web client.
         var profile = IdleProfile.Flat(10);
 
         var day = MeasurementsFormatter.ComputeDay([At(9), At(9, 10)], profile);
-        var past = MeasurementsFormatter.ComputeDay([At(9), At(9, 11)], profile);
 
-        Assert.Equal(TimeSpan.FromMinutes(11), day!.Work);
-        Assert.Equal(TimeSpan.FromMinutes(2), past!.Work);
+        Assert.Equal(TimeSpan.FromMinutes(10), day!.Work);
     }
 
     [Fact]
@@ -100,8 +96,8 @@ public class IdleProfileTests
         var bridged = MeasurementsFormatter.ComputeDay([At(16, 55), At(17, 30)], profile);
         var broken = MeasurementsFormatter.ComputeDay([At(17, 5), At(17, 40)], profile);
 
-        Assert.Equal(TimeSpan.FromMinutes(36), bridged!.Work);
-        Assert.Equal(TimeSpan.FromMinutes(2), broken!.Work);
+        Assert.Equal(TimeSpan.FromMinutes(35), bridged!.Work);
+        Assert.Equal(TimeSpan.Zero, broken!.Work);
     }
 
     [Fact]

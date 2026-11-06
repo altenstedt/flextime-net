@@ -10,7 +10,7 @@ public static class App
     /// <param name="splitWeek">-s, Split weeks with a new line</param>
     /// <param name="blocks">Number of blocks per day</param>
     /// <param name="days">-d, Number of days to show. 0 shows every day on disk.</param>
-    /// <param name="idle">-i, Idle limit in minutes, at least 1. Gaps of fewer idle minutes count as active time.</param>
+    /// <param name="idle">-i, Idle limit in minutes. Gaps no longer than this count as active time.</param>
     /// <param name="since">Print measurements since, for example 3d, "2 weeks ago", yesterday, P3D or 3.00:00:00. Takes precedence over --days.</param>
     /// <param name="timestamps">Include raw timestamps (Unix seconds) in JSON output.</param>
     /// <param name="json">Write JSON to standard out.</param>
