@@ -11,7 +11,9 @@ namespace Flextime;
 /// user reads there are the ones they write down.  Where the two could
 /// drift, this file follows the web: limits are clamped and rounded the
 /// same way, a short curve is padded the same way, and a gap is bridged
-/// when it is no longer than the limit at the second the gap starts.
+/// when its idle time — the step between two stamps less the minute the
+/// later one covers — is no longer than the limit at the second the gap
+/// starts.  A limit of 10 bridges 10 idle minutes.
 /// </summary>
 public sealed class IdleProfile
 {

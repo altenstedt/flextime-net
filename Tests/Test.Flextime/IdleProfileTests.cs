@@ -77,12 +77,16 @@ public class IdleProfileTests
     [Fact]
     public void AGapIsBridgedWhenItEqualsTheLimit()
     {
-        // Inclusive, matching the web client.
+        // Inclusive, matching the web client.  An 11-minute step is 10
+        // idle minutes, since the later stamp covers the minute before
+        // it; one more second is past the limit.
         var profile = IdleProfile.Flat(10);
 
-        var day = MeasurementsFormatter.ComputeDay([At(9), At(9, 10)], profile);
+        var day = MeasurementsFormatter.ComputeDay([At(9), At(9, 11)], profile);
+        var past = MeasurementsFormatter.ComputeDay([At(9), At(9, 11, 1)], profile);
 
-        Assert.Equal(TimeSpan.FromMinutes(10), day!.Work);
+        Assert.Equal(TimeSpan.FromMinutes(12), day!.Work);
+        Assert.Equal(TimeSpan.FromMinutes(2), past!.Work);
     }
 
     [Fact]
@@ -96,8 +100,8 @@ public class IdleProfileTests
         var bridged = MeasurementsFormatter.ComputeDay([At(16, 55), At(17, 30)], profile);
         var broken = MeasurementsFormatter.ComputeDay([At(17, 5), At(17, 40)], profile);
 
-        Assert.Equal(TimeSpan.FromMinutes(35), bridged!.Work);
-        Assert.Equal(TimeSpan.Zero, broken!.Work);
+        Assert.Equal(TimeSpan.FromMinutes(36), bridged!.Work);
+        Assert.Equal(TimeSpan.FromMinutes(2), broken!.Work);
     }
 
     [Fact]
