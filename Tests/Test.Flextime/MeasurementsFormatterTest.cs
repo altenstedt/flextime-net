@@ -52,27 +52,57 @@ public class MeasurementsFormatterTest
     }
 
     [Fact]
-    public void OneInactiveMinuteIsBridgedAtLimitOne()
+    public void OneInactiveMinuteIsSplitAtLimitOneAndBridgedAtTwo()
     {
         DateTimeOffset[] stamps = [.. Minutes(At(9, 1), 5), .. Minutes(At(9, 7), 2)];
 
-        var blocks = MeasurementsFormatter.Blocks(stamps, _ => TimeSpan.FromMinutes(1));
+        var split = MeasurementsFormatter.Blocks(stamps, _ => TimeSpan.FromMinutes(1));
+        var bridged = MeasurementsFormatter.Blocks(stamps, _ => TimeSpan.FromMinutes(2));
 
-        Assert.Equal([(At(9), At(9, 8))], blocks);
-        Assert.Equal(TimeSpan.FromMinutes(8), new MeasurementsFormatter(TimeSpan.FromMinutes(1), 0).ComputeDay(stamps)!.Work);
+        Assert.Equal([(At(9), At(9, 5)), (At(9, 6), At(9, 8))], split);
+        Assert.Equal([(At(9), At(9, 8))], bridged);
+        Assert.Equal(TimeSpan.FromMinutes(7), new MeasurementsFormatter(TimeSpan.FromMinutes(1), 0).ComputeDay(stamps)!.Work);
+        Assert.Equal(TimeSpan.FromMinutes(8), new MeasurementsFormatter(TimeSpan.FromMinutes(2), 0).ComputeDay(stamps)!.Work);
     }
 
     [Fact]
-    public void IdleTimeEqualToTheLimitIsBridgedOneSecondMoreIsNot()
+    public void IdleTimeBelowTheLimitIsBridgedEqualIsNot()
     {
         var formatter = new MeasurementsFormatter(TimeSpan.FromMinutes(10), 0);
 
-        // An 11-minute step is 10 idle minutes.
-        var bridged = formatter.ComputeDay([At(9), At(9, 11)])!;
-        var broken = formatter.ComputeDay([At(9), At(9, 11, 1)])!;
+        // A 10-minute step is 9 idle minutes, an 11-minute step 10.
+        var bridged = formatter.ComputeDay([At(9), At(9, 10)])!;
+        var broken = formatter.ComputeDay([At(9), At(9, 11)])!;
 
-        Assert.Equal(TimeSpan.FromMinutes(12), bridged.Work);
+        Assert.Equal(TimeSpan.FromMinutes(11), bridged.Work);
         Assert.Equal(TimeSpan.FromMinutes(2), broken.Work);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void IdleTimeCountsInWholeMinutes(int late)
+    {
+        // A missed minute, the next stamp a second early, on time or
+        // late: split at a limit of one minute, bridged at two.
+        DateTimeOffset[] stamps = [At(9), At(9, 2).AddSeconds(late)];
+
+        Assert.Equal(2, MeasurementsFormatter.Blocks(stamps, _ => TimeSpan.FromMinutes(1)).Count);
+        Assert.Single(MeasurementsFormatter.Blocks(stamps, _ => TimeSpan.FromMinutes(2)));
+    }
+
+    [Fact]
+    public void AFlatLimitBelowOneMinuteCountsAsOne()
+    {
+        // A stamp off the minute, thirty seconds in, still shares the block.
+        DateTimeOffset[] stamps = [At(9), At(9, 0, 30), At(9, 1, 30), At(9, 3)];
+
+        var negative = new MeasurementsFormatter(TimeSpan.FromMinutes(-5), 0).ComputeDay(stamps)!;
+        var one = new MeasurementsFormatter(TimeSpan.FromMinutes(1), 0).ComputeDay(stamps)!;
+
+        Assert.Equal(one.Work, negative.Work);
+        Assert.Equal(TimeSpan.FromSeconds(3 * 60 + 30), negative.Work);
     }
 
     [Fact]
@@ -157,9 +187,9 @@ public class MeasurementsFormatterTest
                     Create(DateTimeOffset.Parse("2023-12-01T08:23:49+01:00"), TimeSpan.FromMinutes(10))
                 ],
                 // Ten idle minutes (an 11-minute step less the minute the
-                // later stamp covers) against a 10-minute limit counts as
-                // active — inclusive, matching the web client.
-                "2023-12-01 06:59 – 08:23 01:24 | 00:13 w/48 Fri",
+                // later stamp covers) against a 10-minute limit is not
+                // bridged, matching the web client: three one-minute blocks.
+                "2023-12-01 06:59 – 08:23 01:24 | 00:03 w/48 Fri",
                 TimeSpan.FromMinutes(10),
                 0);
 

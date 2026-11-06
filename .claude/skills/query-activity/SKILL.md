@@ -50,11 +50,16 @@ PATH, use it directly instead — it starts faster.)
 }
 ```
 
-- `start`/`end` — first and last recorded activity of the day, in the day's `zone`.
-- `span` — `end - start`. `work` — active time: sum of gaps between consecutive
-  measurements that are no longer than the idle limit (inclusive; default
-  10 minutes). The `flextime` CLI and the web client use the same rule, so
-  numbers match across clients at the same limit.
+- A timestamp t stands for the minute ending at t, (t − 1 min, t].
+- `start`/`end` — the day's activity in its `zone`: `start` is a minute before
+  the first sample (never before local midnight), `end` the last sample.
+- `span` — `end - start`. `work` — the sum of the day's blocks. Between
+  neighbouring samples the idle time is the step less one minute, rounded to
+  whole minutes; it is bridged (the whole step counts) when it is shorter than
+  the idle limit (default 10 minutes, so up to 9 idle minutes bridge).
+  Otherwise the later sample opens a block of its own minute. The `flextime`
+  CLI and the web client use the same rule, so numbers match across clients at
+  the same limit.
 - `measurements` — number of recorded samples (roughly one per active minute).
 
 ## Exit codes

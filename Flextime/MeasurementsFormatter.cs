@@ -12,6 +12,10 @@ public record DaySummary(
 
 public class MeasurementsFormatter(TimeSpan idle, int blocksPerDay)
 {
+    // A flat limit below the smallest a profile allows would split
+    // neighbours a minute apart, and a negative one would overlap blocks.
+    private readonly TimeSpan limit = TimeSpan.FromMinutes(Math.Max(IdleProfile.LimitMinimum, idle.TotalMinutes));
+
     /// <summary>
     /// How much of the clock one stamp stands for.  A stamp t is written
     /// when there was input during the minute ending at t, so it covers
@@ -23,8 +27,9 @@ public class MeasurementsFormatter(TimeSpan idle, int blocksPerDay)
     /// The blocks of a day: runs of stamps whose neighbours are bridged,
     /// each from a minute before its first stamp to its last.  Between
     /// neighbours the idle time is the step less the minute the later
-    /// stamp covers, and a gap is bridged when that idle time is no
-    /// longer than the limit (inclusive, matching the web client).  The
+    /// stamp covers, and a gap is bridged when that idle time, rounded
+    /// to whole minutes, is shorter than the limit (see <see
+    /// cref="Bridged"/>, matching the web client).  The
     /// limit is the one in force at the earlier stamp — the second the
     /// gap starts — not its end or its middle, again as the web does.
     /// A duplicate or unscheduled stamp less than a minute after the
@@ -42,7 +47,7 @@ public class MeasurementsFormatter(TimeSpan idle, int blocksPerDay)
 
         for (var i = 0; i < timestamps.Count; i++)
         {
-            if (i > 0 && timestamps[i] - timestamps[i - 1] - Minute <= limitAt(timestamps[i - 1].TimeOfDay))
+            if (i > 0 && Bridged(timestamps[i] - timestamps[i - 1] - Minute, limitAt(timestamps[i - 1].TimeOfDay)))
             {
                 blocks[^1] = (blocks[^1].Start, timestamps[i]);
             }
@@ -57,8 +62,23 @@ public class MeasurementsFormatter(TimeSpan idle, int blocksPerDay)
         return blocks;
     }
 
+    /// <summary>
+    /// Whether idle time between neighbours is bridged at a limit.  Idle
+    /// time counts in whole minutes, rounded half up as the web's
+    /// Math.round does, so a stamp a second early or late lands on the
+    /// minute it was meant for; a limit of L minutes bridges fewer than
+    /// L idle minutes.  Neighbours with no idle minute between them
+    /// always share a block, whatever the limit.
+    /// </summary>
+    public static bool Bridged(TimeSpan idle, TimeSpan limit)
+    {
+        var minutes = Math.Floor(idle.TotalMinutes + 0.5);
+
+        return minutes <= 0 || TimeSpan.FromMinutes(minutes) < limit;
+    }
+
     public DaySummary? ComputeDay(IReadOnlyList<DateTimeOffset> timestamps) =>
-        ComputeDay(timestamps, _ => idle);
+        ComputeDay(timestamps, _ => limit);
 
     /// <summary>
     /// The same day, computed against a curve rather than one limit.
@@ -130,7 +150,7 @@ public class MeasurementsFormatter(TimeSpan idle, int blocksPerDay)
 
         if (blocksPerDay > 0)
         {
-            var blocks = Blocks(measurements.Select(item => item.Timestamp).ToArray(), _ => idle);
+            var blocks = Blocks(measurements.Select(item => item.Timestamp).ToArray(), _ => limit);
 
             var suffix = string.Join(", ",
                 Enumerable
