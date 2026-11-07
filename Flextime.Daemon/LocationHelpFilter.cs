@@ -22,7 +22,8 @@ public static class LocationHelp
                        hardware address. Only shown here, never sent.
         Route          How internet traffic leaves this computer. It never
                        changes the place.
-        VPN            VPN connections that are up.
+        VPN            VPN connections the system lists as up. A VPN it does not
+                       list shows only in Route.
 
         The maker is a hint. To check a place, look at Here now in the web
         app. A place you have never been should show up as Not named yet.
