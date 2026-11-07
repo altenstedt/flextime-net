@@ -166,20 +166,30 @@ public class UserInputMonitor(
                     throw new InvalidOperationException("Screen saver monitor not found.");
                 }
 
+                // The connection is shared with the idle reads, and a
+                // handler that throws, or a signal that fails to read,
+                // closes it.  So both end here, as a logged error.
                 await screenSaverMonitor.WatchActiveChangedAsync((Notification<bool> notification) =>
                 {
                     if (notification.HasValue)
                     {
-                        var active = notification.Value;
+                        try
+                        {
+                            var active = notification.Value;
 
-                        SessionLockChanged(active);
-                        logger.LogTrace(active ? "ScreenSaver switched to active" : "ScreenSaver switched to inactive");
+                            SessionLockChanged(active);
+                            logger.LogTrace(active ? "ScreenSaver switched to active" : "ScreenSaver switched to inactive");
+                        }
+                        catch (Exception exception)
+                        {
+                            logger.LogError(exception, "ScreenSaver exception.");
+                        }
                     }
                     else if (notification.IsCompletion)
                     {
                         logger.LogError(notification.CompletionReason, "ScreenSaver exception.");
                     }
-                }, ObserverFlags.None);
+                }, ObserverFlags.EmitOnReaderFailed);
 
                 // The signal only tells of a change, as on Windows.  Read
                 // after subscribing, so that no change falls in between.
