@@ -126,7 +126,7 @@ public class Export(IHttpClientFactory httpClientFactory, DeviceCode deviceCode)
     {
         ["computers"] = "Each computer with its id, the name you gave it, the hostnames it reported, and its first and last day with data.",
         ["activity"] = "For each computer, one entry per day and time zone. Timestamps are Unix seconds, one for each minute the computer was in use.",
-        ["places"] = "Only with location on. Each place is [start, router, flags]: when it took effect (Unix seconds), a hashed router id, and flags. Flag 1 means the internet went through a tunnel, 2 a VPN was connected, 4 location was turned off.",
+        ["places"] = "Only with location on. Each place is [start, router, flags]: when it took effect (Unix seconds), a hashed router id, and flags. Flag 1 means the internet went through a tunnel, 2 a VPN was connected, 4 location was turned off, 8 the network was metered, like a phone hotspot.",
         ["hints"] = "The network domain each router was last seen on.",
         ["settings"] = "Your idle profiles, the time you marked as not work, and your names for places, as the web app stores them.",
     };
