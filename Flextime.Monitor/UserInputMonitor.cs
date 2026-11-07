@@ -168,16 +168,16 @@ public class UserInputMonitor(
 
                 await screenSaverMonitor.WatchActiveChangedAsync((Notification<bool> notification) =>
                 {
-                    if (notification.Exception == null)
+                    if (notification.HasValue)
                     {
                         var active = notification.Value;
 
                         SessionLockChanged(active);
                         logger.LogTrace(active ? "ScreenSaver switched to active" : "ScreenSaver switched to inactive");
                     }
-                    else
+                    else if (notification.IsCompletion)
                     {
-                        logger.LogError(notification.Exception, "ScreenSaver exception.");
+                        logger.LogError(notification.CompletionReason, "ScreenSaver exception.");
                     }
                 }, ObserverFlags.None);
 
