@@ -55,6 +55,14 @@ public static class TimeZones
 
     public static bool TryGet(string id, [NotNullWhen(true)] out TimeZoneInfo? zone)
     {
+        // An empty zone is what a file written without one holds.
+        if (string.IsNullOrEmpty(id))
+        {
+            zone = null;
+
+            return false;
+        }
+
         if (zonesById.TryGetValue(id, out zone))
         {
             return true;

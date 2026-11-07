@@ -113,7 +113,8 @@ public static class PlaceFiles
         {
             var measurements = TryParse(file);
 
-            if (measurements == null)
+            // Its points could not be placed on any day; see Reader.
+            if (measurements == null || !MeasurementFiles.HasKnownZone(file, measurements))
             {
                 continue;
             }

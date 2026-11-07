@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using Google.Protobuf;
 
@@ -104,6 +105,35 @@ public static class MeasurementFiles
 
             throw;
         }
+    }
+
+    // Files this process has already named as in an unknown zone, so a
+    // sync pass that reads a file for its measurements and again for its
+    // places says so once.
+    private static readonly ConcurrentDictionary<string, string> unknownZones = new();
+
+    /// <summary>
+    /// Whether the zone <paramref name="file"/> was written in is one
+    /// this machine can resolve.  When it is not, says so once, on
+    /// standard error, naming the file and the zone; the caller skips
+    /// the file.  The file itself is left alone: sync never uploads it
+    /// (the API refuses a zone it cannot resolve too) and never deletes
+    /// it, and it is read again once the zone resolves, after a tzdata
+    /// update say.
+    /// </summary>
+    public static bool HasKnownZone(string file, Measurements measurements)
+    {
+        if (TimeZones.TryGet(measurements.Zone, out _))
+        {
+            return true;
+        }
+
+        if (unknownZones.TryAdd(Path.GetFullPath(file), measurements.Zone))
+        {
+            Console.Error.WriteLine($"Skipping measurement file {TerminalText.Clean(Path.GetFileName(file))} in unknown time zone \"{TerminalText.Clean(measurements.Zone)}\"; it is kept and read again once the zone is known.");
+        }
+
+        return false;
     }
 
     /// <summary>

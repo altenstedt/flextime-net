@@ -34,6 +34,15 @@ public static class Reader
                 continue;
             }
 
+            // A file in a zone this machine cannot resolve cannot be
+            // placed on any day.  Skipped, not thrown on: one such file
+            // would otherwise stop every sync, info and the flextime
+            // CLI until someone removed it by hand.
+            if (!MeasurementFiles.HasKnownZone(file, measurements))
+            {
+                continue;
+            }
+
             list.AddRange(measurements.Measurements_.Select(item => new MeasurementWithZone(item, measurements.Zone, measurements.Interval)));
         }
 

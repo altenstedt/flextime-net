@@ -56,6 +56,18 @@ public class PlaceFilesTests : IDisposable
     }
 
     [Fact]
+    public void Read_skips_a_file_in_an_unknown_zone()
+    {
+        Write("2026-10-12T080000.bin", "Europe/Stockholm", [1000], (900, 1, 0));
+        Write("2026-10-12T090000.bin", "Mars/Olympus_Mons", [4600], (4500, 2, 0));
+        Write("2026-10-12T100000.bin", "Europe/Stockholm", [8200], (8100, 3, 0));
+
+        var places = PlaceFiles.Read(folder);
+
+        Assert.Equal([900u, 8100u], places.Select(item => item.Place.Timestamp));
+    }
+
+    [Fact]
     public void Read_of_a_missing_folder_is_empty()
     {
         Assert.Empty(PlaceFiles.Read(Path.Combine(folder, "missing")));

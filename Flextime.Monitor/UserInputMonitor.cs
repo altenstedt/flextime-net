@@ -38,6 +38,9 @@ public class UserInputMonitor(
     // already uploaded would send its minutes again, under another day.
     private string? lastZone;
 
+    // The last unknown zone warned about.
+    private string? unknownZone;
+
     // The zone last handed to ZoneChanged.  Null at start, so the first
     // file publishes its zone too, whatever listen wrote before it.
     private string? publishedZone;
@@ -613,11 +616,19 @@ public class UserInputMonitor(
         var zone = options.TimeZone ?? GetTimeZoneInfo();
 
         // A zone .NET cannot name ("Local", when it cannot find the zone
-        // files) is no zone to move to: readers would refuse the file.
-        // The file goes on in the zone it began in.
+        // files) is no zone to move to: readers skip a file in it.  The
+        // file goes on in the zone it began in.  A first file in such a
+        // zone keeps it, since any zone guessed here would be wrong for
+        // good once uploaded.  Readers leave that file on disk.
         if (lastZone != null && zone != lastZone && !TimeZones.TryGet(zone, out _))
         {
-            logger.LogWarning("Time zone {Zone} is unknown; keeping {Last}.", zone, lastZone);
+            // Once per zone, not at every flush.
+            if (zone != unknownZone)
+            {
+                logger.LogWarning("Time zone {Zone} is unknown; keeping {Last}.", zone, lastZone);
+
+                unknownZone = zone;
+            }
 
             zone = lastZone;
         }

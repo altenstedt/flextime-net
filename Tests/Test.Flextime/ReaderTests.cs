@@ -270,6 +270,42 @@ public class ReaderTests : IDisposable
         Assert.Equal(new[] { new DateOnly(2024, 1, 1) }, byDates.Keys);
     }
 
+    [Theory]
+    [InlineData("Mars/Olympus_Mons")]
+    [InlineData("Local")]
+    [InlineData("")]
+    [InlineData("../../../etc/passwd")]
+    public void FileInUnknownZoneIsSkipped(string zone)
+    {
+        var timestamp = DateTimeOffset.Parse("2024-01-01T10:00:00+00:00");
+
+        WriteFile(folder, "UTC", timestamp);
+        WriteFile(folder, zone, timestamp.AddDays(1));
+        WriteFile(folder, "UTC", timestamp.AddDays(2));
+
+        Assert.False(TimeZones.TryGet(zone, out _));
+
+        var byDates = Reader.ReadFiles(folder, TimeSpan.MinValue);
+
+        Assert.Equal(new[] { new DateOnly(2024, 1, 1), new DateOnly(2024, 1, 3) }, byDates.Keys);
+
+        // Kept for when the zone resolves; nothing reading deletes it.
+        Assert.Equal(3, Directory.GetFiles(folder, "*.bin").Length);
+    }
+
+    [Fact]
+    public void WindowSkipsFileInUnknownZone()
+    {
+        var timestamp = DateTimeOffset.Parse("2024-01-01T10:00:00+00:00");
+
+        WriteFile(folder, "Mars/Olympus_Mons", timestamp);
+        WriteFile(folder, "UTC", timestamp.AddDays(1));
+
+        var byDates = Reader.ReadWindow(folder, null);
+
+        Assert.Equal(new[] { new DateOnly(2024, 1, 2) }, byDates.Keys);
+    }
+
     [Fact]
     public void ReplaceRewritesWholeAndLeavesNoTemporaryFile()
     {

@@ -153,6 +153,37 @@ public class SyncRefusalTests : IDisposable
     }
 
     [Fact]
+    public async Task A_file_in_an_unknown_zone_is_skipped_and_kept()
+    {
+        var bogus = new Measurements { Interval = 60, Zone = "Mars/Olympus_Mons" };
+
+        bogus.Measurements_.Add(new Measurement { Timestamp = Tuesday + 3600, Kind = Measurement.Types.Kind.Measurement });
+
+        var path = Path.Combine(Measurements, "2025-10-13T090000.bin");
+
+        using (var stream = File.Create(path))
+        {
+            bogus.WriteTo(stream);
+        }
+
+        var api = new FakeApi(_ => new HttpResponseMessage(HttpStatusCode.NoContent));
+        var lines = new List<string>();
+
+        await CreateSync(api).SyncAndLog(new ListLogger(lines));
+
+        // Both days from the readable file go up, without the skipped
+        // file's minute, and the pass completes.
+        Assert.Equal(2, api.Uploads.Count);
+        Assert.DoesNotContain(api.Uploads, upload => upload.Contains($"{Tuesday + 3600}"));
+        Assert.DoesNotContain(api.Uploads, upload => upload.Contains("Mars"));
+        Assert.True(File.Exists(ReconcilePath));
+
+        // Left on disk, as it was, for when the zone resolves.
+        Assert.True(File.Exists(path));
+        Assert.Equal(bogus.ToByteArray(), File.ReadAllBytes(path));
+    }
+
+    [Fact]
     public async Task A_pass_with_only_refusals_moves_the_reconcile_stamp()
     {
         await CreateSync(RefusingMonday(HttpStatusCode.UnprocessableEntity)).SyncAndLog(NullLogger.Instance);
