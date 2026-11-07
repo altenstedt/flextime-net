@@ -287,12 +287,17 @@ public sealed class PlaceRecorder(IPlaceSource source, ILogger logger)
     {
         var parts = new List<string>();
 
-        if ((flags & PlaceFlags.Tunnel) != 0)
-        {
-            parts.Add("through a tunnel");
-        }
+        // A full VPN sets both flags and reads as one thing.  A tunnel
+        // with no VPN client behind it, or a VPN that carries only its
+        // own networks, keeps its own words.
+        var tunnel = (flags & PlaceFlags.Tunnel) != 0;
+        var vpn = (flags & PlaceFlags.Vpn) != 0;
 
-        if ((flags & PlaceFlags.Vpn) != 0)
+        if (tunnel)
+        {
+            parts.Add(vpn ? "through a VPN" : "through a tunnel");
+        }
+        else if (vpn)
         {
             parts.Add("VPN connected");
         }
