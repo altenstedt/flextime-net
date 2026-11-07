@@ -1,9 +1,24 @@
+using System.Text.Json.Nodes;
 using Flextime.Daemon;
 
 namespace Test.Flextime;
 
-public class ExportTests
+public class ExportTests : IDisposable
 {
+    private readonly string folder = Path.Combine(Path.GetTempPath(), $"flextime-export-tests-{Guid.NewGuid():N}");
+
+    public ExportTests()
+    {
+        Directory.CreateDirectory(folder);
+    }
+
+    public void Dispose()
+    {
+        Directory.Delete(folder, recursive: true);
+    }
+
+    private static readonly JsonObject Sample = new() { ["exported"] = "2026-10-21T08:00:00Z" };
+
     private static readonly DateTimeOffset Now = new(2026, 10, 21, 8, 0, 0, TimeSpan.Zero);
 
     private static Func<string, Task<string>> Server(Dictionary<string, string> answers, List<string>? asked = null) =>
@@ -84,5 +99,89 @@ public class ExportTests
         }, asked), Now, "7.15.0");
 
         Assert.Contains("/ids?api-version=1.5&id=a%20b", asked);
+    }
+
+    [Fact]
+    public void Save_writes_a_new_file()
+    {
+        var path = Path.Combine(folder, "export.json");
+
+        Export.Save(Sample, path);
+
+        Assert.Equal("2026-10-21T08:00:00Z", JsonNode.Parse(File.ReadAllText(path))!["exported"]!.GetValue<string>());
+        Assert.Equal([path], Directory.GetFiles(folder));
+
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(path));
+        }
+    }
+
+    [Fact]
+    public void Save_replaces_an_existing_file_and_its_mode()
+    {
+        var path = Path.Combine(folder, "export.json");
+
+        File.WriteAllText(path, "an older, longer export that must not show through");
+
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+        }
+
+        Export.Save(Sample, path);
+
+        Assert.NotNull(JsonNode.Parse(File.ReadAllText(path)));
+        Assert.Equal([path], Directory.GetFiles(folder));
+
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(path));
+        }
+    }
+
+    [Fact]
+    public void Save_replaces_a_symbolic_link_instead_of_writing_through_it()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var victim = Path.Combine(folder, "victim.txt");
+        var path = Path.Combine(folder, "export.json");
+
+        File.WriteAllText(victim, "keep me");
+        File.CreateSymbolicLink(path, victim);
+
+        Export.Save(Sample, path);
+
+        Assert.Equal("keep me", File.ReadAllText(victim));
+        Assert.Null(new FileInfo(path).LinkTarget);
+        Assert.NotNull(JsonNode.Parse(File.ReadAllText(path)));
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(path));
+    }
+
+    [Fact]
+    public void Save_into_a_missing_folder_fails_and_leaves_nothing()
+    {
+        var path = Path.Combine(folder, "missing", "export.json");
+
+        Assert.ThrowsAny<IOException>(() => Export.Save(Sample, path));
+        Assert.Empty(Directory.GetFileSystemEntries(folder));
+    }
+
+    [Fact]
+    public void Save_over_a_folder_fails_and_removes_its_temporary_file()
+    {
+        var path = Path.Combine(folder, "export.json");
+
+        Directory.CreateDirectory(path);
+
+        // One of the two Invoke reports as "Cannot write".
+        var exception = Record.Exception(() => Export.Save(Sample, path));
+
+        Assert.True(exception is IOException or UnauthorizedAccessException, exception?.ToString());
+        Assert.Equal([path], Directory.GetFileSystemEntries(folder));
     }
 }

@@ -44,18 +44,7 @@ public class Export(IHttpClientFactory httpClientFactory, DeviceCode deviceCode)
             }
             else
             {
-                // Only the user may read the file: it is all their data.
-                var options = new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write };
-
-                if (!OperatingSystem.IsWindows())
-                {
-                    options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-                }
-
-                await using (var stream = new FileStream(path, options))
-                {
-                    Write(export, stream);
-                }
+                Save(export, path);
 
                 var computers = export["computers"]!.AsArray().Count;
                 var days = export["activity"]!.AsArray().Sum(item => item!["days"]!.AsArray().Count);
@@ -146,6 +135,15 @@ public class Export(IHttpClientFactory httpClientFactory, DeviceCode deviceCode)
         JsonNode.Parse(body)?["items"]?.AsArray() is { } items
             ? (JsonArray)items.DeepClone()
             : [];
+
+    /// <summary>
+    /// Writes the export to <paramref name="path"/>, readable by the user
+    /// only: it is all their data.  Through a new file renamed over the
+    /// path, so a symbolic link planted there is replaced, not written
+    /// through, and an existing file's looser mode is not kept.
+    /// </summary>
+    public static void Save(JsonObject export, string path) =>
+        PrivateFile.Replace(path, stream => Write(export, stream));
 
     private static void Write(JsonObject export, Stream stream)
     {

@@ -77,35 +77,8 @@ public static class MeasurementFiles
     /// crash midway leaves the old file as it was.  The temporary file is
     /// not a .bin file, so nothing reads it.
     /// </summary>
-    public static void Replace(string path, Measurements measurements)
-    {
-        var temporary = $"{path}.{Guid.NewGuid():N}.tmp";
-
-        // Private to the user from the moment it exists, whatever the
-        // umask, as the token file is.
-        var fileOptions = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write };
-
-        if (!OperatingSystem.IsWindows())
-        {
-            fileOptions.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-        }
-
-        try
-        {
-            using (var stream = new FileStream(temporary, fileOptions))
-            {
-                measurements.WriteTo(stream);
-            }
-
-            File.Move(temporary, path, overwrite: true);
-        }
-        catch
-        {
-            TryDelete(temporary);
-
-            throw;
-        }
-    }
+    public static void Replace(string path, Measurements measurements) =>
+        PrivateFile.Replace(path, measurements.WriteTo);
 
     // Files this process has already named as in an unknown zone, so a
     // sync pass that reads a file for its measurements and again for its
@@ -144,18 +117,6 @@ public static class MeasurementFiles
     /// </summary>
     public static FileStream OpenRead(string path) =>
         new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-
-    private static void TryDelete(string path)
-    {
-        try
-        {
-            File.Delete(path);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            // A stray temporary file is not a .bin file; nothing reads it.
-        }
-    }
 
     private static bool TryStarted(string file, out DateTime started) =>
         DateTime.TryParseExact(
