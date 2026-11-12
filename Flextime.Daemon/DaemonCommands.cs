@@ -21,11 +21,22 @@ public class DaemonCommands(
     ComputerClient computerClient)
 {
     /// <summary>Flextime -- track working hours. Without a command, show the installation.</summary>
-    [ConsoleAppFilter<NoArgumentsFilter>]
+    /// <param name="days">-d, Also list the latest days, or 0 for all.</param>
+    /// <param name="noColor">No colour; NO_COLOR set and not empty does the same.</param>
+    /// <param name="json">Write JSON to standard out.</param>
     [Command("")]
-    public async Task Root()
+    public async Task<int> Root(
+        [HideDefaultValue] int? days = null, bool noColor = false, bool json = false,
+        CancellationToken cancellationToken = default)
     {
-        await printInfo.Invoke();
+        if (days is < 0)
+        {
+            ConsoleApp.LogError("--days must be 0 or more.");
+
+            return 1;
+        }
+
+        return await printInfo.Invoke(days, noColor, json, cancellationToken);
     }
 
     /// <summary>Log in to the Flextime server, so sync can upload</summary>

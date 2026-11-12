@@ -55,8 +55,10 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         var since = DueWindow();
         var inSync = 0;
 
-        await ActOnRemoteStatus(upload: true, (line, status) =>
+        await ActOnRemoteStatus(upload: true, day =>
         {
+            var (_, line, status, _) = day;
+
             if (status == DayStatus.InSync)
             {
                 // A recurring install runs this once a minute, and by
@@ -79,8 +81,10 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
 
     public Task SyncAndLog(ILogger logger)
     {
-        return ActOnRemoteStatus(upload: true, (line, status) =>
+        return ActOnRemoteStatus(upload: true, day =>
         {
+            var (_, line, status, _) = day;
+
             switch (status)
             {
                 case DayStatus.InSync:
@@ -147,9 +151,21 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         return today.AddDays(-WindowDays);
     }
 
-    public Task Print(int count)
+    // One day compared with the server.  Waiting is the oldest local
+    // timestamp the server does not have yet, in Unix seconds, when
+    // that can be told from the watermark.
+    public record DayResult(DateOnly Date, string Line, DayStatus Status, long? Waiting = null);
+
+    // Every local day against the server, oldest first.  Nothing is
+    // uploaded.
+    public async Task<List<DayResult>> Compare(CancellationToken cancellationToken = default)
     {
-        return ActOnRemoteStatus(upload: false, (line, _) => AnsiConsole.WriteLine(TerminalText.Clean(line)), limit: count);
+        var days = new List<DayResult>();
+
+        await ActOnRemoteStatus(upload: false, day => days.Add(day with { Line = TerminalText.Clean(day.Line) }),
+            cancellationToken: cancellationToken);
+
+        return days;
     }
 
     // Places are synced once location has ever been turned on or off —
@@ -161,10 +177,12 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         Location.WasEverSet(LocationPath)
         || Location.ReadClear(LocationClearPath)?.Pending == true;
 
-    private async Task<SummaryDataContract?> GetSummary(string version, DateOnly? since) =>
+    private async Task<SummaryDataContract?> GetSummary(string version, DateOnly? since,
+        CancellationToken cancellationToken = default) =>
         await httpClient.GetFromJsonAsync(
             SummaryUri(version, since),
-            SummarySourceGenerationContext.Default.SummaryDataContract);
+            SummarySourceGenerationContext.Default.SummaryDataContract,
+            cancellationToken);
 
     private string SummaryUri(string version, DateOnly? since) =>
         since.HasValue
@@ -252,8 +270,8 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         }
     }
 
-    private async Task ActOnRemoteStatus(bool upload, Action<string, DayStatus> output, int limit = int.MaxValue,
-        DateOnly? since = null, Action<string, bool>? note = null)
+    private async Task ActOnRemoteStatus(bool upload, Action<DayResult> output,
+        DateOnly? since = null, Action<string, bool>? note = null, CancellationToken cancellationToken = default)
     {
         note ??= (_, _) => { };
 
@@ -271,7 +289,7 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         }
         else
         {
-            remoteSummary = await GetSummary("1.4", since);
+            remoteSummary = await GetSummary("1.4", since, cancellationToken);
         }
 
         if (upload)
@@ -298,8 +316,7 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         // days must not be compared against it: every one of them would
         // look missing and be uploaded again on every pass.
         var dates = localByDates
-            .Where(item => !since.HasValue || item.Key >= since.Value)
-            .TakeLast(limit);
+            .Where(item => !since.HasValue || item.Key >= since.Value);
 
         foreach (var date in dates)
         {
@@ -314,6 +331,7 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
             var stale = new List<(IGrouping<string, MeasurementWithZone> Measurements, (int, long, long) Watermark)>();
             var serverHasMore = false;
             var known = false;
+            long? waiting = null;
 
             foreach (var byZone in date.Value.list.GroupBy(item => item.Zone))
             {
@@ -348,12 +366,25 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
                     continue;
                 }
 
+                // The server's watermark covers up to its last; anything
+                // newer is what an upload would add.
+                foreach (var timestamp in timestamps)
+                {
+                    if (match == null || (long)timestamp > match.Last)
+                    {
+                        waiting = waiting is { } before ? Math.Min(before, (long)timestamp) : (long)timestamp;
+                        break;
+                    }
+                }
+
                 stale.Add((byZone, (timestamps.Length, timestamps[^1], sum)));
             }
 
+            void Output(string line, DayStatus status) => output(new DayResult(date.Key, line, status, waiting));
+
             if (stale.Count == 0)
             {
-                output(
+                Output(
                     serverHasMore
                         ? $"{summary} [server has more]"
                         : $"{summary} [in sync]",
@@ -405,15 +436,15 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
                 // it are not held back by it.
                 if (refused.Count == 0 && held > 0)
                 {
-                    output($"{summary} [refused earlier, not sent]", DayStatus.StillRefused);
+                    Output($"{summary} [refused earlier, not sent]", DayStatus.StillRefused);
                 }
                 else if (refused.Count == 0)
                 {
-                    output($"{summary} [synced]", DayStatus.Synced);
+                    Output($"{summary} [synced]", DayStatus.Synced);
                 }
                 else
                 {
-                    output(
+                    Output(
                         refused.Count == stale.Count
                             ? $"{summary} [refused {string.Join(", ", refused)}]"
                             : $"{summary} [partly synced, refused {string.Join(", ", refused)}]",
@@ -422,11 +453,11 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
             }
             else if (known)
             {
-                output($"{summary} [can sync]", DayStatus.CanSync);
+                Output($"{summary} [can sync]", DayStatus.CanSync);
             }
             else
             {
-                output($"{summary} [local only]", DayStatus.LocalOnly);
+                Output($"{summary} [local only]", DayStatus.LocalOnly);
             }
         }
 
