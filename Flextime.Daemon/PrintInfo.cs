@@ -23,48 +23,178 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
         // code page.
         Console.OutputEncoding = Encoding.UTF8;
 
-        var text = !json;
-        var colour = text && ColourWanted(noColor, Environment.GetEnvironmentVariable("NO_COLOR"))
-            && !Console.IsOutputRedirected && AnsiConsole.Profile.Capabilities.Ansi;
+        var terminal = !json && !Console.IsOutputRedirected && AnsiConsole.Profile.Capabilities.Ansi;
+        var colour = terminal && ColourWanted(noColor, Environment.GetEnvironmentVariable("NO_COLOR"));
         var now = DateTimeOffset.Now;
-        // Any red row makes the exit code 1, so a script can tell.
-        var bad = false;
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
-        void Print(string label, string? value, Tone tone = Tone.Plain)
-        {
-            bad |= tone == Tone.Bad;
-
-            if (text)
-            {
-                Row(label, colour ? Paint(value, tone) : value);
-            }
-        }
-
-        // Ctrl+C ends the wait, and then cancels the request: left
-        // running, disposing the host on the way out waits for it.
-        using var abandon = new CancellationTokenSource();
-
-        Task Fetch(string label, Func<Task> work) =>
-            text ? Spin(label, work, abandon, cancellationToken) : Until(work(), abandon, cancellationToken);
-
-        // Whether it works, in the order the data flows: recorded,
-        // scheduled for upload, allowed to upload, arrived.
-
+        // Everything on this computer first, so the whole block can be
+        // shown before the server answers.
         var local = Reader.ReadFiles(Constants.MeasurementsFolder, TimeSpan.MinValue);
         var listen = ReadListen(LastMinute(local));
-
-        Print("Listen process", ListenStatus(listen, now), listen.State switch
-        {
-            "running" => Tone.Plain,
-            "stopped" => Tone.Warn,
-            _ => Tone.Bad,
-        });
-
         var schedule = ReadSync();
+        var grace = Grace(schedule);
+        var location = new StatusLocationDataContract(Location.IsOn(), Location.ReadClear() is { Pending: true });
+        var version = VersionHelper.GetVersion();
+        var zone = TimeZoneId();
+        var localData = ReadLocalData(local);
+        var measurements = Path.GetFullPath(computer.MeasurementsFolder);
+        var logs = LogsStatus();
 
-        Print("Sync schedule", SyncStatus(schedule), schedule.State == "notScheduled" ? Tone.Bad : Tone.Plain);
+        // Ctrl+C ends the wait, and then cancels the requests: left
+        // running, disposing the host on the way out waits for them.
+        using var abandon = new CancellationTokenSource();
 
+        var server = new ServerState();
+        var fetching = Until(FetchServer(httpClient, server, abandon.Token), abandon, cancellationToken);
+
+        // The rows as they stand; a row still waiting for the server
+        // shows the spinner frame, or "Interrupted" once it never will.
+        List<Line> Frame(string? spinner)
+        {
+            ServerState state;
+
+            lock (server)
+            {
+                state = server with { };
+            }
+
+            var waiting = new Line(null, spinner ?? "Interrupted", Tone.Plain);
+
+            Line Row(string label, Line value) => value with { Label = label };
+
+            var lines = new List<Line>
+            {
+                // Whether it works, in the order the data flows:
+                // recorded, scheduled for upload, allowed to upload,
+                // arrived.
+                Row("Listen process", new(null, ListenStatus(listen, now), listen.State switch
+                {
+                    "running" => Tone.Plain,
+                    "stopped" => Tone.Warn,
+                    _ => Tone.Bad,
+                })),
+                Row("Sync schedule", new(null, SyncStatus(schedule), schedule.State == "notScheduled" ? Tone.Bad : Tone.Plain)),
+                Row("Signed in", state.SignIn is { } signIn
+                    ? new(null, SignInStatus(signIn), signIn.State == "yes" ? Tone.Plain : Tone.Bad)
+                    : waiting),
+            };
+
+            var dayRows = new List<string>();
+
+            if (!state.DataDone)
+            {
+                lines.Add(Row("Server data", waiting));
+            }
+            else if (state.Compared is { } compared)
+            {
+                var (line, rows) = ServerData(compared, now, grace, days);
+
+                lines.Add(Row("Server data", new(null, line,
+                    compared.Any(day => !Fine(day, now, grace)) ? Tone.Bad : Tone.Plain)));
+                dayRows = rows;
+            }
+            else
+            {
+                // Not logged in or expired is already said, in red, above.
+                lines.Add(Row("Server data", new(null, state.Failure ?? "",
+                    state.SignIn?.State == "yes" ? Tone.Warn : Tone.Plain)));
+            }
+
+            lines.AddRange(dayRows.Select(row => new Line(null, row, Tone.Plain)));
+            lines.Add(Row("Location", new(null, LocationStatus(location), Tone.Plain)));
+
+            // What it is and where, for looking up now and then.
+            lines.Add(new Line(null, "", Tone.Plain));
+            lines.Add(Row("Hostname", new(null, TerminalText.Clean(computer.Hostname), Tone.Plain)));
+            lines.Add(Row("Computer id", new(null, computer.Id ?? "", Tone.Plain)));
+            lines.Add(Row("Time zone", new(null, TimeZoneStatus(PrintTimeZone(), zone, listen.Zone), Tone.Plain)));
+            lines.Add(Row("Local data", new(null, LocalDataStatus(localData), Tone.Plain)));
+            lines.Add(Row("Client version", new(null, version ?? "Unknown", Tone.Plain)));
+            lines.Add(Row("Server version", state.SignIn is null
+                ? waiting
+                : state.ServerVersion is { } serverVersion
+                    ? new(null, ShortVersion(serverVersion), Tone.Plain)
+                    : new(null, state.ServerError ?? state.NotFetched ?? "", Tone.Warn)));
+            lines.Add(Row("Server URL", new(null, Constants.ApiUri.ToString(), Tone.Plain)));
+            lines.Add(Row("Measurements", new(null, HomeRelative(measurements, home), Tone.Plain)));
+
+            if (logs != null)
+            {
+                lines.Add(Row("Logs", new(null, HomeRelative(logs, home), Tone.Plain)));
+            }
+
+            return lines;
+        }
+
+        if (json)
+        {
+            await fetching;
+
+            var dataContract = new StatusDataContract(
+                listen,
+                schedule,
+                server.SignIn!,
+                ServerDataContract(server.Compared, server.Failure, now, grace, days),
+                location,
+                TerminalText.Clean(computer.Hostname),
+                computer.Id,
+                zone,
+                localData,
+                version,
+                server.ServerVersion,
+                server.ServerError,
+                Constants.ApiUri.ToString(),
+                measurements,
+                logs);
+
+            Console.WriteLine(ToJson(dataContract));
+        }
+        else
+        {
+            if (terminal)
+            {
+                await Animate(Frame, fetching, colour);
+            }
+            else
+            {
+                // A pipe gets the block once, when it is complete.
+                await Task.WhenAny(fetching);
+            }
+
+            // Printed past Spectre, which wraps a line at the window's
+            // width and so breaks a long path in two when it is copied.
+            // After Ctrl+C too, with what was not fetched marked.
+            foreach (var line in Frame(null))
+            {
+                Console.WriteLine(Format(line, colour));
+            }
+
+            await fetching;
+        }
+
+        // Any red row makes the exit code 1, so a script can tell.
+        return Frame(null).Any(line => line.Tone == Tone.Bad) ? 1 : 0;
+    }
+
+    // What the server calls found.  Written by FetchServer and read by
+    // every frame, under a lock on the instance.
+    private sealed record ServerState
+    {
+        // Set when the ping is done, which is also what finds an
+        // expired sign-in.
+        public StatusSignInDataContract? SignIn { get; set; }
+        public string? ServerVersion { get; set; }
+        public string? ServerError { get; set; }
+        // Why the days were not asked for, or why asking failed.
+        public string? NotFetched { get; set; }
+        public string? Failure { get; set; }
+        public List<Sync.DayResult>? Compared { get; set; }
+        public bool DataDone { get; set; }
+    }
+
+    private async Task FetchServer(HttpClient httpClient, ServerState state, CancellationToken cancellationToken)
+    {
         string? serverVersion = null;
         string? serverError = null;
         // Why the server was not asked for the days: the version request
@@ -72,134 +202,145 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
         string? notFetched = null;
         var expired = false;
 
-        // The ping refreshes the sign-in first, so it is what finds an
-        // expired one.
-        await Fetch("Signed in", async () =>
+        try
         {
-            try
-            {
-                var pingResult = await httpClient.GetFromJsonAsync("/ping", PingSourceGenerationContext.Default.PingDataContract, abandon.Token);
+            var pingResult = await httpClient.GetFromJsonAsync(
+                "/ping", PingSourceGenerationContext.Default.PingDataContract, cancellationToken);
 
-                serverVersion = TerminalText.Clean(pingResult?.Version);
-            }
-            catch (TokenRefreshException)
-            {
-                // The server itself was never asked.
-                expired = true;
-                notFetched = "Not fetched, the sign-in has expired";
-            }
-            catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
-            {
-                notFetched = NotFetched(exception);
-                serverError = Failure(exception);
-            }
-        });
+            serverVersion = TerminalText.Clean(pingResult?.Version);
+        }
+        catch (TokenRefreshException)
+        {
+            // Every request refreshes the sign-in first; the server
+            // itself was never asked.
+            expired = true;
+            notFetched = "Not fetched, the sign-in has expired";
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
+        {
+            notFetched = NotFetched(exception);
+            serverError = Failure(exception);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // An answer that could not be read, here or in the sign-in
+            // refresh: said in its row, not as a stack trace under it.
+            notFetched = "Not fetched, the version request failed";
+            serverError = Unexpected(exception);
+        }
 
         var signIn = await ReadSignIn(deviceCode.IsAuthenticated, expired);
-
-        Print("Signed in", SignInStatus(signIn), signIn.State == "yes" ? Tone.Plain : Tone.Bad);
 
         if (!deviceCode.IsAuthenticated)
         {
             notFetched = "Not fetched, not logged in";
         }
 
-        List<Sync.DayResult>? compared = null;
-        var failure = notFetched;
-
-        if (notFetched == null)
+        lock (state)
         {
-            await Fetch("Server data", async () =>
+            state.ServerVersion = serverVersion;
+            state.ServerError = serverError;
+            state.NotFetched = notFetched;
+            state.Failure = notFetched;
+            state.SignIn = signIn;
+            state.DataDone = notFetched != null;
+        }
+
+        if (notFetched != null)
+        {
+            return;
+        }
+
+        List<Sync.DayResult>? compared = null;
+        string? failure = null;
+
+        try
+        {
+            compared = await sync.Compare(cancellationToken);
+        }
+        catch (TokenRefreshException exception)
+        {
+            failure = TerminalText.Clean(exception.Message);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
+        {
+            failure = Failure(exception);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            failure = Unexpected(exception);
+        }
+
+        lock (state)
+        {
+            state.Compared = compared;
+            state.Failure = failure;
+            state.DataDone = true;
+        }
+    }
+
+    // One output line: a labelled row, or a day row or blank line
+    // without a label.
+    private sealed record Line(string? Label, string Text, Tone Tone);
+
+    private static string Format(Line line, bool colour)
+    {
+        var text = colour ? Paint(line.Text, line.Tone) : line.Text;
+
+        return line.Label is null ? text ?? "" : $"{line.Label,-16}:  {text}";
+    }
+
+    // While the server calls run, the block as a live Spectre region,
+    // redrawn in place with each spinner frame.  Spectre measures what
+    // each character takes on screen, follows the window's width, and
+    // crops a block taller than the window.  The region is cleared at
+    // the end, and the caller prints the finished block.
+    //
+    // A known cost, accepted: should the window shrink below the drawn
+    // block while it runs, Spectre clears the screen and the scrollback
+    // (LiveRenderable.PositionCursor, Spectre.Console 0.57.2).  It runs
+    // for a second or two, and drawing the region by hand to avoid that
+    // was judged not worth it.
+    private static async Task Animate(Func<string?, List<Line>> frame, Task fetching, bool colour)
+    {
+        await AnsiConsole.Live(Render(frame(Frames[0]), colour))
+            .AutoClear(true)
+            .Overflow(VerticalOverflow.Ellipsis)
+            .Cropping(VerticalOverflowCropping.Bottom)
+            .StartAsync(async context =>
             {
-                try
+                var index = 0;
+
+                while (!fetching.IsCompleted)
                 {
-                    compared = await sync.Compare(abandon.Token);
-                }
-                catch (TokenRefreshException exception)
-                {
-                    failure = TerminalText.Clean(exception.Message);
-                }
-                catch (Exception exception) when (exception is HttpRequestException or TimeoutRejectedException)
-                {
-                    failure = Failure(exception);
+                    await Task.WhenAny(fetching, Task.Delay(80));
+
+                    context.UpdateTarget(Render(frame(Frames[++index % Frames.Length]), colour));
                 }
             });
-        }
-
-        if (compared == null)
-        {
-            // Not logged in or expired is already said, in red, above.
-            Print("Server data", failure, signIn.State == "yes" ? Tone.Warn : Tone.Plain);
-        }
-        else
-        {
-            var (line, rows) = ServerData(compared, now, Grace(schedule), days);
-
-            Print("Server data", line,
-                compared.Any(day => !Fine(day, now, Grace(schedule))) ? Tone.Bad : Tone.Plain);
-
-            foreach (var row in text ? rows : [])
-            {
-                Console.WriteLine(row);
-            }
-        }
-
-        var location = new StatusLocationDataContract(Location.IsOn(), Location.ReadClear() is { Pending: true });
-
-        Print("Location", LocationStatus(location));
-
-        // What it is and where, for looking up now and then.
-
-        var version = VersionHelper.GetVersion();
-        var zone = TimeZoneId();
-        var localData = ReadLocalData(local);
-        var measurements = Path.GetFullPath(computer.MeasurementsFolder);
-        var logs = LogsStatus();
-
-        if (text)
-        {
-            Console.WriteLine();
-        }
-
-        Print("Hostname", TerminalText.Clean(computer.Hostname));
-        Print("Computer id", computer.Id);
-        Print("Time zone", TimeZoneStatus(PrintTimeZone(), zone, listen.Zone));
-        Print("Local data", LocalDataStatus(localData));
-        Print("Client version", version ?? "Unknown");
-        Print("Server version", serverVersion != null ? ShortVersion(serverVersion) : serverError ?? notFetched,
-            serverVersion != null ? Tone.Plain : Tone.Warn);
-        Print("Server URL", Constants.ApiUri.ToString());
-        Print("Measurements", HomeRelative(measurements, home));
-
-        if (logs != null)
-        {
-            Print("Logs", HomeRelative(logs, home));
-        }
-
-        if (json)
-        {
-            var dataContract = new StatusDataContract(
-                listen,
-                schedule,
-                signIn,
-                ServerDataContract(compared, failure, now, Grace(schedule), days),
-                location,
-                TerminalText.Clean(computer.Hostname),
-                computer.Id,
-                zone,
-                localData,
-                version,
-                serverVersion,
-                serverError,
-                Constants.ApiUri.ToString(),
-                measurements,
-                logs);
-
-            Console.WriteLine(ToJson(dataContract));
-        }
-
-        return bad ? 1 : 0;
     }
+
+    private static Rows Render(List<Line> lines, bool colour) =>
+        new(lines.Select(line =>
+        {
+            var paragraph = new Paragraph();
+
+            if (line.Label is not null)
+            {
+                paragraph.Append($"{line.Label,-16}:  ");
+            }
+
+            return paragraph.Append(line.Text, colour ? ToneStyle(line.Tone) : Style.Plain);
+        }));
+
+    // Palette entries 1 and 3, the same red and yellow Paint gives the
+    // finished block; Spectre's Red and Yellow are the bright ones.
+    private static Style ToneStyle(Tone tone) => tone switch
+    {
+        Tone.Bad => new Style(Color.Maroon),
+        Tone.Warn => new Style(Color.Olive),
+        _ => Style.Plain,
+    };
 
     // Relaxed escaping: the output goes to a terminal or a script, never
     // into HTML, and "7.18.5\u002B12ae77c" helps neither.
@@ -286,6 +427,11 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
             {
                 await abandon.CancelAsync();
 
+                // ConsoleAppFramework's handler goes on to CancelAfter
+                // right after cancelling; give it time to before the app
+                // unwinds and disposes what it calls that on.
+                await Task.Delay(50, CancellationToken.None);
+
                 throw new OperationCanceledException(cancellationToken);
             }
         }
@@ -295,49 +441,6 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
 
     // Spinner frames, Spectre's Dots2.
     private static readonly string[] Frames = ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"];
-
-    // Runs work with a spinner where the row's value will go.  The row
-    // itself is printed by the caller once the work is done, over the
-    // spinner: only the label and one character are ever drawn, so the
-    // line cannot wrap and leave a stray copy behind.  Not drawn when
-    // the output is not a terminal.
-    private static async Task Spin(string label, Func<Task> work, CancellationTokenSource abandon,
-        CancellationToken cancellationToken)
-    {
-        var task = Until(work(), abandon, cancellationToken);
-
-        if (Console.IsOutputRedirected || !AnsiConsole.Profile.Capabilities.Ansi)
-        {
-            await task;
-
-            return;
-        }
-
-        var frame = 0;
-
-        Console.Write("\e[?25l");
-
-        try
-        {
-            while (!task.IsCompleted)
-            {
-                Console.Write($"\r{label,-16}:  {Frames[frame++ % Frames.Length]}");
-
-                await Task.WhenAny(task, Task.Delay(80, CancellationToken.None));
-            }
-        }
-        finally
-        {
-            // Also after Ctrl+C, which ends the wait above.
-            Console.Write("\r\e[K\e[?25h");
-        }
-
-        await task;
-    }
-
-    // Written past Spectre, which wraps a line at the terminal's width
-    // and so breaks a long path in two when it is copied.
-    private static void Row(string label, string? value) => Console.WriteLine($"{label,-16}:  {value}");
 
     // One line for every local day compared, and the rows worth
     // showing: the days that differ, and the latest days when asked
@@ -404,6 +507,11 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
         _ => $"Not reachable, {TerminalText.Clean(exception.Message).TrimEnd('.')}",
     };
 
+    // Anything else that went wrong with a request, in one line.
+    public static string Unexpected(Exception exception) => exception is JsonException
+        ? "Not readable, the answer is not what was expected"
+        : $"Failed, {TerminalText.Clean(exception.Message).TrimEnd('.')}";
+
     // Why the days were not asked for, after the version request failed.
     public static string NotFetched(Exception exception) => exception is HttpRequestException { StatusCode: { } status }
         ? $"Not fetched, the server answered {(int)status}"
@@ -454,7 +562,18 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
             return new StatusSignInDataContract("yes", null, null);
         }
 
-        var token = new JwtSecurityToken(accessToken);
+        JwtSecurityToken token;
+
+        try
+        {
+            token = new JwtSecurityToken(accessToken);
+        }
+        catch (ArgumentException)
+        {
+            // A token that does not parse still says a sign-in is stored;
+            // whether it works is the ping's to find out.
+            return new StatusSignInDataContract("yes", null, null);
+        }
 
         var name = token.Claims.FirstOrDefault(claim => claim.Type == "name")?.Value;
         var email = token.Claims.FirstOrDefault(claim => claim.Type == "email")?.Value;

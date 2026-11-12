@@ -239,4 +239,12 @@ public class PrintInfoTests
         Assert.Equal("/var/x", PrintInfo.HomeRelative("/var/x", "/Users/martin"));
         Assert.Equal("/var/x", PrintInfo.HomeRelative("/var/x", "/"));
     }
+
+    [Fact]
+    public void An_unexpected_failure_is_one_line()
+    {
+        Assert.Equal("Not readable, the answer is not what was expected",
+            PrintInfo.Unexpected(new System.Text.Json.JsonException("'<' is an invalid start of a value.")));
+        Assert.Equal("Failed, Token response was null", PrintInfo.Unexpected(new InvalidOperationException("Token response was null.")));
+    }
 }
