@@ -436,6 +436,13 @@ public class UserInputMonitor(
 
         try
         {
+            // Again, inside: a session event can wait here while the
+            // loop begins a pause.
+            if (pauseGate.Paused && kind is not (Measurement.Types.Kind.Start or Measurement.Types.Kind.Stop))
+            {
+                return;
+            }
+
             await MarkCore(kind, wake, scheduled);
         }
         finally
@@ -672,6 +679,13 @@ public class UserInputMonitor(
             // A newer event restarts the wait; the last one samples.
             for (var attempt = 0; attempt < PendingRetries && generation == Volatile.Read(ref networkGeneration); attempt++)
             {
+                // Nothing is recorded while paused, places included; the
+                // start that ends the pause reads the network again.
+                if (pauseGate.Paused)
+                {
+                    return;
+                }
+
                 // Read outside the lock: a slow probe must not hold up
                 // the minute's measurement.
                 if (await placeRecorder.ReadNetwork() is not { } sample)
@@ -685,6 +699,11 @@ public class UserInputMonitor(
 
                 try
                 {
+                    if (pauseGate.Paused)
+                    {
+                        return;
+                    }
+
                     update = placeRecorder.Apply(sample);
 
                     if (update.Changed)
