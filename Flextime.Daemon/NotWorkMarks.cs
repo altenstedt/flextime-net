@@ -484,11 +484,11 @@ public sealed class PendingMarks(string path, string lockPath)
     public static PendingMarks Default { get; } = new(StateFiles.PauseMarkPath, StateFiles.PauseMarkLockPath);
 
     /// <summary>False when the mark could not be saved.</summary>
-    public async Task<bool> Add(PendingMark mark, DateTimeOffset now)
+    public async Task<bool> Add(PendingMark mark, DateTimeOffset now, CancellationToken cancellationToken = default)
     {
         try
         {
-            using var held = await SingleInstance.TryAcquire(lockPath, LockWait);
+            using var held = await SingleInstance.TryAcquire(lockPath, LockWait, cancellationToken);
 
             if (held == null)
             {
@@ -506,18 +506,18 @@ public sealed class PendingMarks(string path, string lockPath)
 
             return true;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or OperationCanceledException)
         {
             return false;
         }
     }
 
     /// <summary>Removes one mark, best effort.</summary>
-    public async Task Remove(PendingMark mark, DateTimeOffset now)
+    public async Task Remove(PendingMark mark, DateTimeOffset now, CancellationToken cancellationToken = default)
     {
         try
         {
-            using var held = await SingleInstance.TryAcquire(lockPath, LockWait);
+            using var held = await SingleInstance.TryAcquire(lockPath, LockWait, cancellationToken);
 
             if (held == null)
             {
@@ -531,7 +531,7 @@ public sealed class PendingMarks(string path, string lockPath)
                 Write(entries);
             }
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or OperationCanceledException)
         {
             // Left for the next sync, which finds it already written.
         }
@@ -541,7 +541,7 @@ public sealed class PendingMarks(string path, string lockPath)
     /// The marks waiting.  Lines that are corrupt or too old are dropped
     /// here, once, and said so through <paramref name="dropped"/>.
     /// </summary>
-    public async Task<List<PendingMark>> Read(DateTimeOffset now, Action<string>? dropped)
+    public async Task<List<PendingMark>> Read(DateTimeOffset now, Action<string>? dropped, CancellationToken cancellationToken = default)
     {
         // The common case, every sync: nothing waits, and no lock file
         // needs to exist for that.
@@ -552,7 +552,7 @@ public sealed class PendingMarks(string path, string lockPath)
 
         try
         {
-            using var held = await SingleInstance.TryAcquire(lockPath, LockWait);
+            using var held = await SingleInstance.TryAcquire(lockPath, LockWait, cancellationToken);
 
             if (held == null)
             {
@@ -578,7 +578,10 @@ public sealed class PendingMarks(string path, string lockPath)
             return [];
         }
 
-        if (info.LinkTarget != null || Directory.Exists(path) || info.Length > MaxBytes)
+        // As the pause file: a link, a directory, an empty "file" (which
+        // may be a pipe, and would block the open) and a large one are
+        // never opened.
+        if (info.LinkTarget != null || Directory.Exists(path) || info.Length == 0 || info.Length > MaxBytes)
         {
             dropped?.Invoke("Dropped the pending not-work marks: the file is not one this version writes.");
             Discard();
@@ -672,7 +675,7 @@ public sealed class PendingMarks(string path, string lockPath)
     {
         try
         {
-            var entries = await Read(now, line => note(line, true));
+            var entries = await Read(now, line => note(line, true), cancellationToken);
 
             foreach (var mark in entries)
             {
@@ -680,7 +683,7 @@ public sealed class PendingMarks(string path, string lockPath)
                 var span = Backdate.Describe(mark.From, mark.To, zone, now);
                 var (result, reason) = await writer.Apply(Backdate.Split(mark.From, mark.To, zone), cancellationToken);
 
-                await Remove(mark, now);
+                await Remove(mark, now, cancellationToken);
 
                 if (result == MarkResult.Refused)
                 {

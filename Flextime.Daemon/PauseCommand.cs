@@ -10,6 +10,12 @@ namespace Flextime.Daemon;
 /// keep it from taking effect; the not-work mark is saved for sync before
 /// the server is tried, so an interrupted or failed write is not lost.
 /// </summary>
+/// <remarks>
+/// Listen writes a stop as the pause begins and a start as it ends, and
+/// both are ordinary measurements to the sums.  A pause shorter than the
+/// idle limit in force is therefore bridged like any other gap and still
+/// counts as work; only a longer pause leaves the time out.
+/// </remarks>
 public partial class PauseCommand(IHttpClientFactory httpClientFactory, DeviceCode deviceCode)
 {
     // Where the state lives, the clock and the outputs; tests set them.
@@ -63,6 +69,13 @@ public partial class PauseCommand(IHttpClientFactory httpClientFactory, DeviceCo
                 return 1;
             }
 
+            if (length < TimeSpan.FromMinutes(1))
+            {
+                Error.WriteLine("A pause lasts a minute at least.");
+
+                return 1;
+            }
+
             if (length > latest - now)
             {
                 Error.WriteLine("A pause ends by the end of tomorrow at the latest. Use the stop command to stop for longer.");
@@ -100,6 +113,15 @@ public partial class PauseCommand(IHttpClientFactory httpClientFactory, DeviceCo
             }
 
             sinceFrom = from;
+        }
+
+        // Checked before writing, so a pause in force is never replaced
+        // by one listen would ignore.
+        if (PauseFile.Parse(PauseFile.Format(end, now), now) is { IsPaused: false } check)
+        {
+            Error.WriteLine($"Cannot pause until {PauseFile.Describe(end, now, Zone)}: the pause {check.Problem ?? "would already be over"}.");
+
+            return 1;
         }
 
         try
@@ -210,7 +232,7 @@ public partial class PauseCommand(IHttpClientFactory httpClientFactory, DeviceCo
 
         // Saved first: if what follows fails or is interrupted, sync
         // writes it.  Writing it twice changes nothing.
-        var saved = await Pending.Add(mark, now);
+        var saved = await Boxed(token => Pending.Add(mark, now, token), false, cancellationToken);
 
         if (!IsAuthenticated())
         {
@@ -230,7 +252,12 @@ public partial class PauseCommand(IHttpClientFactory httpClientFactory, DeviceCo
             var writer = new MarksWriter(httpClientFactory.CreateClient("ApiHttpClient"));
             var (result, reason) = await writer.Apply(Backdate.Split(mark.From, mark.To, zone), timeout.Token);
 
-            await Pending.Remove(mark, now);
+            await Boxed(async token =>
+            {
+                await Pending.Remove(mark, now, token);
+
+                return true;
+            }, false, cancellationToken);
 
             if (result == MarkResult.Refused)
             {
@@ -246,6 +273,28 @@ public partial class PauseCommand(IHttpClientFactory httpClientFactory, DeviceCo
             Out.WriteLine(saved
                 ? $"Could not reach the server; sync marks {span} as not work later."
                 : $"Could not mark {span} as not work: {TerminalText.Clean(exception.Message)}");
+        }
+    }
+
+    // Runs on another thread and waits no longer than the network
+    // timeout and a margin: a file operation can block where no token
+    // reaches (a pipe at the path, say), and the pause is already written,
+    // so the command must still finish.  A worker left behind is a
+    // background thread and does not keep the process alive.
+    private async Task<T> Boxed<T>(Func<CancellationToken, Task<T>> work, T fallback, CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        timeout.CancelAfter(NetworkTimeout);
+
+        try
+        {
+            return await Task.Run(() => work(timeout.Token), CancellationToken.None)
+                .WaitAsync(NetworkTimeout + TimeSpan.FromSeconds(1), CancellationToken.None);
+        }
+        catch (Exception exception) when (exception is TimeoutException or OperationCanceledException)
+        {
+            return fallback;
         }
     }
 

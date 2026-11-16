@@ -100,7 +100,23 @@ public sealed class Marks(IReadOnlySet<DateOnly> days, IReadOnlyDictionary<DateO
             list.Add(new MarkRange(from, to));
         }
 
-        return list.OrderBy(item => item.From).ToList();
+        // Merged where they touch or overlap, as the web merges them, so
+        // no second counts twice.
+        var merged = new List<MarkRange>();
+
+        foreach (var next in list.OrderBy(item => item.From))
+        {
+            if (merged.Count > 0 && next.From <= merged[^1].To)
+            {
+                merged[^1] = merged[^1] with { To = Math.Max(merged[^1].To, next.To) };
+            }
+            else
+            {
+                merged.Add(next);
+            }
+        }
+
+        return merged;
     }
 
     /// <summary>
@@ -109,12 +125,16 @@ public sealed class Marks(IReadOnlySet<DateOnly> days, IReadOnlyDictionary<DateO
     /// force where each begins; the marks take their overlap out after
     /// that, so marking never changes which gaps count.  Each gap is
     /// placed at its start's time of day plus its length, as the web
-    /// places a block.
+    /// places a block, counted from the start of <paramref name="date"/>:
+    /// a row that runs past midnight places its last gaps past 24 hours,
+    /// where no range of the date reaches, rather than on the date's own
+    /// early hours.
     /// </summary>
     public static TimeSpan Overlap(
         IReadOnlyList<DateTimeOffset> timestamps,
         Func<DateTimeOffset, TimeSpan> limitAt,
-        IReadOnlyList<MarkRange> ranges)
+        IReadOnlyList<MarkRange> ranges,
+        DateOnly date)
     {
         if (ranges.Count == 0)
         {
@@ -132,7 +152,9 @@ public sealed class Marks(IReadOnlySet<DateOnly> days, IReadOnlyDictionary<DateO
                 continue;
             }
 
-            var start = timestamps[i - 1].TimeOfDay.TotalSeconds;
+            var at = timestamps[i - 1];
+            var days = DateOnly.FromDateTime(at.DateTime).DayNumber - date.DayNumber;
+            var start = at.TimeOfDay.TotalSeconds + days * 86_400.0;
             var end = start + diff.TotalSeconds;
 
             foreach (var range in ranges)

@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace Flextime.Daemon;
 
 /// <summary>
@@ -35,13 +37,18 @@ public static class SingleInstance
     public static async Task<IDisposable?> TryAcquire(string path, TimeSpan wait, CancellationToken cancellationToken = default)
     {
         var retry = TimeSpan.FromMilliseconds(100);
-        var until = DateTimeOffset.UtcNow + wait;
+
+        // The monotonic clock: a wall clock stepped back would make the
+        // wait as long as the step.
+        var started = Stopwatch.GetTimestamp();
 
         while (true)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var held = TryAcquire(path);
 
-            if (held != null || DateTimeOffset.UtcNow >= until)
+            if (held != null || Stopwatch.GetElapsedTime(started) >= wait)
             {
                 return held;
             }

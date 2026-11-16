@@ -53,7 +53,8 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
 
     // Not-work marks the pause command could not write wait at most this
     // long per pass, so they never hold up the next measurement upload.
-    private static readonly TimeSpan MarksTimeout = TimeSpan.FromSeconds(10);
+    public TimeSpan MarksTimeout { get; init; } = TimeSpan.FromSeconds(10);
+    public TimeSpan MarksMargin { get; init; } = TimeSpan.FromSeconds(5);
 
     public async Task SyncAndPrint()
     {
@@ -97,7 +98,13 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
         {
             using var timeout = new CancellationTokenSource(MarksTimeout);
 
-            await PendingMarks.Retry(new MarksWriter(httpClient), DateTimeOffset.UtcNow, note, timeout.Token);
+            // On another thread, and waited on for no longer than the
+            // timeout and a margin: a file operation can block where no
+            // token reaches, and a sync stuck here would hold up every
+            // upload after it.  A worker left behind is a background
+            // thread, so the process still exits.
+            await Task.Run(() => PendingMarks.Retry(new MarksWriter(httpClient), DateTimeOffset.UtcNow, note, timeout.Token))
+                .WaitAsync(MarksTimeout + MarksMargin);
         }
         catch (Exception exception)
         {

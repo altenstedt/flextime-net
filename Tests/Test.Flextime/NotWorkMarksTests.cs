@@ -380,14 +380,14 @@ public class NotWorkMarksTests : IDisposable
     {
         var pending = Pending;
 
-        Assert.True(await pending.Add(Mark(), Now));
-        Assert.True(await pending.Add(Mark(), Now));
+        Assert.True(await pending.Add(Mark(), Now, TestContext.Current.CancellationToken));
+        Assert.True(await pending.Add(Mark(), Now, TestContext.Current.CancellationToken));
 
-        Assert.Equal([Mark()], await pending.Read(Now, null));
+        Assert.Equal([Mark()], await pending.Read(Now, null, TestContext.Current.CancellationToken));
 
-        await pending.Remove(Mark(), Now);
+        await pending.Remove(Mark(), Now, TestContext.Current.CancellationToken);
 
-        Assert.Empty(await pending.Read(Now, null));
+        Assert.Empty(await pending.Read(Now, null, TestContext.Current.CancellationToken));
         Assert.False(File.Exists(Path.Combine(folder, "pause-mark.txt")));
     }
 
@@ -404,12 +404,12 @@ public class NotWorkMarksTests : IDisposable
 
         var dropped = new List<string>();
 
-        Assert.Equal([Mark()], await Pending.Read(Now, dropped.Add));
+        Assert.Equal([Mark()], await Pending.Read(Now, dropped.Add, TestContext.Current.CancellationToken));
         Assert.Equal(4, dropped.Count);
 
         dropped.Clear();
 
-        Assert.Equal([Mark()], await Pending.Read(Now, dropped.Add));
+        Assert.Equal([Mark()], await Pending.Read(Now, dropped.Add, TestContext.Current.CancellationToken));
         Assert.Empty(dropped);
     }
 
@@ -422,13 +422,95 @@ public class NotWorkMarksTests : IDisposable
 
         var dropped = new List<string>();
 
-        Assert.Empty(await Pending.Read(Now, dropped.Add));
+        Assert.Empty(await Pending.Read(Now, dropped.Add, TestContext.Current.CancellationToken));
         Assert.Single(dropped);
         Assert.False(File.Exists(path));
 
         Directory.CreateDirectory(path);
 
-        Assert.Empty(await Pending.Read(Now, dropped.Add));
+        Assert.Empty(await Pending.Read(Now, dropped.Add, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task A_pipe_for_the_pending_file_is_discarded_never_opened()
+    {
+        if (OperatingSystem.IsWindows() || !File.Exists("/usr/bin/mkfifo"))
+        {
+            return;
+        }
+
+        var path = Path.Combine(folder, "pause-mark.txt");
+
+        using (var mkfifo = System.Diagnostics.Process.Start("/usr/bin/mkfifo", [path]))
+        {
+            await mkfifo.WaitForExitAsync(TestContext.Current.CancellationToken);
+        }
+
+        var read = Pending.Read(Now, null, TestContext.Current.CancellationToken);
+        var done = await Task.WhenAny(read, Task.Delay(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+
+        Assert.Same(read, done);
+        Assert.Empty(await read);
+        Assert.False(Path.Exists(path));
+
+        // And the pause command can save a mark there again.
+        Assert.True(await Pending.Add(Mark(), Now, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task A_cancelled_remove_does_not_wait_for_the_lock()
+    {
+        var pending = Pending;
+
+        await pending.Add(Mark(), Now, TestContext.Current.CancellationToken);
+
+        using var held = SingleInstance.TryAcquire(Path.Combine(folder, "pause-mark.lock"));
+        using var cancelled = new CancellationTokenSource();
+
+        await cancelled.CancelAsync();
+
+        var started = System.Diagnostics.Stopwatch.StartNew();
+
+        await pending.Remove(Mark(), Now, cancelled.Token);
+
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task Sync_gives_up_on_marks_that_block_where_no_token_reaches()
+    {
+        // A server that ignores cancellation, standing in for any call
+        // that blocks: sync must still finish.
+        var store = new FakeStore { Hang = _ => new TaskCompletionSource().Task };
+        var measurements = Path.Combine(folder, "measurements");
+
+        Directory.CreateDirectory(measurements);
+
+        var sync = new Sync(new StoreFactory(store), new Computer("0123456789abcdef", "Test"))
+        {
+            Folder = measurements,
+            PendingMarks = Pending,
+            MarksTimeout = TimeSpan.FromMilliseconds(100),
+            MarksMargin = TimeSpan.FromMilliseconds(100),
+        };
+
+        // Sync reads the queue at the real time now.
+        var now = Whole(DateTimeOffset.UtcNow);
+
+        await Pending.Add(new PendingMark(now.AddMinutes(-3), now, "Europe/Stockholm", now), now, TestContext.Current.CancellationToken);
+
+        var notes = new List<string>();
+        var started = System.Diagnostics.Stopwatch.StartNew();
+
+        await sync.RetryMarks((line, _) => notes.Add(line));
+
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(3));
+        Assert.Contains(notes, line => line.StartsWith("Not-work marks wait for the next sync"));
+    }
+
+    private sealed class StoreFactory(HttpMessageHandler handler) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => Client(handler);
     }
 
     [Fact]
@@ -438,11 +520,11 @@ public class NotWorkMarksTests : IDisposable
         var pending = Pending;
         var notes = new List<(string, bool)>();
 
-        await pending.Add(Mark(), Now);
+        await pending.Add(Mark(), Now, TestContext.Current.CancellationToken);
         await pending.Retry(new MarksWriter(Client(store)), Now, (line, warning) => notes.Add((line, warning)),
             TestContext.Current.CancellationToken);
 
-        Assert.Empty(await pending.Read(Now, null));
+        Assert.Empty(await pending.Read(Now, null, TestContext.Current.CancellationToken));
         Assert.Equal("""{"marks":{"2026-11-16":[{"from":70860,"to":71100}]}}""", store.Document);
         Assert.Equal([("Marked 19:41–19:45 as not work.", false)], notes);
     }
@@ -454,11 +536,11 @@ public class NotWorkMarksTests : IDisposable
         var pending = Pending;
         var notes = new List<(string Line, bool Warning)>();
 
-        await pending.Add(Mark(), Now);
+        await pending.Add(Mark(), Now, TestContext.Current.CancellationToken);
         await pending.Retry(new MarksWriter(Client(store)), Now, (line, warning) => notes.Add((line, warning)),
             TestContext.Current.CancellationToken);
 
-        Assert.Equal([Mark()], await pending.Read(Now, null));
+        Assert.Equal([Mark()], await pending.Read(Now, null, TestContext.Current.CancellationToken));
         Assert.True(Assert.Single(notes).Warning);
     }
 
@@ -469,14 +551,14 @@ public class NotWorkMarksTests : IDisposable
         var pending = Pending;
         var notes = new List<string>();
 
-        await pending.Add(Mark(), Now);
+        await pending.Add(Mark(), Now, TestContext.Current.CancellationToken);
 
         using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
 
         await pending.Retry(new MarksWriter(Client(store)), Now, (line, _) => notes.Add(line), timeout.Token);
 
         Assert.Single(notes);
-        Assert.Equal([Mark()], await pending.Read(Now, null));
+        Assert.Equal([Mark()], await pending.Read(Now, null, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -486,11 +568,11 @@ public class NotWorkMarksTests : IDisposable
         var pending = Pending;
         var notes = new List<(string Line, bool Warning)>();
 
-        await pending.Add(Mark(), Now);
+        await pending.Add(Mark(), Now, TestContext.Current.CancellationToken);
         await pending.Retry(new MarksWriter(Client(store)), Now, (line, warning) => notes.Add((line, warning)),
             TestContext.Current.CancellationToken);
 
-        Assert.Empty(await pending.Read(Now, null));
+        Assert.Empty(await pending.Read(Now, null, TestContext.Current.CancellationToken));
         Assert.StartsWith("Dropped the not-work mark", Assert.Single(notes).Line);
     }
 
@@ -508,6 +590,27 @@ public class NotWorkMarksTests : IDisposable
     }
 
     [Fact]
+    public void Overlapping_stored_ranges_count_once()
+    {
+        var marks = Marks.Decode(JsonDocument.Parse(
+            """{ "marks": { "2026-11-16": [{ "from": 0, "to": 200 }, { "from": 100, "to": 300 }, { "from": 300, "to": 400 }] } }""").RootElement);
+
+        Assert.Equal([new MarkRange(0, 400)], marks.RangesOn(Monday));
+    }
+
+    [Fact]
+    public void A_row_past_midnight_does_not_take_the_dates_early_ranges()
+    {
+        // 23:58 to 00:02, with the date's first five minutes marked.
+        var late = new DateTimeOffset(2026, 11, 16, 23, 58, 0, TimeSpan.FromHours(1));
+        DateTimeOffset[] timestamps = [late, late.AddMinutes(1), late.AddMinutes(2), late.AddMinutes(3), late.AddMinutes(4)];
+
+        var overlap = Marks.Overlap(timestamps, _ => TimeSpan.FromMinutes(10), [new MarkRange(0, 300)], Monday);
+
+        Assert.Equal(TimeSpan.Zero, overlap);
+    }
+
+    [Fact]
     public void Marked_ranges_come_out_of_the_bridged_work_only()
     {
         // 10:00, 10:01, 10:02, then 10:30 after a gap the limit does not
@@ -517,7 +620,7 @@ public class NotWorkMarksTests : IDisposable
 
         // Marked 10:01:30 to 10:31.
         var overlap = Marks.Overlap(timestamps, _ => TimeSpan.FromMinutes(10),
-            [new MarkRange(10 * 3600 + 90, 10 * 3600 + 31 * 60)]);
+            [new MarkRange(10 * 3600 + 90, 10 * 3600 + 31 * 60)], new DateOnly(2026, 11, 16));
 
         // Half of the second minute and the last minute; the gap was not work.
         Assert.Equal(TimeSpan.FromSeconds(30 + 60), overlap);

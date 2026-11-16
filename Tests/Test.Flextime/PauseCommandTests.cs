@@ -156,6 +156,20 @@ public class PauseCommandTests : IDisposable
         Assert.False(File.Exists(PausePath));
     }
 
+    [Theory]
+    [InlineData("30s")]
+    [InlineData("0.5s")]
+    public async Task A_pause_too_short_to_hold_leaves_the_pause_in_force(string length)
+    {
+        await Command().Pause("2h", null, null, true, Token);
+
+        var before = await File.ReadAllTextAsync(PausePath, Token);
+
+        Assert.Equal(1, await Command().Pause(length, null, null, true, Token));
+        Assert.Equal(before, await File.ReadAllTextAsync(PausePath, Token));
+        Assert.True(Status().IsPaused);
+    }
+
     [Fact]
     public async Task For_and_until_set_the_end()
     {

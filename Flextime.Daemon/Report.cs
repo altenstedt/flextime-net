@@ -300,7 +300,7 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
             // web client sums it.  Marked ranges come out of the work
             // after bridging, as the web takes them out.
             var profile = policy?.For(date, timestamps[0].DayOfWeek) ?? IdleProfile.Flat(flat);
-            var marked = Marks.Overlap(timestamps, at => profile.LimitAt(at.TimeOfDay), marks.RangesOn(date));
+            var marked = Marks.Overlap(timestamps, at => profile.LimitAt(at.TimeOfDay), marks.RangesOn(date), date);
             var counted = marks.IsMarked(date)
                 ? TimeSpan.Zero
                 : day.Work > marked ? day.Work - marked : TimeSpan.Zero;
