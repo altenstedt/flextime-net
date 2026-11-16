@@ -293,9 +293,6 @@ public sealed class MarksWriter(HttpClient httpClient)
 {
     private const int Attempts = 4;
 
-    /// <summary>The API's limit on a stored document.</summary>
-    private const int MaxDocumentLength = 16 * 1024;
-
     public async Task<(MarkResult Result, string? Reason)> Apply(IReadOnlyList<DayRange> ranges, CancellationToken cancellationToken)
     {
         for (var attempt = 0; attempt < Attempts; attempt++)
@@ -355,11 +352,6 @@ public sealed class MarksWriter(HttpClient httpClient)
 
             var json = document.ToJsonString();
 
-            if (json.Length > MaxDocumentLength)
-            {
-                return (MarkResult.Refused, "the marks would grow past what the server stores");
-            }
-
             using var request = new HttpRequestMessage(HttpMethod.Put, "/store/marks?api-version=1.0");
 
             request.Content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -381,7 +373,10 @@ public sealed class MarksWriter(HttpClient httpClient)
                     continue;
 
                 case HttpStatusCode.BadRequest:
-                    return (MarkResult.Refused, "the server refused the marks");
+                    // The size limit is the server's alone, so a later
+                    // raise needs no new client; a full document lands
+                    // here.
+                    return (MarkResult.Refused, "the server refused the marks, perhaps because they are full");
 
                 default:
                     put.EnsureSuccessStatusCode();
