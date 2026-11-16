@@ -49,6 +49,11 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
     public string LocationPath { get; init; } = StateFiles.LocationPath;
     public string LocationClearPath { get; init; } = StateFiles.LocationClearPath;
     public Func<bool> ListenRunning { get; init; } = () => SingleInstance.IsHeld(SingleInstance.ListenLockPath);
+    public PendingMarks PendingMarks { get; init; } = PendingMarks.Default;
+
+    // Not-work marks the pause command could not write wait at most this
+    // long per pass, so they never hold up the next measurement upload.
+    private static readonly TimeSpan MarksTimeout = TimeSpan.FromSeconds(10);
 
     public async Task SyncAndPrint()
     {
@@ -77,11 +82,39 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
             : inSync == 1
                 ? "1 day in sync."
                 : $"{inSync} days in sync.");
+
+        await RetryMarks((line, _) => AnsiConsole.WriteLine(TerminalText.Clean(line)));
     }
 
-    public Task SyncAndLog(ILogger logger)
+    /// <summary>
+    /// Writes the not-work marks the pause command left for sync.  After
+    /// the measurements, which are uploaded by now; time-boxed, and never
+    /// throws, so a mark can never hold up or fail an upload.
+    /// </summary>
+    public async Task RetryMarks(Action<string, bool> note)
     {
-        return ActOnRemoteStatus(upload: true, day =>
+        try
+        {
+            using var timeout = new CancellationTokenSource(MarksTimeout);
+
+            await PendingMarks.Retry(new MarksWriter(httpClient), DateTimeOffset.UtcNow, note, timeout.Token);
+        }
+        catch (Exception exception)
+        {
+            try
+            {
+                note($"Not-work marks wait for the next sync: {TerminalText.Clean(exception.Message)}", true);
+            }
+            catch
+            {
+                // Nothing more to do.
+            }
+        }
+    }
+
+    public async Task SyncAndLog(ILogger logger)
+    {
+        await ActOnRemoteStatus(upload: true, day =>
         {
             var (_, line, status, _) = day;
 
@@ -105,7 +138,11 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
                     logger.LogInformation("{Line}", TerminalText.Clean(line));
                     break;
             }
-        }, since: DueWindow(), note: (line, warning) =>
+        }, since: DueWindow(), note: Note);
+
+        await RetryMarks(Note);
+
+        void Note(string line, bool warning)
         {
             if (warning)
             {
@@ -115,7 +152,7 @@ public class Sync(IHttpClientFactory httpClientFactory, Computer computer)
             {
                 logger.LogInformation("{Line}", TerminalText.Clean(line));
             }
-        });
+        }
     }
 
     // Null when the whole history is due to be compared again, otherwise

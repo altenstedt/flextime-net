@@ -74,6 +74,7 @@ public class PlaceSyncTests : IDisposable
             ReconcilePath = Path.Combine(folder, "reconcile.txt"),
             LocationPath = Path.Combine(folder, "location.txt"),
             LocationClearPath = Path.Combine(folder, "location-clear.txt"),
+            PendingMarks = new PendingMarks(Path.Combine(folder, "pause-mark.txt"), Path.Combine(folder, "pause-mark.lock")),
             ListenRunning = () => false,
         };
 

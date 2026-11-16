@@ -18,7 +18,8 @@ public class DaemonCommands(
     Sync sync,
     Installer installer,
     LocationClient locationClient,
-    ComputerClient computerClient)
+    ComputerClient computerClient,
+    PauseCommand pauseCommand)
 {
     /// <summary>Flextime -- track working hours. Without a command, show the installation.</summary>
     /// <param name="days">-d, Also list the latest days, or 0 for all.</param>
@@ -434,6 +435,9 @@ public class DaemonCommands(
         // restart.
         var placeRecorder = new PlaceRecorder(new PlaceSource(logger), monitorLogger);
 
+        var pauseReader = new PauseReader(new PauseFileSource(StateFiles.PausePath),
+            message => logger.LogWarning("{Message}", message));
+
         var monitor = new UserInputMonitor(monitorLogger, new UserInputMonitorOptions
         {
             IgnoreSessionLocked = ignoreSessionLocked,
@@ -442,6 +446,9 @@ public class DaemonCommands(
             // Seen from use: in Hamburg, listen had moved to Berlin but
             // the info command still said Stockholm, from the start.
             ZoneChanged = zone => StateFiles.Write(StateFiles.ListenPath, zone),
+            // Read every tick.  Anything wrong with the file reads as no
+            // pause, said once in the log, so listen goes on measuring.
+            PausedUntil = now => pauseReader.Check(now) is { State: PauseState.Paused, End: { } end } ? end : null,
         }, placeRecorder);
 
         try
@@ -460,7 +467,7 @@ public class DaemonCommands(
         logger.LogInformation("Summary is logged every {Interval}.", interval);
 
         logger.LogDebug("Start.");
-        await monitor.MarkStart();
+        await monitor.Begin();
 
         // Limit the catch to cancellation, not all exceptions.
         // https://blog.stephencleary.com/2023/11/configureawait-in-net-8.html
@@ -474,7 +481,7 @@ public class DaemonCommands(
         }
 
         logger.LogDebug("Stop.");
-        await monitor.MarkStop();
+        await monitor.End();
     }
 
     /// <summary>Install listen and sync as services that start at logon</summary>
@@ -532,6 +539,38 @@ public class DaemonCommands(
         logger.LogDebug("Stop invoked.");
 
         return await installer.Stop();
+    }
+
+    /// <summary>Stop measuring until midnight, or --for or --until</summary>
+    /// <remarks>
+    /// Marks the active stretch just before the pause as not work, when
+    /// it is no longer than 30 minutes, or from --since.  The pause ends
+    /// by itself; resume ends it sooner.  A pause lasts until the end of
+    /// tomorrow at the most.
+    /// </remarks>
+    /// <param name="for">Pause this long instead: 2h, 90m or "1 hour".</param>
+    /// <param name="until">Pause until this time of day: 07:00.</param>
+    /// <param name="since">Mark as not work from 19:42, or 10m ago.</param>
+    /// <param name="noBackdate">Mark nothing before the pause.</param>
+    public async Task<int> Pause(
+        [HideDefaultValue] string? @for = null,
+        [HideDefaultValue] string? until = null,
+        [HideDefaultValue] string? since = null,
+        bool noBackdate = false,
+        CancellationToken cancellationToken = default)
+    {
+        logger.LogDebug("Pause invoked.");
+
+        return await pauseCommand.Pause(@for, until, since, noBackdate, cancellationToken);
+    }
+
+    /// <summary>Measure again after a pause; marks are kept</summary>
+    [ConsoleAppFilter<NoArgumentsFilter>]
+    public int Resume()
+    {
+        logger.LogDebug("Resume invoked.");
+
+        return pauseCommand.Resume();
     }
 
     /// <summary>Start listen after a stop</summary>

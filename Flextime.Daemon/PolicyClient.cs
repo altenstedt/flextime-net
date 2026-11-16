@@ -5,9 +5,10 @@ namespace Flextime.Daemon;
 
 /// <summary>
 /// Reads the idle policy the web client stores: the idle profiles and
-/// the days marked as not work.  Both are free-form documents in the
-/// server's per-user store, written by the web client and only ever
-/// read here — a second writer would race the web's ETags.
+/// the time marked as not work.  Both are free-form documents in the
+/// server's per-user store, written by the web client.  The only other
+/// writer is the pause command, through <see cref="MarksWriter"/>, which
+/// writes conditionally on the version it read, as the web does.
 /// </summary>
 public class PolicyClient(IHttpClientFactory httpClientFactory)
 {

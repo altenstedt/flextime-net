@@ -34,6 +34,22 @@ public static class StateFiles
     /// </summary>
     public static readonly string LocationClearPath = Path.Combine(Folder, "location-clear.txt");
 
+    /// <summary>
+    /// The pause: written by the pause command, read by listen every
+    /// tick, removed by resume, start, install and uninstall.  See
+    /// <see cref="PauseFile"/>.
+    /// </summary>
+    public static readonly string PausePath = Path.Combine(Folder, "pause.txt");
+
+    /// <summary>
+    /// Not-work marks the pause command could not write to the server
+    /// yet; sync retries them.  See <see cref="PendingMarks"/>.
+    /// </summary>
+    public static readonly string PauseMarkPath = Path.Combine(Folder, "pause-mark.txt");
+
+    /// <summary>Held while the pending marks file is read and rewritten.</summary>
+    public static readonly string PauseMarkLockPath = Path.Combine(Folder, "pause-mark.lock");
+
     public static void Write(string path, params string[] lines)
     {
         var directory = Path.GetDirectoryName(path);

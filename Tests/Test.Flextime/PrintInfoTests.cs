@@ -168,7 +168,7 @@ public class PrintInfoTests
 
         // One line in the output; broken here at the top-level names.
         const string expected = """
-            {"listen":{"state":"running","zone":"Europe/Stockholm","stoppedOn":null,"lastMinute":"2026-11-12T15:00:00+01:00"},
+            {"listen":{"state":"running","zone":"Europe/Stockholm","stoppedOn":null,"lastMinute":"2026-11-12T15:00:00+01:00","pausedUntil":null,"pauseIgnored":null},
             "sync":{"state":"scheduled","every":"00:01:00","installedOn":"2026-10-28"},
             "signedIn":{"state":"yes","name":"Name","email":"name@example.com"},
             "serverData":{"days":2,"outOfSync":1,"error":null,"items":[{"date":"2026-11-12","status":"canSync","inSync":false}]},

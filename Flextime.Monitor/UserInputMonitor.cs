@@ -80,6 +80,12 @@ public class UserInputMonitor(
 
     private int networkGeneration;
 
+    // Whether measuring is paused.  Changes only in Begin and the Run
+    // loop; read by session events, which are dropped while paused.
+    private readonly PauseGate pauseGate = new();
+    private DateTimeOffset? announcedPauseEnd;
+    private bool pauseReadFailed;
+
     public async Task Initialize()
     {
         if (placeRecorder != null)
@@ -267,9 +273,106 @@ public class UserInputMonitor(
 
             lastTick = tick;
 
-            await Mark(Measurement.Types.Kind.Measurement, wake, scheduled: true);
+            var until = PausedUntilAt(tick);
+
+            switch (pauseGate.Next(until != null))
+            {
+                case PauseStep.Enter:
+                    AnnouncePause(until!.Value);
+
+                    // The read after the pause is not the next minute's.
+                    lastScheduledRead = null;
+
+                    await Mark(Measurement.Types.Kind.Stop);
+                    break;
+
+                case PauseStep.Skip:
+                    AnnouncePause(until!.Value);
+                    break;
+
+                case PauseStep.Leave:
+                    logger.LogInformation("Pause ended; measuring again.");
+                    announcedPauseEnd = null;
+
+                    // Like a start: the place is read again too.
+                    await Mark(Measurement.Types.Kind.Start, wake: true);
+                    break;
+
+                default:
+                    await Mark(Measurement.Types.Kind.Measurement, wake, scheduled: true);
+                    break;
+            }
 
         } while (!token.IsCancellationRequested);
+    }
+
+    /// <summary>
+    /// Starts measuring, or begins paused when a pause is in force: then
+    /// nothing is written until it ends.
+    /// </summary>
+    public async Task Begin()
+    {
+        var until = PausedUntilAt(DateTimeOffset.UtcNow);
+
+        if (pauseGate.Next(until != null) == PauseStep.Enter)
+        {
+            AnnouncePause(until!.Value);
+
+            return;
+        }
+
+        await MarkStart();
+    }
+
+    /// <summary>Stops measuring; a paused listen already wrote its stop.</summary>
+    public async Task End()
+    {
+        if (!pauseGate.Paused)
+        {
+            await MarkStop();
+        }
+    }
+
+    /// <summary>
+    /// The end of the pause in force at <paramref name="now"/>, or null to
+    /// measure.  Never throws: a pause that cannot be read is no pause.
+    /// </summary>
+    public DateTimeOffset? PausedUntilAt(DateTimeOffset now)
+    {
+        if (options.PausedUntil == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var until = options.PausedUntil(now);
+
+            pauseReadFailed = false;
+
+            return until > now ? until : null;
+        }
+        catch (Exception exception)
+        {
+            if (!pauseReadFailed)
+            {
+                pauseReadFailed = true;
+                logger.LogWarning("Reading the pause failed; measuring: {Message}", exception.Message);
+            }
+
+            return null;
+        }
+    }
+
+    private void AnnouncePause(DateTimeOffset until)
+    {
+        if (until == announcedPauseEnd)
+        {
+            return;
+        }
+
+        announcedPauseEnd = until;
+        logger.LogInformation("Paused until {Until:yyyy-MM-dd HH:mm (K)}.", until.ToLocalTime());
     }
 
     // Idle timers and the reads of them are not exact; input this close
@@ -322,6 +425,13 @@ public class UserInputMonitor(
 
     private async Task Mark(Measurement.Types.Kind kind, bool wake = false, bool scheduled = false)
     {
+        // A session lock or unlock while paused records nothing; the
+        // pause's own stop and start pass.
+        if (pauseGate.Paused && kind is not (Measurement.Types.Kind.Start or Measurement.Types.Kind.Stop))
+        {
+            return;
+        }
+
         await markSemaphore.WaitAsync();
 
         try

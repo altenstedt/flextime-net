@@ -70,6 +70,7 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                 // arrived.
                 Row("Listen process", new(null, ListenStatus(listen, now), listen.State switch
                 {
+                    "running" when listen.PausedUntil != null || listen.PauseIgnored != null => Tone.Warn,
                     "running" => Tone.Plain,
                     "stopped" => Tone.Warn,
                     _ => Tone.Bad,
@@ -603,7 +604,12 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
             // about now.
             var zone = StateFiles.TryRead(StateFiles.ListenPath) is [var value, ..] ? TerminalText.Clean(value) : null;
 
-            return new StatusListenDataContract("running", zone, null, lastMinute);
+            // Read as listen reads it, so this says what listen does.
+            var pause = new PauseReader(new PauseFileSource(StateFiles.PausePath)).Check(DateTimeOffset.UtcNow);
+
+            return new StatusListenDataContract("running", zone, null, lastMinute,
+                pause.IsPaused ? pause.End : null,
+                pause.State == PauseState.Invalid ? TerminalText.Clean(pause.Problem ?? "") : null);
         }
 
         // Written by the stop command; removed by start.
@@ -615,6 +621,16 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
     public static string ListenStatus(StatusListenDataContract listen, DateTimeOffset now)
     {
         var lastMinute = listen.LastMinute is { } value ? $", last minute {FormatLastMinute(value, now)}" : "";
+
+        if (listen is { State: "running", PausedUntil: { } until })
+        {
+            return $"Paused until {PauseFile.Describe(until, now, TimeZoneInfo.Local)}. Use resume command to measure again.";
+        }
+
+        if (listen is { State: "running", PauseIgnored: { } problem })
+        {
+            return $"Running{lastMinute}; pause file ignored, it {problem}";
+        }
 
         return listen.State switch
         {
@@ -754,7 +770,13 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
 
 internal record PingDataContract(string Version);
 
-public record StatusListenDataContract(string State, string? Zone, string? StoppedOn, DateTimeOffset? LastMinute);
+public record StatusListenDataContract(
+    string State,
+    string? Zone,
+    string? StoppedOn,
+    DateTimeOffset? LastMinute,
+    DateTimeOffset? PausedUntil = null,
+    string? PauseIgnored = null);
 
 public record StatusSyncDataContract(string State, string? Every, string? InstalledOn);
 

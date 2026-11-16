@@ -46,6 +46,8 @@ public class Installer(DeviceCode deviceCode)
 
     public async Task<int> Install(string? timeZone, TimeSpan every)
     {
+        ClearPause();
+
         if (every <= TimeSpan.Zero)
         {
             Console.Error.WriteLine("The sync interval must be positive.");
@@ -129,8 +131,20 @@ public class Installer(DeviceCode deviceCode)
         return result;
     }
 
+    // Install, start and uninstall all mean "measure as usual", so a
+    // pause goes, whatever the outcome of the rest.
+    private static void ClearPause()
+    {
+        if (PauseFile.Clear(StateFiles.PausePath) is { } failure)
+        {
+            Console.Error.WriteLine($"Could not remove the pause: {failure}");
+        }
+    }
+
     public async Task<int> Uninstall()
     {
+        ClearPause();
+
         int result;
 
         if (OperatingSystem.IsMacOS())
@@ -200,6 +214,8 @@ public class Installer(DeviceCode deviceCode)
 
     public async Task<int> Start()
     {
+        ClearPause();
+
         if (StateFiles.TryRead(StateFiles.InstallPath) == null)
         {
             Console.Error.WriteLine("The user services are not installed.");
