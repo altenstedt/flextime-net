@@ -145,6 +145,59 @@ public class RefreshTokenDelegatingHandlerTests(ITestOutputHelper testOutputHelp
     }
 
     [Fact]
+    public async Task A_cancelled_caller_does_not_lose_the_rotated_refresh_token()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), $"flextime-refresh-tests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(folder);
+
+        try
+        {
+            var tokenPath = Path.Combine(folder, "user");
+
+            await TokenStorage.Write("old access token", 0, "refresh token", tokenPath, TestContext.Current.CancellationToken);
+
+            var handlerOptions = new RefreshTokenDelegatingHandlerOptions
+            {
+                Scope = "scope",
+                ClientId = "client id cancelled",
+                RefreshToken = "refresh token",
+                WriteToStorage = true,
+                TokenPath = tokenPath
+            };
+
+            // The token endpoint answers after 100 ms; the caller gives
+            // up after 20, as the pause command's timeout would.
+            var handler = new RefreshTokenDelegatingHandler(
+                new MockHttpClientFactory(new TokenHandler(refreshToken: "rotated refresh token")),
+                handlerOptions)
+            {
+                InnerHandler = new OkHandler()
+            };
+
+            var httpClient = new HttpClient(handler) { BaseAddress = new Uri("https://localhost") };
+
+            using var caller = new CancellationTokenSource(TimeSpan.FromMilliseconds(20));
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => httpClient.SendAsync(new HttpRequestMessage(), caller.Token));
+
+            string? refreshToken = null;
+
+            for (var wait = 0; wait < 50 && refreshToken != "rotated refresh token"; wait++)
+            {
+                await Task.Delay(50, TestContext.Current.CancellationToken);
+                (_, _, refreshToken) = await TokenStorage.Read(tokenPath, TestContext.Current.CancellationToken);
+            }
+
+            Assert.Equal("rotated refresh token", refreshToken);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task TestRefreshTokenIsKeptWhenNoneIsReturned()
     {
         var folder = Path.Combine(Path.GetTempPath(), $"flextime-refresh-tests-{Guid.NewGuid():N}");

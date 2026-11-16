@@ -42,6 +42,12 @@ public class RefreshTokenDelegatingHandler(
             throw LogOut();
         }
 
+        // The refresh runs to the end once it has begun, whatever the
+        // caller's token says: the token endpoint rotates the refresh
+        // token, and a refresh cancelled between its response and the
+        // write below would lose the new one.  The token client's own
+        // resilience timeouts bound it.  The caller stops waiting when
+        // cancelled; the refresh carries on.
         var accessToken = await cache.GetOrAddAsync<string>(options.ClientId, async entry =>
         {
             // This is guaranteed to be single threaded since we use LazyCache.
@@ -66,7 +72,7 @@ public class RefreshTokenDelegatingHandler(
                 new("refresh_token", options.RefreshToken)
             ];
 
-            var responseMessage = await tokenHttpClient.PostAsync(string.Empty, new FormUrlEncodedContent(collection), cancellationToken);
+            var responseMessage = await tokenHttpClient.PostAsync(string.Empty, new FormUrlEncodedContent(collection), CancellationToken.None);
 
             if (!responseMessage.IsSuccessStatusCode)
             {
@@ -80,7 +86,7 @@ public class RefreshTokenDelegatingHandler(
 
             var tokenResponse = await responseMessage.Content.ReadFromJsonAsync(
                 TokenResponseSourceGenerationContext.Default.TokenResponse, 
-                cancellationToken);
+                CancellationToken.None);
 
             if (tokenResponse == null)
             {
@@ -116,11 +122,11 @@ public class RefreshTokenDelegatingHandler(
                 // The token kept above: a response without a new one must
                 // not blank the stored one, or the next process starts
                 // logged out.
-                await TokenStorage.Write(accessToken, tokenResponse.expires_in, options.RefreshToken, options.TokenPath, cancellationToken);
+                await TokenStorage.Write(accessToken, tokenResponse.expires_in, options.RefreshToken, options.TokenPath, CancellationToken.None);
             }
 
             return accessToken;
-        });
+        }).WaitAsync(cancellationToken);
 
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
