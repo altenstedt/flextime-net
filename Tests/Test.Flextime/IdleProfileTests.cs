@@ -193,16 +193,23 @@ public class IdleProfileTests
     }
 
     [Fact]
-    public void RangeMarksAreRefused()
+    public void RangeMarksAreRead()
     {
-        // A shape the stored format allows and the web decodes, but
-        // nothing subtracts yet.  Accepting it would mean counting the
-        // day differently from the client that wrote it.
-        var exception = Assert.Throws<IdlePolicyException>(
-            () => Marks.Decode(Json("""{ "marks": { "2026-06-22": [{ "from": 0, "to": 3600 }] } }""")));
+        var marks = Marks.Decode(Json("""{ "marks": { "2026-06-22": [{ "from": 0, "to": 3600 }] } }"""));
 
-        Assert.Contains("ranges", exception.Message);
+        Assert.Equal([new MarkRange(0, 3600)], marks.RangesOn(new DateOnly(2026, 6, 22)));
+        Assert.False(marks.IsMarked(new DateOnly(2026, 6, 22)));
     }
+
+    [Theory]
+    [InlineData("""{ "marks": { "2026-06-22": [{ "from": 3600, "to": 0 }] } }""")]
+    [InlineData("""{ "marks": { "2026-06-22": [{ "from": -1, "to": 10 }] } }""")]
+    [InlineData("""{ "marks": { "2026-06-22": [{ "from": 0, "to": 86401 }] } }""")]
+    [InlineData("""{ "marks": { "2026-06-22": [{ "from": "0", "to": 10 }] } }""")]
+    [InlineData("""{ "marks": { "2026-06-22": [{ "from": 0 }] } }""")]
+    [InlineData("""{ "marks": { "2026-06-22": [3] } }""")]
+    public void MalformedRangeMarksAreRefused(string stored) =>
+        Assert.Throws<IdlePolicyException>(() => Marks.Decode(Json(stored)));
 
     [Fact]
     public void AnAbsentMarksDocumentIsEmpty()

@@ -297,8 +297,13 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
 
             // A marked day keeps its place — the reconcile still knows
             // the day existed — but contributes nothing, exactly as the
-            // web client sums it.
-            var counted = marks.IsMarked(date) ? TimeSpan.Zero : day.Work;
+            // web client sums it.  Marked ranges come out of the work
+            // after bridging, as the web takes them out.
+            var profile = policy?.For(date, timestamps[0].DayOfWeek) ?? IdleProfile.Flat(flat);
+            var marked = Marks.Overlap(timestamps, at => profile.LimitAt(at.TimeOfDay), marks.RangesOn(date));
+            var counted = marks.IsMarked(date)
+                ? TimeSpan.Zero
+                : day.Work > marked ? day.Work - marked : TimeSpan.Zero;
 
             work[date] = work.TryGetValue(date, out var running) ? running + counted : counted;
         }
