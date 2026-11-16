@@ -280,10 +280,10 @@ public class UserInputMonitor(
                 case PauseStep.Enter:
                     AnnouncePause(until!.Value);
 
-                    // The read after the pause is not the next minute's.
+                    // Nothing marks the pause: it is a gap like any
+                    // other, and the read after it is not the next
+                    // minute's.
                     lastScheduledRead = null;
-
-                    await Mark(Measurement.Types.Kind.Stop);
                     break;
 
                 case PauseStep.Skip:
@@ -294,8 +294,8 @@ public class UserInputMonitor(
                     logger.LogInformation("Pause ended; measuring again.");
                     announcedPauseEnd = null;
 
-                    // Like a start: the place is read again too.
-                    await Mark(Measurement.Types.Kind.Start, wake: true);
+                    // Like a wake: the place is read again too.
+                    await Mark(Measurement.Types.Kind.Measurement, wake: true, scheduled: true);
                     break;
 
                 default:
@@ -324,7 +324,7 @@ public class UserInputMonitor(
         await MarkStart();
     }
 
-    /// <summary>Stops measuring; a paused listen already wrote its stop.</summary>
+    /// <summary>Stops measuring; a paused listen writes nothing.</summary>
     public async Task End()
     {
         if (!pauseGate.Paused)
@@ -425,9 +425,8 @@ public class UserInputMonitor(
 
     private async Task Mark(Measurement.Types.Kind kind, bool wake = false, bool scheduled = false)
     {
-        // A session lock or unlock while paused records nothing; the
-        // pause's own stop and start pass.
-        if (pauseGate.Paused && kind is not (Measurement.Types.Kind.Start or Measurement.Types.Kind.Stop))
+        // Nothing at all is recorded while paused.
+        if (pauseGate.Paused)
         {
             return;
         }
@@ -438,7 +437,7 @@ public class UserInputMonitor(
         {
             // Again, inside: a session event can wait here while the
             // loop begins a pause.
-            if (pauseGate.Paused && kind is not (Measurement.Types.Kind.Start or Measurement.Types.Kind.Stop))
+            if (pauseGate.Paused)
             {
                 return;
             }
@@ -680,7 +679,7 @@ public class UserInputMonitor(
             for (var attempt = 0; attempt < PendingRetries && generation == Volatile.Read(ref networkGeneration); attempt++)
             {
                 // Nothing is recorded while paused, places included; the
-                // start that ends the pause reads the network again.
+                // wake that ends the pause reads the network again.
                 if (pauseGate.Paused)
                 {
                     return;

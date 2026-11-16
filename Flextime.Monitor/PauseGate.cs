@@ -5,20 +5,20 @@ public enum PauseStep
     /// <summary>Not paused: measure.</summary>
     Measure,
 
-    /// <summary>A pause begins: write the stop, once.</summary>
+    /// <summary>A pause begins: from now on, write nothing.</summary>
     Enter,
 
     /// <summary>Still paused: write nothing.</summary>
     Skip,
 
-    /// <summary>The pause is over: write the start, once.</summary>
+    /// <summary>The pause is over: measure, as after a wake.</summary>
     Leave,
 }
 
 /// <summary>
-/// Turns what the pause file says each tick into what listen does, so a
-/// stop and a start are written once per change, however the file
-/// comes and goes.
+/// Turns what the pause file says each tick into what listen does, so
+/// the start and end of a pause are each seen once per change, however
+/// the file comes and goes.
 /// </summary>
 public sealed class PauseGate
 {

@@ -675,7 +675,7 @@ public class PauseTests : IDisposable
     // ---- What listen does with it ---------------------------------------
 
     [Fact]
-    public void Stop_and_start_are_written_once_per_change_however_the_file_flaps()
+    public void A_pause_begins_and_ends_once_per_change_however_the_file_flaps()
     {
         var gate = new PauseGate();
         var steps = new[] { false, true, true, false, true, false, false, true, true, true, false }

@@ -63,19 +63,6 @@ public static class Backdate
     }
 
     /// <summary>
-    /// The end of a marked range for a pause at <paramref name="now"/>:
-    /// the next whole minute, where listen writes the stop that begins
-    /// the pause.
-    /// </summary>
-    public static DateTimeOffset RangeEnd(DateTimeOffset now)
-    {
-        var seconds = now.ToUnixTimeMilliseconds();
-        var minute = 60_000L;
-
-        return DateTimeOffset.FromUnixTimeMilliseconds((seconds + minute - 1) / minute * minute);
-    }
-
-    /// <summary>
     /// The ranges of the days from <paramref name="from"/> to
     /// <paramref name="to"/>, split at midnight in <paramref name="zone"/>.
     /// A range is its start's time of day plus its length, as the web

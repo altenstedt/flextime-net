@@ -11,10 +11,10 @@ namespace Flextime.Daemon;
 /// the server is tried, so an interrupted or failed write is not lost.
 /// </summary>
 /// <remarks>
-/// Listen writes a stop as the pause begins and a start as it ends, and
-/// both are ordinary measurements to the sums.  A pause shorter than the
-/// idle limit in force is therefore bridged like any other gap and still
-/// counts as work; only a longer pause leaves the time out.
+/// Listen writes nothing for a pause, not even where it begins or ends:
+/// it is a gap like any other.  A pause shorter than the idle limit in
+/// force is therefore bridged and still counts as work; only a longer
+/// pause leaves the time out.
 /// </remarks>
 public partial class PauseCommand(IHttpClientFactory httpClientFactory, DeviceCode deviceCode)
 {
@@ -178,7 +178,7 @@ public partial class PauseCommand(IHttpClientFactory httpClientFactory, DeviceCo
             return;
         }
 
-        var to = Backdate.RangeEnd(now);
+        var to = now;
         DateTimeOffset from;
         string zoneId;
 

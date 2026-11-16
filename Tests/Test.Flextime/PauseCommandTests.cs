@@ -100,7 +100,7 @@ public class PauseCommandTests : IDisposable
 
         Assert.Equal(new DateTimeOffset(2026, 11, 17, 0, 0, 0, TimeSpan.FromHours(1)), Status().End);
         Assert.Equal(
-            "Paused until 00:00. Use the resume command to measure again sooner.\nMarked 19:41–19:45 as not work.\n",
+            "Paused until 00:00. Use the resume command to measure again sooner.\nMarked 19:41–19:44 as not work.\n",
             output.ToString().ReplaceLineEndings("\n"));
         Assert.False(File.Exists(PendingPath));
     }
@@ -125,7 +125,7 @@ public class PauseCommandTests : IDisposable
 
         await Command(server).Pause(null, null, "19:00", false, Token);
 
-        Assert.Contains("Marked 19:00–19:45 as not work.", output.ToString());
+        Assert.Contains("Marked 19:00–19:44 as not work.", output.ToString());
     }
 
     [Theory]
@@ -218,7 +218,7 @@ public class PauseCommandTests : IDisposable
 
         Assert.True(DateTimeOffset.UtcNow - started < TimeSpan.FromSeconds(5));
         Assert.True(Status().IsPaused);
-        Assert.Contains("sync marks 19:41–19:45 as not work later", output.ToString());
+        Assert.Contains("sync marks 19:41–19:44 as not work later", output.ToString());
         Assert.Single(File.ReadAllLines(PendingPath));
     }
 

@@ -92,19 +92,11 @@ public class NotWorkMarksTests : IDisposable
     }
 
     [Fact]
-    public void The_range_ends_at_the_next_whole_minute()
-    {
-        Assert.Equal(new DateTimeOffset(2026, 11, 16, 18, 45, 0, TimeSpan.Zero), Backdate.RangeEnd(Now));
-        Assert.Equal(new DateTimeOffset(2026, 11, 16, 18, 45, 0, TimeSpan.Zero),
-            Backdate.RangeEnd(new DateTimeOffset(2026, 11, 16, 18, 45, 0, TimeSpan.Zero)));
-    }
-
-    [Fact]
     public void A_range_is_in_seconds_of_the_day_in_the_days_zone()
     {
-        var ranges = Backdate.Split(Now.AddMinutes(-2.5), Backdate.RangeEnd(Now), Stockholm);
+        var ranges = Backdate.Split(Now.AddMinutes(-2.5), Now, Stockholm);
 
-        Assert.Equal([new DayRange(new DateOnly(2026, 11, 16), 19 * 3600 + 42 * 60, 19 * 3600 + 45 * 60)], ranges);
+        Assert.Equal([new DayRange(new DateOnly(2026, 11, 16), 19 * 3600 + 42 * 60, 19 * 3600 + 44 * 60 + 30)], ranges);
     }
 
     [Fact]
@@ -371,9 +363,9 @@ public class NotWorkMarksTests : IDisposable
     private static DateTimeOffset Whole(DateTimeOffset instant) =>
         DateTimeOffset.FromUnixTimeSeconds(instant.ToUnixTimeSeconds());
 
-    // 19:41:00 to 19:45:00, saved at 19:44:30.
+    // 19:41:00 to 19:44:30, saved at 19:44:30.
     private static PendingMark Mark() =>
-        new(Whole(Now.AddMinutes(-3).AddSeconds(-30)), Whole(Backdate.RangeEnd(Now)), "Europe/Stockholm", Whole(Now));
+        new(Whole(Now.AddMinutes(-3).AddSeconds(-30)), Whole(Now), "Europe/Stockholm", Whole(Now));
 
     [Fact]
     public async Task A_saved_mark_reads_back_and_is_removed()
@@ -525,8 +517,8 @@ public class NotWorkMarksTests : IDisposable
             TestContext.Current.CancellationToken);
 
         Assert.Empty(await pending.Read(Now, null, TestContext.Current.CancellationToken));
-        Assert.Equal("""{"marks":{"2026-11-16":[{"from":70860,"to":71100}]}}""", store.Document);
-        Assert.Equal([("Marked 19:41–19:45 as not work.", false)], notes);
+        Assert.Equal("""{"marks":{"2026-11-16":[{"from":70860,"to":71070}]}}""", store.Document);
+        Assert.Equal([("Marked 19:41–19:44 as not work.", false)], notes);
     }
 
     [Fact]
