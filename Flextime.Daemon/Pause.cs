@@ -331,15 +331,29 @@ public sealed class PauseFileSource(string path) : IPauseFileSource
 
 /// <summary>
 /// Reads the pause file for listen, once a minute.  Never throws, never
-/// waits, and anything it cannot trust reads as no pause: listen goes on
-/// measuring.  A problem is reported once, when it first appears, not
-/// every tick.
+/// waits more than a moment, and anything it cannot trust reads as no
+/// pause: listen goes on measuring.  A problem is reported once, when it
+/// first appears, not every tick.
 /// </summary>
-public sealed class PauseReader(IPauseFileSource source, Action<string>? warn = null)
+/// <remarks>
+/// The file is looked at and read on another thread, waited on for no
+/// longer than <c>readTimeout</c>: a pipe put at the path between the
+/// look and the open would otherwise block the open, and the tick with
+/// it.  A read that has not come back is not started again until it
+/// does, so a stuck read costs one thread, not one a minute.
+/// </remarks>
+public sealed class PauseReader(IPauseFileSource source, Action<string>? warn = null, TimeSpan? readTimeout = null)
 {
+    private readonly TimeSpan timeout = readTimeout ?? TimeSpan.FromSeconds(1);
+
     private PauseFileStat? lastStat;
     private string? lastText;
     private string? lastProblem;
+    private Task<Snapshot>? stuck;
+
+    // What the other thread found: the file as it was looked at, its
+    // text when it was read, or why it was not.
+    private sealed record Snapshot(PauseFileStat? Stat, string? Text, string? Problem);
 
     public PauseStatus Check(DateTimeOffset now)
     {
@@ -358,9 +372,43 @@ public sealed class PauseReader(IPauseFileSource source, Action<string>? warn = 
 
     private PauseStatus CheckCore(DateTimeOffset now)
     {
-        var stat = source.Stat();
+        if (stuck is { IsCompleted: false })
+        {
+            return Problem("is taking too long to read");
+        }
 
-        if (stat == null)
+        stuck = null;
+
+        var knownStat = lastStat;
+        var knownText = lastText;
+        var look = Task.Run(() => Look(knownStat, knownText));
+
+        bool done;
+
+        try
+        {
+            done = look.Wait(timeout);
+        }
+        catch (AggregateException exception)
+        {
+            lastStat = null;
+            lastText = null;
+
+            return Problem($"cannot be read: {exception.InnerException?.Message ?? exception.Message}");
+        }
+
+        if (!done)
+        {
+            stuck = look;
+            lastStat = null;
+            lastText = null;
+
+            return Problem("is taking too long to read");
+        }
+
+        var snapshot = look.Result;
+
+        if (snapshot.Stat == null)
         {
             lastStat = null;
             lastText = null;
@@ -369,51 +417,15 @@ public sealed class PauseReader(IPauseFileSource source, Action<string>? warn = 
             return new PauseStatus(PauseState.None);
         }
 
-        // A directory, a link, an empty file and a large one are never
-        // opened: a link could lead anywhere, and an empty "file" may be
-        // a pipe, which would block the open.
-        if (stat.IsDirectory)
+        if (snapshot.Problem != null)
         {
-            return Problem("is a directory");
+            return Problem(snapshot.Problem);
         }
 
-        if (stat.IsLink)
-        {
-            return Problem("is a symbolic link");
-        }
+        lastStat = snapshot.Stat;
+        lastText = snapshot.Text;
 
-        if (stat.Length == 0)
-        {
-            return Problem("is empty");
-        }
-
-        if (stat.Length > PauseFile.MaxBytes)
-        {
-            return Problem("is too large");
-        }
-
-        string text;
-
-        if (stat == lastStat && lastText != null)
-        {
-            // The file has not changed since the last tick.
-            text = lastText;
-        }
-        else
-        {
-            var bytes = source.Read(PauseFile.MaxBytes);
-
-            if (bytes.Length > PauseFile.MaxBytes)
-            {
-                return Problem("is too large");
-            }
-
-            text = new UTF8Encoding(false, false).GetString(bytes);
-            lastStat = stat;
-            lastText = text;
-        }
-
-        var status = PauseFile.Parse(text, now);
+        var status = PauseFile.Parse(snapshot.Text!, now);
 
         if (status.State == PauseState.Invalid)
         {
@@ -423,6 +435,55 @@ public sealed class PauseReader(IPauseFileSource source, Action<string>? warn = 
         lastProblem = null;
 
         return status;
+    }
+
+    // Runs on the other thread; touches no field.
+    private Snapshot Look(PauseFileStat? knownStat, string? knownText)
+    {
+        var stat = source.Stat();
+
+        if (stat == null)
+        {
+            return new Snapshot(null, null, null);
+        }
+
+        // A directory, a link, an empty file and a large one are never
+        // opened: a link could lead anywhere, and an empty "file" may be
+        // a pipe, which would block the open.
+        if (stat.IsDirectory)
+        {
+            return new Snapshot(stat, null, "is a directory");
+        }
+
+        if (stat.IsLink)
+        {
+            return new Snapshot(stat, null, "is a symbolic link");
+        }
+
+        if (stat.Length == 0)
+        {
+            return new Snapshot(stat, null, "is empty");
+        }
+
+        if (stat.Length > PauseFile.MaxBytes)
+        {
+            return new Snapshot(stat, null, "is too large");
+        }
+
+        if (stat == knownStat && knownText != null)
+        {
+            // The file has not changed since the last tick.
+            return new Snapshot(stat, knownText, null);
+        }
+
+        var bytes = source.Read(PauseFile.MaxBytes);
+
+        if (bytes.Length > PauseFile.MaxBytes)
+        {
+            return new Snapshot(stat, null, "is too large");
+        }
+
+        return new Snapshot(stat, new UTF8Encoding(false, false).GetString(bytes), null);
     }
 
     private PauseStatus Problem(string problem)

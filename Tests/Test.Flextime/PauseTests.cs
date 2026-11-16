@@ -525,6 +525,70 @@ public class PauseTests : IDisposable
         }
     }
 
+    [Fact]
+    public void A_read_that_blocks_measures_and_is_not_started_again()
+    {
+        using var release = new ManualResetEventSlim();
+        var bytes = Encoding.UTF8.GetBytes(Text(Now.AddHours(1), Now));
+        var source = new FakeSource
+        {
+            OnStat = () => FileOf(bytes.Length),
+            OnRead = () =>
+            {
+                release.Wait(TimeSpan.FromSeconds(30));
+
+                return bytes;
+            },
+        };
+        var warnings = new List<string>();
+        var reader = new PauseReader(source, warnings.Add, TimeSpan.FromMilliseconds(100));
+        var started = Stopwatch.StartNew();
+
+        for (var tick = 0; tick < 5; tick++)
+        {
+            Assert.False(reader.Check(Now).IsPaused);
+        }
+
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(3));
+        Assert.Equal(1, source.Reads);
+        Assert.Single(warnings);
+
+        // Once it comes back, the file is read again.
+        release.Set();
+        SpinWait.SpinUntil(() => false, 200);
+
+        Assert.True(reader.Check(Now).IsPaused);
+    }
+
+    [Fact]
+    public async Task A_pipe_swapped_in_after_the_look_does_not_block_the_tick()
+    {
+        if (OperatingSystem.IsWindows() || !File.Exists("/usr/bin/mkfifo"))
+        {
+            return;
+        }
+
+        using (var mkfifo = Process.Start("/usr/bin/mkfifo", [PausePath]))
+        {
+            await mkfifo.WaitForExitAsync(TestContext.Current.CancellationToken);
+        }
+
+        // The look saw a small file; the open meets a pipe.
+        var real = new PauseFileSource(PausePath);
+        var source = new FakeSource { OnStat = () => FileOf(30), OnRead = () => real.Read(PauseFile.MaxBytes) };
+        var reader = new PauseReader(source, readTimeout: TimeSpan.FromMilliseconds(200));
+        var started = Stopwatch.StartNew();
+
+        Assert.False(reader.Check(Now).IsPaused);
+        Assert.False(reader.Check(Now).IsPaused);
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(3));
+
+        // Let the stuck open finish, so the test leaves no thread behind.
+        await using (var writer = new FileStream(PausePath, FileMode.Open, FileAccess.Write))
+        {
+        }
+    }
+
     // ---- Clearing -------------------------------------------------------
 
     [Fact]
