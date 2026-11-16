@@ -51,5 +51,6 @@ public class RouterMakersTests
     public void The_location_help_key_fits_in_80_columns()
     {
         Assert.All(LocationHelp.Key.Split('\n'), line => Assert.True(line.Length <= 80, line));
+        Assert.All(PauseHelp.Key.Split('\n'), line => Assert.True(line.Length <= 80, line));
     }
 }

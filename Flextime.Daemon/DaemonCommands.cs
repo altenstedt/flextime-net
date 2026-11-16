@@ -554,6 +554,7 @@ public class DaemonCommands(
     /// <param name="until">Pause until this time of day: 07:00.</param>
     /// <param name="since">Mark as not work from 19:42, or 10m ago.</param>
     /// <param name="noBackdate">Mark nothing before the pause.</param>
+    [ConsoleAppFilter<PauseHelpFilter>]
     public async Task<int> Pause(
         [HideDefaultValue] string? @for = null,
         [HideDefaultValue] string? until = null,
