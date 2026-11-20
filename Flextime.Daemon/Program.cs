@@ -1,3 +1,4 @@
+using Flextime;
 using ConsoleAppFramework;
 using Flextime.Daemon;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,9 +52,19 @@ if (OperatingSystem.IsWindows())
     builder.Logging.AddEventLog();
 }
 
+ConsoleApp.Version = ConsoleApp.VersionWithHomePage;
+
 var app = builder.ToConsoleAppBuilder();
 
 app.UseFilter<UnknownCommandFilter>();
 app.Add<DaemonCommands>();
 
 await app.RunAsync(args);
+
+// The root help ends with the home page.  A lone --help never reaches a
+// filter, and a first argument that is not an option names a command.
+if (args is [var first, ..] && first.StartsWith('-') && HomePage.AskedForHelp(args))
+{
+    Console.WriteLine();
+    Console.WriteLine(HomePage.Line);
+}

@@ -18,6 +18,10 @@ public static class Constants
             ? new Uri(uri.GetComponents(UriComponents.SchemeAndServer, UriFormat.UriEscaped) + "/", UriKind.Absolute)
             : new Uri("https://api.flextime.inhill.com/", UriKind.Absolute);
 
+    // Where Flextime lives, named in --help and --version so an installed
+    // program still says where it came from.
+    public const string HomePage = "https://flextime.inhill.com/";
+
     public static readonly Uri AuthorityUri = new Uri($"https://login.microsoftonline.com/{TenantId}/oauth2/v2.0/", UriKind.Absolute);
 
     public static readonly Uri TokenUri = new Uri(AuthorityUri, "token");
