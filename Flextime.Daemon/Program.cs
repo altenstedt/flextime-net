@@ -52,8 +52,6 @@ if (OperatingSystem.IsWindows())
     builder.Logging.AddEventLog();
 }
 
-ConsoleApp.Version = ConsoleApp.VersionWithHomePage;
-
 var app = builder.ToConsoleAppBuilder();
 
 app.UseFilter<UnknownCommandFilter>();

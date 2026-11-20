@@ -18,7 +18,7 @@ public static class Constants
             ? new Uri(uri.GetComponents(UriComponents.SchemeAndServer, UriFormat.UriEscaped) + "/", UriKind.Absolute)
             : new Uri("https://api.flextime.inhill.com/", UriKind.Absolute);
 
-    // Where Flextime lives, named in --help and --version so an installed
+    // Where Flextime lives, named at the end of --help so an installed
     // program still says where it came from.
     public const string HomePage = "https://flextime.inhill.com/";
 
