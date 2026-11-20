@@ -1,17 +1,17 @@
-Cross plattform implementation of flextime, a program for tracking
+Cross platform implementation of flextime, a program for tracking
 working hours.
 
-The Flextime daemon query the computer for the time since the last
+The Flextime daemon queries the computer for the time since the last
 user input once every minute and stores the result on disk.  The
 flextime program can be used to display the times the user has been
 active on the computer.  For example:
 
     $ flextime
-    2020-08-10 07:16 — 16:10 8:53 | 0:27 w/33 Mon
-    2020-08-11 13:29 — 14:01 0:31 | 0:12 w/33 Tue
-    2020-08-12 07:33 — 17:22 9:49 | 6:22 w/33 Wed
-    2020-08-13 07:54 — 15:17 7:22 | 3:34 w/33 Thu
-    2020-08-14 07:29 — 10:38 3:08 | 3:08 w/33 Fri
+    2020-08-10 07:16 – 16:10 08:53 | 00:27 w/33 Mon
+    2020-08-11 13:29 – 14:01 00:31 | 00:12 w/33 Tue
+    2020-08-12 07:33 – 17:22 09:49 | 06:22 w/33 Wed
+    2020-08-13 07:54 – 15:17 07:22 | 03:34 w/33 Thu
+    2020-08-14 07:29 – 10:38 03:08 | 03:08 w/33 Fri
 
 If your working day starts and ends on the computer, this list
 effectively represents your working hours.
@@ -19,8 +19,8 @@ effectively represents your working hours.
 The flextime program only reads the files on this computer; it never
 uses the network and needs no account.  It shows the last 30 days by
 default; `--days 0` shows every day on disk, `--idle` sets the idle
-limit in minutes, and `--json` writes the same shape as
-`flextimed data --json`, so a script can read either one.
+limit in minutes (10 by default), and `--json` writes the same shape
+as `flextimed data --json`, so a script can read either one.
 
 `--since` takes a length of time written any of the usual ways, in
 English:
@@ -44,12 +44,49 @@ prints, so anything shorter than a day means today, and the colon
 forms keep their .NET meaning — `36:00:00` is 36 days, `36h` is 36
 hours.  Months and years are not accepted: neither has a fixed length.
 
-Just make sure that the Flextime daemon, is started every time you
-log in.
+Run the daemon at every login with:
 
-Once you log in, `flextimed sync` uploads the measurements with their
-time zone, a random id for the computer, and the computer's hostname,
-read afresh on every pass: on macOS the computer name from System
+    flextimed install           # listen, and sync --once every 20m
+    flextimed install --every 1h
+    flextimed uninstall         # measurements and sign-in are kept
+
+On macOS that is two launchd agents, `se.flextime.listen` and
+`se.flextime.sync`, in `~/Library/LaunchAgents`, logging to
+`~/Library/Logs/Flextime`.  On Linux it is the systemd user units
+`flextime-listen.service` and `flextime-sync.timer`; on Windows two
+scheduled tasks, and there `--time-zone` is required.  Run without a
+command, `flextimed` shows the installation and whether it is healthy;
+`--days` also lists the latest days.
+
+`flextimed stop` stops `listen`, across logins, until `flextimed
+start`; sync keeps going.  To leave a stretch out for a while instead:
+
+    flextimed pause                 # until midnight
+    flextimed pause --for 2h
+    flextimed pause --until 07:00
+    flextimed resume
+
+A pause ends by itself, never later than the end of tomorrow.  The
+active stretch just before it, if no longer than 30 minutes, is marked
+as not work; `--since` marks from the time you give instead, and
+`--no-backdate` marks nothing.  The mark is undone in the web app.  A
+pause shorter than the idle limit is bridged like any other gap.
+
+`flextimed listen` is what the service runs; `listen --help` has its
+options.  `FLEXTIME_LOG_LEVEL` (`Debug`, `Warning`, ...) sets how much
+the daemon logs.
+
+The measurements are kept under `Flextime/measurements` in the local
+application data folder (`~/Library/Application Support` on macOS,
+`~/.local/share` on Linux, `%LOCALAPPDATA%` on Windows), with the
+sign-in and the daemon's state next to them in `Flextime`.
+
+`flextimed login` signs in with a device code and `flextimed logout`
+removes the sign-in; the measurements are kept.  Once you log in,
+`flextimed sync --once` uploads, and `sync --every 20m` keeps doing
+so.  Sync uploads the measurements with their time zone, a random id
+for the computer, and the computer's hostname, read afresh on every
+pass: on macOS the computer name from System
 Settings, elsewhere `Environment.MachineName`.  The server keeps the
 hostnames each computer reported.
 
@@ -67,15 +104,23 @@ flextimed computer rename ""              # back to the hostname
 A computer with no data in 90 days is dormant; `computers` lists it
 last.  Its data is all still there.
 
-The program use D-Bus on Linux, and
+`flextimed data` shows the activity on the server, per day and
+computer; `data --help` has its options.  `flextimed export` saves all
+your data on the server to one JSON file, `-o -` to standard out.
+
+The program uses D-Bus on Linux, and
 `CGEventSourceSecondsSinceLastEventType` on macOS, and
 `GetLastInputInfo` on Windows.
 
-Publish:
+Publish, with .NET 11, as native AOT:
 
 ```sh
-dotnet publish -c Release --use-current-runtime --self-contained
+dotnet publish Flextime.Client -c Release --use-current-runtime
+dotnet publish Flextime.Daemon -c Release --use-current-runtime
 ```
+
+and install the two binaries as `~/.local/bin/flextime` and
+`~/.local/bin/flextimed`.
 
 # Reconciling reported hours
 
@@ -149,9 +194,9 @@ day by place.  It is off until you turn it on:
 `listen` reads the setting every minute, so no restart is needed.  A
 place is written into the measurement files only when it changes, as a
 48-bit hash of your user id and the router's hardware address, with
-flags for a connected VPN and for traffic through a tunnel; sync sends
-both with each change point.  The API keys that hash again before it
-stores anything.  The hash hides the router's address from anyone
+flags for a connected VPN, for traffic through a tunnel and for a
+metered network; sync sends both with each change point.  The API keys
+that hash again before it stores anything.  The hash hides the router's address from anyone
 without your user id, but not from the server: it knows the id, and
 can try every address within the known vendor prefixes.  The first
 time a file records a router it also notes the network's DNS domain,
@@ -181,11 +226,3 @@ file.
 
 * https://grpc.io/docs/protoc-installation/
 * https://github.com/protocolbuffers/protobuf/tree/main/csharp
-
-# CLI refactor, needed again after Powderhouse
-
-* https://github.com/orgs/dotnet/projects/381
-* https://github.com/dotnet/command-line-api/labels/Powderhouse
-* https://github.com/dotnet/command-line-api/issues/2338
-* https://github.com/dotnet/command-line-api/issues/440#issuecomment-2024850186
-* https://github.com/dotnet/command-line-api/issues/556
