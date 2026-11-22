@@ -43,6 +43,7 @@ public class PrintData(
         string[] computers,
         bool allComputers,
         bool newestFirst,
+        bool hideNotWork,
         bool json,
         CancellationToken cancellationToken)
     {
@@ -59,6 +60,11 @@ public class PrintData(
             if (data == null)
             {
                 return 1;
+            }
+
+            if (hideNotWork)
+            {
+                data = HideNotWork(data);
             }
 
             if (json)
@@ -340,6 +346,12 @@ public class PrintData(
         var range = $"{day.Start:HH:mm} – {day.End:HH:mm}";
         return $"{label}{range}".PadRight(HeadWidth) + $"{Hours(day.Work),5}";
     }
+
+    // Days marked whole as not work left out, as the web's Hide not work
+    // leaves them out: the JSON too, since asking to hide them asks for
+    // the list without them.  A week of nothing else goes with them.
+    public static DataDataContract HideNotWork(DataDataContract data) =>
+        data with { Days = [.. data.Days.Where(day => !day.NotWork)] };
 
     // The sums run over the exact work and are rounded once, as the web
     // sums a week and a month, so a total can differ by a minute from

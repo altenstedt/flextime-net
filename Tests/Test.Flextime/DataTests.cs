@@ -342,6 +342,22 @@ public class DataTests
     }
 
     [Fact]
+    public void Hiding_not_work_leaves_out_the_marked_days()
+    {
+        var data = new DataDataContract(
+            [new DataComputerDataContract("a1", "One")],
+            [
+                Row(new DateOnly(2026, 11, 6), "08:00", "10:00", TimeSpan.FromHours(2)),
+                Row(new DateOnly(2026, 11, 7), "08:00", "09:00", TimeSpan.Zero) with { NotWork = true },
+            ]);
+
+        var hidden = PrintData.HideNotWork(data);
+
+        Assert.Equal([new DateOnly(2026, 11, 6)], hidden.Days.Select(day => day.Date));
+        Assert.DoesNotContain(PrintData.Format(hidden, false, false, October, NovemberEnd, Later), line => line.Contains("not work"));
+    }
+
+    [Fact]
     public void No_days_says_so()
     {
         Assert.Equal(
