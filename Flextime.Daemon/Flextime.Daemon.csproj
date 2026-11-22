@@ -26,6 +26,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The agent skill ships inside the binary, so it always matches it. -->
+    <EmbeddedResource Include="Skill\SKILL.md" LogicalName="Flextime.Daemon.SKILL.md" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Flextime.Monitor\Flextime.Monitor.csproj" />
     <ProjectReference Include="..\Flextime\Flextime.csproj" />
   </ItemGroup>

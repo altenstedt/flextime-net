@@ -136,7 +136,8 @@ November                  102:47
 The days run oldest first, so the latest is next to the prompt;
 `--newest-first` lists them as the web app does, each month's total on
 its heading.  `--hide-not-work` leaves out days marked as not work, as
-Hide not work does on the web.  `--since`, `--week` and `--month` read as in `report`.  `--json` writes
+Hide not work does on the web.  `--since`, `--week` and `--month` read
+as in `report`.  `--json` writes
 the computers and one entry per day, with its date, zone, start, end,
 work, and whether it is custom or marked whole as not work; the totals
 are sums of the days.
@@ -146,6 +147,13 @@ are sums of the days.
 `--since`, `--week` or `--month` limit the activity to those days; the
 settings are saved whole all the same, and the file's `about` says
 which days it holds.
+
+`flextimed skill` prints an agent skill that teaches an AI agent, such
+as Claude Code, to read your hours with `data`, `computers` and `export`
+and what the numbers mean.  It only reads, and leaves reporting to you
+and the agent.  `--install` writes it to `~/.claude/skills/flextime`,
+`-o` to another folder; the skill is built into flextimed, so install it
+again after an update.
 
 The program uses D-Bus on Linux, and
 `CGEventSourceSecondsSinceLastEventType` on macOS, and

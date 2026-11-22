@@ -53,3 +53,6 @@ internal sealed class DataHelpFilter(ConsoleAppFilter next) : HelpKeyFilter(next
 
 /// <summary>Adds the key after the generated help of export.</summary>
 internal sealed class ExportHelpFilter(ConsoleAppFilter next) : HelpKeyFilter(next, Export.HelpKey);
+
+/// <summary>Adds the key after the generated help of skill.</summary>
+internal sealed class SkillHelpFilter(ConsoleAppFilter next) : HelpKeyFilter(next, Skill.HelpKey);

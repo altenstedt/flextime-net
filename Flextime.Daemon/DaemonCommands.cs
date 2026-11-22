@@ -152,6 +152,17 @@ public class DaemonCommands(
         return computerClient.List(json);
     }
 
+    /// <summary>Print the agent skill that reads your Flextime data</summary>
+    /// <param name="install">Write it to ~/.claude/skills/flextime.</param>
+    /// <param name="output">-o, Write it to this folder instead.</param>
+    [ConsoleAppFilter<SkillHelpFilter>]
+    public int Skill(bool install = false, [HideDefaultValue] string? output = null)
+    {
+        logger.LogDebug("Skill invoked.");
+
+        return Flextime.Daemon.Skill.Invoke(install, output);
+    }
+
     /// <summary>Show this computer's name, hostname and former names</summary>
     [ConsoleAppFilter<NoArgumentsFilter>]
     [Command("computer")]
