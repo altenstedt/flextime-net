@@ -324,7 +324,10 @@ public class PrintData(
 
     private static string Row(DataDayDataContract day, bool colour)
     {
-        var label = $"  {day.Date.ToString("ddd", CultureInfo.InvariantCulture)} {day.Date.Day,2}   ";
+        // The dot for a day changed by hand sits in the indent before the
+        // weekday, where the web puts it, so the columns stay put.
+        var dot = day.Custom ? "• " : "  ";
+        var label = $"{dot}{day.Date.ToString("ddd", CultureInfo.InvariantCulture)} {day.Date.Day,2}   ";
 
         if (day.NotWork)
         {
@@ -335,9 +338,7 @@ public class PrintData(
         }
 
         var range = $"{day.Start:HH:mm} – {day.End:HH:mm}";
-        var dot = day.Custom ? " •" : string.Empty;
-
-        return $"{label}{range}".PadRight(HeadWidth) + $"{Hours(day.Work),5}{dot}";
+        return $"{label}{range}".PadRight(HeadWidth) + $"{Hours(day.Work),5}";
     }
 
     // The sums run over the exact work and are rounded once, as the web

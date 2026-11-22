@@ -124,10 +124,10 @@ MacBook Pro M4, Omegapoint
 November 2026
 Week 45
   Mon  2   07:54 – 21:35   08:05
-  Fri  6   08:27 – 17:00   01:55 •
+• Fri  6   08:27 – 17:00   01:55
                            27:46
 Week 47
-  Fri 20   07:45 – 18:26   08:35 •
+• Fri 20   07:45 – 18:26   08:35
   Sat 21                   not work
                            35:55
 November                  102:47
