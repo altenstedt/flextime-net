@@ -152,7 +152,7 @@ public class DaemonCommands(
     }
 
     /// <summary>Print the agent skill that reads your Flextime data</summary>
-    /// <param name="install">Write it to ~/.claude/skills/flextime.</param>
+    /// <param name="install">Write it to ~/.agents/skills, linked for Claude.</param>
     /// <param name="output">-o, Write it to this folder instead.</param>
     [ConsoleAppFilter<SkillHelpFilter>]
     public int Skill(bool install = false, [HideDefaultValue] string? output = null)

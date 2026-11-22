@@ -16,9 +16,7 @@ public static class Skill
         numbers mean; it only reads.  Install it again after updating flextimed.
         """;
 
-    // Where Claude Code looks for the user's own skills, in any folder.
-    public static string InstallFolder => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude", "skills", "flextime");
+    private static string Home => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
     public static string Text
     {
@@ -40,17 +38,79 @@ public static class Skill
             return 1;
         }
 
-        var folder = install ? InstallFolder : output;
+        if (install)
+        {
+            var (path, link) = Install(Home);
+            Console.WriteLine($"Wrote {path}.");
+            if (link != null)
+            {
+                Console.WriteLine($"Linked {link} to it, for Claude Code.");
+            }
+            return 0;
+        }
 
-        if (folder == null)
+        if (output == null)
         {
             Console.Out.Write(Text);
             return 0;
         }
 
-        var path = Write(folder);
-        Console.WriteLine($"Wrote {path}.");
+        Console.WriteLine($"Wrote {Write(output)}.");
         return 0;
+    }
+
+    /// <summary>
+    /// Writes the skill to ~/.agents/skills/flextime, where the agents
+    /// that share the Agent Skills folder look for a user's skills.  Claude
+    /// Code reads only ~/.claude/skills, so where ~/.claude exists the
+    /// skill is linked from there too: one copy to update, read by both.
+    /// Returns the file written and the link made, if any.
+    /// </summary>
+    public static (string Path, string? Link) Install(string home)
+    {
+        var folder = Path.Combine(home, ".agents", "skills", "flextime");
+        var path = Write(folder);
+
+        var claude = Path.Combine(home, ".claude");
+        if (!Directory.Exists(claude))
+        {
+            return (path, null);
+        }
+
+        var link = Path.Combine(claude, "skills", "flextime");
+        Directory.CreateDirectory(Path.GetDirectoryName(link)!);
+
+        // An earlier flextimed wrote a copy here; a link from before is
+        // made again, in case it points somewhere else.
+        var existing = new DirectoryInfo(link);
+        if (existing.LinkTarget != null)
+        {
+            existing.Delete();
+        }
+        else if (existing.Exists)
+        {
+            if (existing.GetFileSystemInfos().Any(item => item.Name != "SKILL.md"))
+            {
+                // Not ours alone: write the copy there instead of
+                // deleting what the user put beside it.
+                Write(link);
+                return (path, null);
+            }
+            existing.Delete(recursive: true);
+        }
+
+        try
+        {
+            Directory.CreateSymbolicLink(link, folder);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Windows makes links only with developer mode or as an
+            // administrator; a copy serves as well, it is only one more
+            // to update.
+            Write(link);
+        }
+        return (path, link);
     }
 
     // A copy already there is replaced: it came from an older flextimed.

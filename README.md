@@ -152,9 +152,11 @@ which days it holds.
 `flextimed skill` prints an agent skill that teaches an AI agent, such
 as Claude Code, to read your hours with `data`, `computers` and `export`
 and what the numbers mean.  It only reads, and leaves reporting to you
-and the agent.  `--install` writes it to `~/.claude/skills/flextime`,
-`-o` to another folder; the skill is built into flextimed, so install it
-again after an update.
+and the agent.  It follows the open Agent Skills format.  `--install`
+writes it to `~/.agents/skills/flextime`, the folder several agents
+share, and links `~/.claude/skills/flextime` to it for Claude Code,
+which reads only its own folder; `-o` writes it to another folder.  The
+skill is built into flextimed, so install it again after an update.
 
 The program uses D-Bus on Linux, and
 `CGEventSourceSecondsSinceLastEventType` on macOS, and
