@@ -1,10 +1,23 @@
+using System.Globalization;
 using System.Net.Http.Json;
+using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Polly.Timeout;
+using Spectre.Console;
 
 namespace Flextime.Daemon;
 
+/// <summary>
+/// The data command: the hours of the chosen computers as the web app's
+/// day list shows them.  The server merges the computers, as it does for
+/// the web, and each day is counted by <see cref="DayCount"/>, the same
+/// arithmetic report reconciles with, so a day here is the day the user
+/// read there, to the minute.  Nothing on the command line changes the
+/// arithmetic: a number that could differ from the web's would need
+/// explaining every time it was read.
+/// </summary>
 public class PrintData(
     IHttpClientFactory httpClientFactory,
     DeviceCode deviceCode,
@@ -13,17 +26,25 @@ public class PrintData(
 {
     private readonly HttpClient httpClient = httpClientFactory.CreateClient("ApiHttpClient");
 
+    /// <summary>What data prints after its generated help.  Every line fits in 80 columns.</summary>
+    public const string HelpKey = """
+
+        The computers chosen are merged into one day list, as the web app shows
+        them: time on two computers at once counts once.  Each day applies its
+        idle profile, leaves out time marked as not work, and counts time you
+        added by hand.  Work, start and end match the web's day rows.
+
+        For your raw measurements and settings, use export.
+        """;
+
     public async Task<int> Invoke(
-        int days,
+        DateOnly from,
+        DateOnly to,
         string[] computers,
         bool allComputers,
-        int? idle,
-        bool noProfile,
-        bool timestamps,
-        bool json)
+        bool json,
+        CancellationToken cancellationToken)
     {
-        var formatter = new MeasurementsFormatter(TimeSpan.FromMinutes(idle ?? Report.DefaultIdle), 0);
-
         if (!deviceCode.IsAuthenticated)
         {
             Console.Error.WriteLine("You need to log on first. Use the login command to log in.");
@@ -32,138 +53,38 @@ public class PrintData(
 
         try
         {
-            // An idle limit typed on the command line wins here, unlike
-            // in the report command.  This one has existing callers:
-            // a script passing --idle asked a precise question and must
-            // keep getting the same answer after an upgrade.  Only a
-            // caller who named no limit gets their stored profiles.
-            IdlePolicy? policy = null;
+            var data = await Load(from, to, computers, allComputers, cancellationToken);
 
-            if (!noProfile && !idle.HasValue)
+            if (data == null)
             {
-                policy = (await policyClient.GetProfiles(CancellationToken.None)).Value;
-            }
-
-            var known = await httpClient.GetFromJsonAsync(
-                "/computers?api-version=1.1",
-                PrintDataSourceGenerationContext.Default.ComputersDataContract);
-
-            List<ComputerDataContract> targets = [];
-
-            if (allComputers)
-            {
-                targets.AddRange(known?.Items ?? []);
-            }
-            else if (computers.Length > 0)
-            {
-                foreach (var id in computers)
-                {
-                    var match = known?.Items.SingleOrDefault(item => item.Id == id);
-
-                    if (match == null)
-                    {
-                        Console.Error.WriteLine($"Computer {id} not found on server.");
-                        return 1;
-                    }
-
-                    targets.Add(match);
-                }
-            }
-            else
-            {
-                targets.Add(
-                    known?.Items.SingleOrDefault(item => item.Id == computer.Id)
-                    ?? new ComputerDataContract(computer.Id!, computer.Hostname));
-            }
-
-            var result = new List<ComputerActivityDataContract>();
-
-            foreach (var target in targets)
-            {
-                // One request per computer: the /ids response does not echo the
-                // computer id back, so batched requests can only be correlated
-                // by position. The server returns one zone group per day, so
-                // days are regrouped here with each timestamp interpreted in
-                // the zone its group reports.
-                var zones = await httpClient.GetFromJsonAsync(
-                    $"/ids?api-version=1.2&id={Uri.EscapeDataString(target.Id)}",
-                    PrintDataSourceGenerationContext.Default.ZonesDataContract);
-
-                var items = new List<ZoneDataContract>();
-
-                foreach (var item in zones?.Items ?? [])
-                {
-                    if (TimeZones.TryGet(item.Zone, out _))
-                    {
-                        items.Add(item);
-                    }
-                    else
-                    {
-                        // A zone the server knows but this machine cannot
-                        // resolve, for example on Windows without ICU.
-                        Console.Error.WriteLine($"Skipping measurements in unknown time zone {TerminalText.Clean(item.Zone)}.");
-                    }
-                }
-
-                var byDate = items
-                    .SelectMany(item => item.Timestamps.Select(timestamp => (
-                        Timestamp: TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeSeconds(timestamp), TimeZones.Get(item.Zone)),
-                        item.Zone)))
-                    .GroupBy(item => DateOnly.FromDateTime(item.Timestamp.Date))
-                    .OrderBy(group => group.Key);
-
-                var dayActivities = new List<DayActivityDataContract>();
-
-                foreach (var group in byDate)
-                {
-                    var ordered = group.OrderBy(item => item.Timestamp).ToArray();
-
-                    // Days back count from today in the zone the day was
-                    // recorded in, so that today on a computer ahead of or
-                    // behind this machine is not cut off.
-                    if (group.Key <= TimeZones.DateAt(DateTimeOffset.UtcNow, ordered[0].Zone).AddDays(-days))
-                    {
-                        continue;
-                    }
-
-                    var moments = ordered.Select(item => item.Timestamp).ToArray();
-
-                    var day = policy == null
-                        ? formatter.ComputeDay(moments)
-                        : MeasurementsFormatter.ComputeDay(
-                            moments, policy.For(group.Key, moments[0].DayOfWeek));
-
-                    if (day == null)
-                    {
-                        continue;
-                    }
-
-                    dayActivities.Add(new DayActivityDataContract(
-                        day.Date,
-                        ordered[0].Zone,
-                        day.Start,
-                        day.End,
-                        day.Span,
-                        day.Work,
-                        day.Measurements,
-                        timestamps ? ordered.Select(item => item.Timestamp.ToUnixTimeSeconds()).ToArray() : null));
-                }
-
-                result.Add(new ComputerActivityDataContract(target.Id, target.Name, dayActivities.ToArray()));
+                return 1;
             }
 
             if (json)
             {
-                Console.WriteLine(JsonSerializer.Serialize(
-                    new ActivityDataContract(result.ToArray()),
-                    ActivitySourceGenerationContext.Default.ActivityDataContract));
+                Console.WriteLine(ToJson(data));
             }
             else
             {
-                Print(result, formatter);
+                // The en dash and the dot are not in every Windows code page.
+                Console.OutputEncoding = Encoding.UTF8;
+
+                var colour = !Console.IsOutputRedirected
+                             && AnsiConsole.Profile.Capabilities.Ansi
+                             && PrintInfo.ColourWanted(false, Environment.GetEnvironmentVariable("NO_COLOR"));
+
+                foreach (var line in Format(data, allComputers, colour))
+                {
+                    Console.WriteLine(line);
+                }
             }
 
             return 0;
+        }
+        catch (IdlePolicyException exception)
+        {
+            Console.Error.WriteLine(TerminalText.Clean(exception.Message));
+            return 1;
         }
         catch (TokenRefreshException exception)
         {
@@ -178,33 +99,238 @@ public class PrintData(
         }
     }
 
-    private static void Print(List<ComputerActivityDataContract> result, MeasurementsFormatter formatter)
+    // Relaxed escaping, as for the status: the output goes to a terminal
+    // or a script, never into HTML, and "+01:00" reads better unescaped.
+    private static readonly DataSourceGenerationContext JsonContext = new(new JsonSerializerOptions
     {
-        var firstComputer = true;
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    });
 
-        foreach (var item in result)
+    public static string ToJson(DataDataContract data) =>
+        JsonSerializer.Serialize(data, JsonContext.DataDataContract);
+
+    /// <summary>
+    /// The computers and their days from <paramref name="from"/> to
+    /// <paramref name="to"/>, oldest first, or null when a computer
+    /// asked for is not on the account, which is said on standard error.
+    /// </summary>
+    public async Task<DataDataContract?> Load(
+        DateOnly from,
+        DateOnly to,
+        string[] computers,
+        bool allComputers,
+        CancellationToken cancellationToken)
+    {
+        var profiles = await policyClient.GetProfiles(cancellationToken);
+        var marks = (await policyClient.GetMarks(cancellationToken)).Value ?? Marks.Empty;
+        var added = (await policyClient.GetAdded(cancellationToken)).Value ?? AddedTime.Empty;
+
+        var known = (await httpClient.GetFromJsonAsync(
+            "/computers?api-version=1.7",
+            ComputerSourceGenerationContext.Default.ComputerNamesListDataContract,
+            cancellationToken))?.Items ?? [];
+
+        List<DataComputerDataContract> targets = [];
+
+        if (allComputers)
         {
-            if (!firstComputer)
+            targets.AddRange(known.Select(item => new DataComputerDataContract(item.Id, item.DisplayName)));
+        }
+        else if (computers.Length > 0)
+        {
+            foreach (var id in computers.Distinct())
             {
-                Console.WriteLine();
+                var match = known.SingleOrDefault(item => item.Id == id);
+
+                if (match == null)
+                {
+                    Console.Error.WriteLine(TerminalText.Clean($"Computer {id} not found on server. The computers command lists them."));
+                    return null;
+                }
+
+                targets.Add(new DataComputerDataContract(match.Id, match.DisplayName));
             }
+        }
+        else
+        {
+            // A computer that has not synced yet is not on the server,
+            // and has no days there either; it is still the one asked for.
+            var here = known.SingleOrDefault(item => item.Id == computer.Id);
 
-            firstComputer = false;
+            targets.Add(new DataComputerDataContract(computer.Id!, here?.DisplayName ?? computer.Hostname));
+        }
 
-            Console.WriteLine(TerminalText.Clean(string.IsNullOrEmpty(item.Name) ? item.Id : $"{item.Name} ({item.Id})"));
+        if (targets.Count == 0)
+        {
+            return new DataDataContract([], []);
+        }
 
-            if (item.Days.Length == 0)
+        var zones = await httpClient.GetFromJsonAsync(
+            IdsUri(targets.Select(item => item.Id), from, to),
+            DataSourceGenerationContext.Default.DeltaZonesDataContract,
+            cancellationToken);
+
+        var days = Count(zones?.Items ?? [], profiles.Value, marks, added, from, to);
+
+        return new DataDataContract(targets.ToArray(), days);
+    }
+
+    /// <summary>
+    /// The request the web makes for these computers' days: the ids in
+    /// one request, sorted, so the server merges them; API 1.9, which
+    /// answers each date as one item even on a day measured in two
+    /// zones, so the day owes its hours once, as in the web.  The window
+    /// is the server's, from inclusive, before exclusive.
+    /// </summary>
+    public static string IdsUri(IEnumerable<string> ids, DateOnly from, DateOnly to) =>
+        "/ids?api-version=1.9&"
+        + string.Join("&", ids.Order(StringComparer.Ordinal).Select(id => $"id={Uri.EscapeDataString(id)}"))
+        + $"&from={from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
+        + $"&before={to.AddDays(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
+
+    /// <summary>
+    /// The web's day rows for the server's items, oldest first.  Each
+    /// item is a row of its own, as in the web.  A date with time added
+    /// by hand and nothing measured has no item, and so no row, as in
+    /// the web.
+    /// </summary>
+    public static DataDayDataContract[] Count(
+        IEnumerable<DeltaZoneDataContract> items,
+        IdlePolicy? policy,
+        Marks marks,
+        AddedTime added,
+        DateOnly from,
+        DateOnly to)
+    {
+        var days = new List<CountedDay>();
+
+        foreach (var item in items)
+        {
+            if (!TimeZones.TryGet(item.Zone, out var zone))
             {
-                Console.WriteLine("No data.");
+                // A zone the server knows but this machine cannot
+                // resolve, for example on Windows without ICU.
+                Console.Error.WriteLine($"Skipping measurements in unknown time zone {TerminalText.Clean(item.Zone)}.");
                 continue;
             }
 
-            foreach (var day in item.Days)
+            var day = DayCount.Day(item.Zone, DayCount.Read(Timestamps(item.Deltas ?? []), zone), policy, DayCount.DefaultIdle, marks, added);
+
+            // The server's window is by the date stored, the range here
+            // by the date the day is filed under; they agree, and this
+            // holds the range should they not.
+            if (day != null && day.Date >= from && day.Date <= to)
             {
-                Console.WriteLine(formatter.FormatDay(
-                    new DaySummary(day.Date, day.Start, day.End, day.Span, day.Work, day.Measurements)));
+                days.Add(day);
             }
         }
+
+        return days
+            .OrderBy(day => day.Start)
+            .Select(day => new DataDayDataContract(day.Date, day.Zone, day.Start, day.End, day.Work, day.Custom, day.NotWork))
+            .ToArray();
+    }
+
+    // From API 1.6 the timestamps come as deltas: the first is the
+    // timestamp itself, every other the seconds since the one before.
+    private static long[] Timestamps(long[] deltas)
+    {
+        var timestamps = new long[deltas.Length];
+        var timestamp = 0L;
+
+        for (var i = 0; i < deltas.Length; i++)
+        {
+            timestamp += deltas[i];
+            timestamps[i] = timestamp;
+        }
+
+        return timestamps;
+    }
+
+    // Everything on a day's row ahead of its work: weekday, day, range.
+    private const int HeadWidth = 27;
+
+    // The work column ends here, and every total with it.
+    private const int Width = HeadWidth + 5;
+
+    /// <summary>
+    /// The day list as text: the computers counted, then a month heading
+    /// for each month, a week heading for each week part with its total
+    /// after it, and the month's total after its days.  Weeks are split
+    /// where they cross a month, as the web splits them, so that every
+    /// total sums within one month.
+    /// </summary>
+    public static IEnumerable<string> Format(DataDataContract data, bool allComputers, bool colour)
+    {
+        yield return allComputers
+            ? "All computers"
+            : TerminalText.Clean(string.Join(", ", data.Computers.Select(item => item.Name)));
+
+        if (data.Days.Length == 0)
+        {
+            yield return "No data.";
+            yield break;
+        }
+
+        foreach (var month in data.Days.GroupBy(day => (day.Date.Year, day.Date.Month)))
+        {
+            var first = month.First().Date;
+
+            yield return string.Empty;
+            yield return first.ToString("MMMM yyyy", CultureInfo.InvariantCulture);
+
+            // Consecutive days of one ISO week; the days are in order,
+            // so a week is never met twice within a month.
+            foreach (var week in month.GroupBy(day => ISOWeek.GetWeekOfYear(day.Date.ToDateTime(TimeOnly.MinValue))))
+            {
+                yield return $"Week {week.Key}";
+
+                foreach (var day in week)
+                {
+                    yield return Row(day, colour);
+                }
+
+                yield return Hours(Sum(week)).PadLeft(Width);
+            }
+
+            var name = first.ToString("MMMM", CultureInfo.InvariantCulture);
+
+            yield return name + Hours(Sum(month)).PadLeft(Width - name.Length);
+        }
+    }
+
+    private static string Row(DataDayDataContract day, bool colour)
+    {
+        var label = $"  {day.Date.ToString("ddd", CultureInfo.InvariantCulture)} {day.Date.Day,2}   ";
+
+        if (day.NotWork)
+        {
+            // Muted, as the web mutes the row, where colour is wanted.
+            const string notWork = "not work";
+
+            return label.PadRight(HeadWidth) + (colour ? $"\e[2m{notWork}\e[0m" : notWork);
+        }
+
+        var range = $"{day.Start:HH:mm} – {day.End:HH:mm}";
+        var dot = day.Custom ? " •" : string.Empty;
+
+        return $"{label}{range}".PadRight(HeadWidth) + $"{Hours(day.Work),5}{dot}";
+    }
+
+    // The sums run over the exact work and are rounded once, as the web
+    // sums a week and a month, so a total can differ by a minute from
+    // the rounded days added up by hand.
+    private static TimeSpan Sum(IEnumerable<DataDayDataContract> days) =>
+        days.Aggregate(TimeSpan.Zero, (sum, day) => sum + day.Work);
+
+    // Hours and minutes, rounded to the nearest minute as the web rounds
+    // them; a total can run past 99 hours.
+    public static string Hours(TimeSpan value)
+    {
+        var minutes = (long)Math.Round(value.TotalSeconds / 60, MidpointRounding.AwayFromZero);
+
+        return $"{minutes / 60:00}:{minutes % 60:00}";
     }
 }
 
@@ -214,7 +340,36 @@ internal record ComputersDataContract(ComputerDataContract[] Items);
 internal record ZoneDataContract(string Zone, long[] Timestamps);
 internal record ZonesDataContract(ZoneDataContract[] Items);
 
+/// <summary>An item of API 1.6 and later: a day's timestamps as deltas.</summary>
+public record DeltaZoneDataContract(string Zone, long[]? Deltas);
+
+public record DeltaZonesDataContract(DeltaZoneDataContract[] Items);
+
+// The shape data --json writes, its own and not the flextime CLI's: a
+// day here is the web's day row, merged over the computers, so it has
+// no computer to belong to.  Dates, times and durations are written as
+// in that contract.  Week and month totals are left out; they are sums
+// of the days.
+
+public record DataComputerDataContract(string Id, string Name);
+
+public record DataDayDataContract(
+    DateOnly Date,
+    string Zone,
+    DateTimeOffset Start,
+    DateTimeOffset End,
+    TimeSpan Work,
+    bool Custom,
+    bool NotWork);
+
+public record DataDataContract(DataComputerDataContract[] Computers, DataDayDataContract[] Days);
+
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(ComputersDataContract))]
 [JsonSerializable(typeof(ZonesDataContract))]
 internal partial class PrintDataSourceGenerationContext : JsonSerializerContext;
+
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSerializable(typeof(DeltaZonesDataContract))]
+[JsonSerializable(typeof(DataDataContract))]
+public partial class DataSourceGenerationContext : JsonSerializerContext;

@@ -19,8 +19,8 @@ effectively represents your working hours.
 The flextime program only reads the files on this computer; it never
 uses the network and needs no account.  It shows the last 30 days by
 default; `--days 0` shows every day on disk, `--idle` sets the idle
-limit in minutes (10 by default), and `--json` writes the same shape
-as `flextimed data --json`, so a script can read either one.
+limit in minutes (10 by default), and `--json` writes the days per
+computer as JSON.
 
 `--since` takes a length of time written any of the usual ways, in
 English:
@@ -102,11 +102,47 @@ flextimed computer rename ""              # back to the hostname
 ```
 
 A computer with no data in 90 days is dormant; `computers` lists it
-last.  Its data is all still there.
+last.  Its data is all still there.  `computers` also lists the ids
+`data --computer` takes, and marks this computer with `*`, or with
+`"here": true` in `--json`.
 
-`flextimed data` shows the activity on the server, per day and
-computer; `data --help` has its options.  `flextimed export` saves all
-your data on the server to one JSON file, `-o -` to standard out.
+`flextimed data` shows your hours as the web app counts them: the
+computers chosen merged into one day list, each day on its idle
+profile, less the time marked as not work, plus the time added by
+hand.  Work, start and end match the web's day rows to the minute, and
+a dot marks a day with its own profile or added time:
+
+```sh
+flextimed data                            # this computer, the last 30 days
+flextimed data --month this --all-computers
+flextimed data -w 45 -c 0a1b2c3d4e5f6a7b,1b2c3d4e5f6a7b8c
+```
+
+```text
+MacBook Pro M4, Omegapoint
+
+November 2026
+Week 45
+  Mon  2   07:54 – 21:35   08:05
+  Fri  6   08:27 – 17:00   01:55 •
+                           27:46
+Week 47
+  Fri 20   07:45 – 18:26   08:35 •
+  Sat 21                   not work
+                           35:55
+November                  102:47
+```
+
+`--since`, `--week` and `--month` read as in `report`.  `--json` writes
+the computers and one entry per day, with its date, zone, start, end,
+work, and whether it is custom or marked whole as not work; the totals
+are sums of the days.
+
+`flextimed export` saves your data on the server to one JSON file, `-o
+-` to standard out: every computer, every timestamp, and your settings.
+`--since`, `--week` or `--month` limit the activity to those days; the
+settings are saved whole all the same, and the file's `about` says
+which days it holds.
 
 The program uses D-Bus on Linux, and
 `CGEventSourceSecondsSinceLastEventType` on macOS, and
@@ -148,9 +184,9 @@ client, a project.  Then:
 
 or pipe the timesheet in.  The command needs a logged-in daemon, since
 the measured side comes from the server, and it applies your stored
-idle profiles so the numbers match what the web client showed when you
-wrote the hours down.  `report --help` describes the window, machine
-and layout options; running `flextimed report` with no timesheet
+idle profiles, marks and added time so the numbers match what the web
+client showed when you wrote the hours down.  `report --help`
+describes the window, machine and layout options; running `flextimed report` with no timesheet
 prints a primer much like this section.
 
 The reported hours are summed per tag under `Tags:`, and `--tags`

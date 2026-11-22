@@ -25,7 +25,7 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
 {
     private readonly HttpClient httpClient = httpClientFactory.CreateClient("ApiHttpClient");
 
-    public const int DefaultIdle = 10;
+    public const int DefaultIdle = DayCount.DefaultIdle;
 
     /// <summary>
     /// Minutes a day may differ by before it is worth mentioning.
@@ -115,6 +115,10 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
                 ? new StoredDocument<Marks>(null, null)
                 : await policyClient.GetMarks(cancellationToken);
 
+            var added = noProfile
+                ? new StoredDocument<AddedTime>(null, null)
+                : await policyClient.GetAdded(cancellationToken);
+
             // A flat limit beside a stored profile is a contradiction,
             // not a preference: this command exists to reproduce what
             // the web client showed, and the flag would quietly stop it
@@ -146,7 +150,7 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
                 return 1;
             }
 
-            var measured = await Measure(selected, profiles.Value, flat, marks.Value ?? Marks.Empty, cancellationToken);
+            var measured = await Measure(selected, profiles.Value, flat, marks.Value ?? Marks.Empty, added.Value ?? AddedTime.Empty, cancellationToken);
 
             // The reported side may carry years; only the window is
             // being reconciled, and an entry outside it is not a
@@ -242,18 +246,14 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
     ///
     /// One request carries every selected computer: the server merges
     /// them, so this is the same union the web client computes from,
-    /// rather than a merge reinvented here.  The response has no date
-    /// field — it is a list of (zone, timestamps) rows — so the day a
-    /// row belongs to is the date of its first timestamp read in the
-    /// row's own zone.  Rows are computed separately and only their
-    /// work is summed, because merging the timestamps first would
-    /// revive rows that are too short to count on their own.
+    /// rather than a merge reinvented here.
     /// </summary>
     private async Task<Dictionary<DateOnly, TimeSpan>> Measure(
         ComputerDataContract[] selected,
         IdlePolicy? policy,
         int flat,
         Marks marks,
+        AddedTime added,
         CancellationToken cancellationToken)
     {
         var query = string.Join("&", selected.Select(item => $"id={Uri.EscapeDataString(item.Id)}"));
@@ -263,10 +263,30 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
             PrintDataSourceGenerationContext.Default.ZonesDataContract,
             cancellationToken);
 
-        var formatter = new MeasurementsFormatter(TimeSpan.FromMinutes(flat), 0);
-        var work = new Dictionary<DateOnly, TimeSpan>();
+        return Count((zones?.Items ?? []).Select(row => (row.Zone, row.Timestamps)), policy, flat, marks, added);
+    }
 
-        foreach (var row in zones?.Items ?? [])
+    /// <summary>
+    /// The response has no date field — it is a list of (zone,
+    /// timestamps) rows — so the day a row belongs to is the date of its
+    /// first timestamp read in the row's own zone.  Rows are computed
+    /// separately and only their work is summed, because merging the
+    /// timestamps first would revive rows that are too short to count on
+    /// their own.  Each row is counted by <see cref="DayCount"/>, the
+    /// arithmetic the data command shows, so the two agree on a day the
+    /// server answers in one row, which on API 1.9 is every day.
+    /// </summary>
+    public static Dictionary<DateOnly, TimeSpan> Count(
+        IEnumerable<(string Zone, long[] Timestamps)> rows,
+        IdlePolicy? policy,
+        int flat,
+        Marks marks,
+        AddedTime added)
+    {
+        var work = new Dictionary<DateOnly, TimeSpan>();
+        var counted = new Dictionary<DateOnly, (List<DateTimeOffset> Timestamps, Func<DateTimeOffset, TimeSpan> LimitAt)>();
+
+        foreach (var row in rows)
         {
             // A zone this machine cannot resolve would silently drop a
             // day, and a dropped day reads as unreported activity.
@@ -277,35 +297,54 @@ public class Report(IHttpClientFactory httpClientFactory, DeviceCode deviceCode,
                     $"The server returned measurements in time zone {TerminalText.Clean(row.Zone)}, which this machine cannot resolve.");
             }
 
-            var timestamps = row.Timestamps
-                .Select(item => TimeZoneInfo.ConvertTime(DateTimeOffset.FromUnixTimeSeconds(item), zone))
-                .OrderBy(item => item)
-                .ToArray();
+            var timestamps = DayCount.Read(row.Timestamps, zone);
+
+            if (timestamps.Length == 0)
+            {
+                continue;
+            }
 
             // The weekday a curve is chosen by is the one the day
             // started on, read in the day's own zone.
             var date = DateOnly.FromDateTime(timestamps[0].Date);
-
-            var day = policy == null
-                ? formatter.ComputeDay(timestamps)
-                : MeasurementsFormatter.ComputeDay(timestamps, policy.For(date, timestamps[0].DayOfWeek));
-
-            if (day == null)
-            {
-                continue;
-            }
+            var limitAt = DayCount.LimitFor(policy, flat, date, timestamps[0].DayOfWeek);
 
             // A marked day keeps its place — the reconcile still knows
             // the day existed — but contributes nothing, exactly as the
             // web client sums it.  Marked ranges come out of the work
             // after bridging, as the web takes them out.
-            var profile = policy?.For(date, timestamps[0].DayOfWeek) ?? IdleProfile.Flat(flat);
-            var marked = Marks.Overlap(timestamps, at => profile.LimitAt(at.TimeOfDay), marks.RangesOn(date), date);
-            var counted = marks.IsMarked(date)
-                ? TimeSpan.Zero
-                : day.Work > marked ? day.Work - marked : TimeSpan.Zero;
+            if (DayCount.Measured(timestamps, limitAt, marks, date) is not { } rowWork)
+            {
+                continue;
+            }
 
-            work[date] = work.TryGetValue(date, out var running) ? running + counted : counted;
+            work[date] = work.TryGetValue(date, out var running) ? running + rowWork : rowWork;
+
+            if (!counted.TryGetValue(date, out var held))
+            {
+                counted[date] = held = ([], limitAt);
+            }
+
+            held.Timestamps.AddRange(timestamps);
+        }
+
+        // Time added by hand counts after the marks, as in the web: it
+        // lies outside every block, so no marked range can take it
+        // away, and a day marked whole counts none of it.  It belongs to
+        // the date, not to a row, so it is counted once, over all the
+        // date's rows.  Only a travel day has more than one; there each
+        // measurement keeps its own row's zone, where the web reads the
+        // whole date in one, so added time can land up to the zones'
+        // difference off on that one day.
+        foreach (var (date, (timestamps, limitAt)) in counted)
+        {
+            if (marks.IsMarked(date) || added.On(date) is not { } manual)
+            {
+                continue;
+            }
+
+            timestamps.Sort();
+            work[date] += AddedTime.Declared(timestamps, limitAt, manual);
         }
 
         return work;

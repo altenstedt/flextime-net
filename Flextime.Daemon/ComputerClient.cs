@@ -63,14 +63,7 @@ public class ComputerClient(IHttpClientFactory httpClientFactory, DeviceCode dev
         {
             if (json)
             {
-                // Id and name as before, name being the one each is shown
-                // by, so scripts written against the older list still work.
-                Console.WriteLine(JsonSerializer.Serialize(
-                    new ComputerListDataContract(items
-                        .Select(item => new ComputerListItemDataContract(
-                            item.Id, item.DisplayName, item.Hostname, item.FirstDay, item.LastDay, IsDormant(item, today)))
-                        .ToArray()),
-                    ComputerSourceGenerationContext.Default.ComputerListDataContract));
+                Console.WriteLine(ToJson(items, computer.Id, today));
 
                 return 0;
             }
@@ -186,6 +179,20 @@ public class ComputerClient(IHttpClientFactory httpClientFactory, DeviceCode dev
         }
     }
 
+    /// <summary>
+    /// The list as JSON.  Id and name as before, name being the one each
+    /// is shown by, so scripts written against the older list still
+    /// work.  The computer running this says so, as the text list marks
+    /// it, since data takes it when no id is given.
+    /// </summary>
+    public static string ToJson(ComputerNamesDataContract[] items, string? hereId, DateOnly today) =>
+        JsonSerializer.Serialize(
+            new ComputerListDataContract(items
+                .Select(item => new ComputerListItemDataContract(
+                    item.Id, item.DisplayName, item.Hostname, item.FirstDay, item.LastDay, IsDormant(item, today), item.Id == hereId))
+                .ToArray()),
+            ComputerSourceGenerationContext.Default.ComputerListDataContract);
+
     private const string OlderServer = "The server is older than this flextimed: it has no api-version 1.7 yet.";
 
     // What the server takes as a name, empty being none.
@@ -232,8 +239,8 @@ public class ComputerClient(IHttpClientFactory httpClientFactory, DeviceCode dev
             .Distinct();
     }
 
-    // One line per computer, id first: the ids are what report's
-    // --machines takes.  The hostname is left out where the computer is
+    // One line per computer, id first: the ids are what data's
+    // --computer and report's --machines take.  The hostname is left out where the computer is
     // shown by it anyway.  Dormant computers come last, under their own
     // heading.  Every line fits 80 columns.
     public static IEnumerable<string> FormatList(ComputerNamesDataContract[] items, string? hereId, DateOnly today)
@@ -313,7 +320,9 @@ internal record ComputerListItemDataContract(
     string? Hostname,
     DateOnly? FirstDay,
     DateOnly? LastDay,
-    bool Dormant);
+    bool Dormant,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool Here);
 
 internal record ComputerListDataContract(ComputerListItemDataContract[] Items);
 

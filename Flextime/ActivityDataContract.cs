@@ -2,8 +2,11 @@ using System.Text.Json.Serialization;
 
 namespace Flextime;
 
-// The shape written by `flextime --json` and `flextimed data --json`.
-// One contract, so the same script reads local and remote data.
+// The shape written by `flextime --json`: the activity on this
+// computer, per computer and day.  `flextimed data --json` wrote it too
+// until data came to show the web's merged day rows, which belong to no
+// one computer; that contract is DataDataContract in flextimed, and
+// writes dates, times and durations as this one does.
 
 public record DayActivityDataContract(
     DateOnly Date,

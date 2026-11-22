@@ -22,10 +22,10 @@ public static class PauseHelp
 }
 
 /// <summary>
-/// Adds the key after the generated help of pause.
-/// ConsoleAppFramework renders only the summary, and the key needs room.
+/// Adds a key after a command's generated help.  ConsoleAppFramework
+/// renders only the summary, and a key needs room.
 /// </summary>
-internal sealed class PauseHelpFilter(ConsoleAppFilter next) : ConsoleAppFilter(next)
+internal abstract class HelpKeyFilter(ConsoleAppFilter next, string key) : ConsoleAppFilter(next)
 {
     public override async Task InvokeAsync(ConsoleAppContext context, CancellationToken cancellationToken)
     {
@@ -37,10 +37,19 @@ internal sealed class PauseHelpFilter(ConsoleAppFilter next) : ConsoleAppFilter(
         {
             if (argument is "-h" or "--help")
             {
-                Console.WriteLine(PauseHelp.Key);
+                Console.WriteLine(key);
 
                 break;
             }
         }
     }
 }
+
+/// <summary>Adds the key after the generated help of pause.</summary>
+internal sealed class PauseHelpFilter(ConsoleAppFilter next) : HelpKeyFilter(next, PauseHelp.Key);
+
+/// <summary>Adds the key after the generated help of data.</summary>
+internal sealed class DataHelpFilter(ConsoleAppFilter next) : HelpKeyFilter(next, PrintData.HelpKey);
+
+/// <summary>Adds the key after the generated help of export.</summary>
+internal sealed class ExportHelpFilter(ConsoleAppFilter next) : HelpKeyFilter(next, Export.HelpKey);

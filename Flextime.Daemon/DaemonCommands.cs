@@ -143,7 +143,7 @@ public class DaemonCommands(
         }
     }
 
-    /// <summary>Show your computers and the ids report takes</summary>
+    /// <summary>Show your computers and the ids data takes</summary>
     /// <param name="json">Write JSON to standard out.</param>
     public Task<int> Computers(bool json = false)
     {
@@ -223,42 +223,63 @@ public class DaemonCommands(
         return locationClient.Clear(allComputers, cancellationToken);
     }
 
-    /// <summary>Show activity on the server; report matches the web</summary>
-    /// <remarks>
-    /// Note that these numbers are not the web client's, even with idle
-    /// profiles applied: days are grouped here rather than on the
-    /// server, so a day can begin and end differently near midnight.
-    /// The report command is the one that reproduces what the web
-    /// client shows.
-    /// </remarks>
-    /// <param name="days">-d, Number of days to show.</param>
+    /// <summary>Show your hours as the web app counts them</summary>
+    /// <param name="since">-s, How far back: 30d (default), 1w or P7D.</param>
+    /// <param name="week">-w, ISO weeks: this, last, 34, 32-34 or 2026-W34.</param>
+    /// <param name="month">Months: this, last, aug, jun-aug, 8 or 2026-08.</param>
     /// <param name="computer">-c, Computer ids, comma separated. Default: here.</param>
-    /// <param name="allComputers">Show all computers.</param>
-    /// <param name="idle">-i, Idle limit in minutes; overrides profiles.</param>
-    /// <param name="noProfile">Ignore idle profiles; use the flat limit.</param>
-    /// <param name="timestamps">Include raw Unix timestamps in JSON output.</param>
+    /// <param name="allComputers">Count all your computers.</param>
     /// <param name="json">Write JSON to standard out.</param>
-    public Task<int> Data(
-        int days = 30,
+    [ConsoleAppFilter<DataHelpFilter>]
+    public async Task<int> Data(
+        [HideDefaultValue] string since = "30d",
+        [HideDefaultValue] string? week = null,
+        [HideDefaultValue] string? month = null,
         [HideDefaultValue] string[]? computer = null,
         bool allComputers = false,
-        [HideDefaultValue] int? idle = null,
-        bool noProfile = false,
-        bool timestamps = false,
-        bool json = false)
+        bool json = false,
+        CancellationToken cancellationToken = default)
     {
         logger.LogDebug("Data invoked.");
 
-        return printData.Invoke(days, computer ?? [], allComputers, idle, noProfile, timestamps, json);
+        if (computer is { Length: > 0 } && allComputers)
+        {
+            Console.Error.WriteLine("Give either --computer or --all-computers, not both.");
+
+            return 1;
+        }
+
+        if (!RangeOptions.TryRead(since, week, month, DateTimeOffset.Now, out var range))
+        {
+            return 1;
+        }
+
+        var (from, to) = range!.Value;
+
+        return await printData.Invoke(from, to, computer ?? [], allComputers, json, cancellationToken);
     }
 
-    /// <summary>Save all your data on the server to one JSON file</summary>
+    /// <summary>Save your data on the server to one JSON file</summary>
     /// <param name="output">-o, File to write, or - for standard out.</param>
-    public Task<int> Export([HideDefaultValue] string? output = null, CancellationToken cancellationToken = default)
+    /// <param name="since">-s, How far back: 30d, 1w or P7D. Default: all.</param>
+    /// <param name="week">-w, ISO weeks: this, last, 34, 32-34 or 2026-W34.</param>
+    /// <param name="month">Months: this, last, aug, jun-aug, 8 or 2026-08.</param>
+    [ConsoleAppFilter<ExportHelpFilter>]
+    public async Task<int> Export(
+        [HideDefaultValue] string? output = null,
+        [HideDefaultValue] string? since = null,
+        [HideDefaultValue] string? week = null,
+        [HideDefaultValue] string? month = null,
+        CancellationToken cancellationToken = default)
     {
         logger.LogDebug("Export invoked.");
 
-        return export.Invoke(output, cancellationToken);
+        if (!RangeOptions.TryRead(since, week, month, DateTimeOffset.Now, out var range))
+        {
+            return 1;
+        }
+
+        return await export.Invoke(output, range, cancellationToken);
     }
 
     /// <summary>Compare reported hours with measured activity</summary>
@@ -268,7 +289,7 @@ public class DaemonCommands(
     /// <param name="month">Months: this, last, aug, jun-aug, 8 or 2026-08.</param>
     /// <param name="machines">-m, Computer ids to count. Default: all.</param>
     /// <param name="idle">-i, Flat idle limit when there are no profiles.</param>
-    /// <param name="noProfile">Ignore idle profiles and marks.</param>
+    /// <param name="noProfile">Ignore idle profiles, marks and added time.</param>
     /// <param name="threshold">Minutes a day may differ quietly.</param>
     /// <param name="tags">Total (default), matrix, days, weeks or months.</param>
     /// <param name="verbose">-v, Also list machines and uncounted activity.</param>
@@ -289,49 +310,13 @@ public class DaemonCommands(
     {
         logger.LogDebug("Report invoked.");
 
-        DateOnly from;
-        DateOnly to;
-
-        if (week != null && month != null)
+        // --since has a default here, so a range is always read.
+        if (!RangeOptions.TryRead(since, week, month, DateTimeOffset.Now, out var range))
         {
-            Console.Error.WriteLine("Give either --week or --month, not both.");
-
             return 1;
         }
 
-        if (month != null)
-        {
-            if (!Months.TryParse(month, DateTimeOffset.Now, out from, out to))
-            {
-                Console.Error.WriteLine($"Cannot read \"{month}\" as a month.");
-                Console.Error.WriteLine("Try this, last, aug, jun-aug, 8, 6-8, 2026-08 or 2026-jun-aug.");
-
-                return 1;
-            }
-        }
-        else if (week != null)
-        {
-            if (!IsoWeeks.TryParse(week, DateTimeOffset.Now, out from, out to))
-            {
-                Console.Error.WriteLine($"Cannot read \"{week}\" as an ISO week.");
-                Console.Error.WriteLine("Try this, last, 34, 32-34, 2026-W34 or 2026-W32-34.");
-
-                return 1;
-            }
-        }
-        else
-        {
-            if (!DurationParser.TryParse(since, DateTimeOffset.Now, out var sinceValue))
-            {
-                Console.Error.WriteLine($"Cannot read \"{since}\" as a length of time.");
-                Console.Error.WriteLine("Try 3d, 1w, \"2 weeks ago\", yesterday, \"last week\", P7D or 7.00:00:00.");
-
-                return 1;
-            }
-
-            from = DateOnly.FromDateTime((DateTimeOffset.Now - sinceValue).Date);
-            to = DateOnly.FromDateTime(DateTimeOffset.Now.Date);
-        }
+        var (from, to) = range!.Value;
 
         return await report.Invoke(timesheet, from, to, machines ?? [], idle, noProfile, threshold, tags, verbose, json, cancellationToken);
     }

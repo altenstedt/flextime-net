@@ -106,6 +106,52 @@ public class ExportTests : IDisposable
     }
 
     [Fact]
+    public async Task A_range_reads_only_its_days_in_the_shape_of_the_whole_export()
+    {
+        var asked = new List<string>();
+
+        var export = await Export.Build(Server(new()
+        {
+            ["/computers?api-version=1.7"] = """{ "items": [ { "id": "a1" } ] }""",
+            ["/ids?api-version=1.8&id=a1&from=2026-11-01&before=2026-12-01"] = """{ "items": [ { "zone": "Europe/Stockholm", "deltas": [1000, 60, 120], "places": [ [0, "95313127c39c", 2] ] } ], "count": 1, "continuation": "" }""",
+            ["/places/hints?api-version=1.5&id=a1"] = """{ "items": [] }""",
+            ["/store/profiles?api-version=1.0"] = """{ "v": 1 }""",
+            ["/store/marks?api-version=1.0"] = "null",
+            ["/store/added?api-version=1.0"] = "null",
+            ["/store/places?api-version=1.0"] = "null",
+        }, asked), Now, "7.15.0", (new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 30)));
+
+        var day = export["activity"]![0]!["days"]![0]!.AsObject();
+
+        Assert.Equal(["zone", "timestamps", "places"], day.Select(item => item.Key));
+        Assert.Equal([1000L, 1060L, 1180L], day["timestamps"]!.AsArray().Select(item => item!.GetValue<long>()));
+        Assert.Equal(2, day["places"]![0]![2]!.GetValue<int>());
+
+        // The settings are whole all the same, and the file says it is
+        // part of the activity.
+        Assert.Equal(1, export["settings"]!["profiles"]!["v"]!.GetValue<int>());
+        Assert.Contains("from 2026-11-01 to 2026-11-30", export["about"]!["activity"]!.GetValue<string>());
+        Assert.DoesNotContain(asked, uri => uri.StartsWith("/ids?api-version=1.5"));
+    }
+
+    [Fact]
+    public async Task Without_a_range_the_about_text_is_as_before()
+    {
+        var export = await Export.Build(Server(new()
+        {
+            ["/computers?api-version=1.7"] = """{ "items": [] }""",
+            ["/store/profiles?api-version=1.0"] = "null",
+            ["/store/marks?api-version=1.0"] = "null",
+            ["/store/added?api-version=1.0"] = "null",
+            ["/store/places?api-version=1.0"] = "null",
+        }), Now, "7.15.0");
+
+        Assert.Equal(
+            "For each computer, one entry per day and time zone. Timestamps are Unix seconds, one for each minute the computer was in use.",
+            export["about"]!["activity"]!.GetValue<string>());
+    }
+
+    [Fact]
     public void Save_writes_a_new_file()
     {
         var path = Path.Combine(folder, "export.json");
