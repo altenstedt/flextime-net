@@ -17,7 +17,7 @@ public class Export(IHttpClientFactory httpClientFactory, DeviceCode deviceCode)
     private readonly HttpClient httpClient = httpClientFactory.CreateClient("ApiHttpClient");
 
     // The documents the server's store accepts.
-    private static readonly string[] Documents = ["profiles", "marks", "places"];
+    private static readonly string[] Documents = ["profiles", "marks", "added", "places"];
 
     public async Task<int> Invoke(string? output, CancellationToken cancellationToken)
     {
@@ -128,7 +128,7 @@ public class Export(IHttpClientFactory httpClientFactory, DeviceCode deviceCode)
         ["activity"] = "For each computer, one entry per day and time zone. Timestamps are Unix seconds, one for each minute the computer was in use.",
         ["places"] = "Only with location on. Each place is [start, router, flags]: when it took effect (Unix seconds), a hashed router id, and flags. Flag 1 means the internet went through a tunnel, 2 a VPN was connected, 4 location was turned off, 8 the network was metered, like a phone hotspot.",
         ["hints"] = "The network domain each router was last seen on.",
-        ["settings"] = "Your idle profiles, the time you marked as not work, and your names for places, as the web app stores them.",
+        ["settings"] = "Your idle profiles, the time you marked as not work, the time you added to days by hand, and your names for places, as the web app stores them.",
     };
 
     private static JsonArray Items(string body) =>

@@ -42,6 +42,7 @@ public class ExportTests : IDisposable
             ["/places/hints?api-version=1.5&id=a1&id=b2"] = """{ "items": [ { "router": "95313127c39c", "hint": "lan", "updated": 1000 } ] }""",
             ["/store/profiles?api-version=1.0"] = """{ "v": 1 }""",
             ["/store/marks?api-version=1.0"] = "null",
+            ["/store/added?api-version=1.0"] = """{ "days": { "2026-11-20": { "started": 27900 } } }""",
             ["/store/places?api-version=1.0"] = """{ "names": {} }""",
         }, asked), Now, "7.15.0");
 
@@ -62,9 +63,10 @@ public class ExportTests : IDisposable
         Assert.Equal(1, export["settings"]!["profiles"]!["v"]!.GetValue<int>());
         Assert.True(export["settings"]!.AsObject().ContainsKey("marks"));
         Assert.Null(export["settings"]!["marks"]);
+        Assert.Equal(27900, export["settings"]!["added"]!["days"]!["2026-11-20"]!["started"]!.GetValue<int>());
 
         // Every answer is read once, the activity one computer at a time.
-        Assert.Equal(7, asked.Count);
+        Assert.Equal(8, asked.Count);
     }
 
     [Fact]
@@ -75,6 +77,7 @@ public class ExportTests : IDisposable
             ["/computers?api-version=1.7"] = """{ "items": [] }""",
             ["/store/profiles?api-version=1.0"] = "null",
             ["/store/marks?api-version=1.0"] = "null",
+            ["/store/added?api-version=1.0"] = "null",
             ["/store/places?api-version=1.0"] = "null",
         }), Now, "7.15.0");
 
@@ -95,6 +98,7 @@ public class ExportTests : IDisposable
             ["/places/hints?api-version=1.5&id=a%20b"] = """{ "items": [] }""",
             ["/store/profiles?api-version=1.0"] = "null",
             ["/store/marks?api-version=1.0"] = "null",
+            ["/store/added?api-version=1.0"] = "null",
             ["/store/places?api-version=1.0"] = "null",
         }, asked), Now, "7.15.0");
 
