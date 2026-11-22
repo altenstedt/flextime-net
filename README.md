@@ -133,7 +133,9 @@ Week 47
 November                  102:47
 ```
 
-`--since`, `--week` and `--month` read as in `report`.  `--json` writes
+The days run oldest first, so the latest is next to the prompt;
+`--newest-first` lists them as the web app does, each month's total on
+its heading.  `--since`, `--week` and `--month` read as in `report`.  `--json` writes
 the computers and one entry per day, with its date, zone, start, end,
 work, and whether it is custom or marked whole as not work; the totals
 are sums of the days.

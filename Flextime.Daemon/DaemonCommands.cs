@@ -229,6 +229,7 @@ public class DaemonCommands(
     /// <param name="month">Months: this, last, aug, jun-aug, 8 or 2026-08.</param>
     /// <param name="computer">-c, Computer ids, comma separated. Default: here.</param>
     /// <param name="allComputers">Count all your computers.</param>
+    /// <param name="newestFirst">Newest day first, as the web app lists them.</param>
     /// <param name="json">Write JSON to standard out.</param>
     [ConsoleAppFilter<DataHelpFilter>]
     public async Task<int> Data(
@@ -237,6 +238,7 @@ public class DaemonCommands(
         [HideDefaultValue] string? month = null,
         [HideDefaultValue] string[]? computer = null,
         bool allComputers = false,
+        bool newestFirst = false,
         bool json = false,
         CancellationToken cancellationToken = default)
     {
@@ -256,7 +258,7 @@ public class DaemonCommands(
 
         var (from, to) = range!.Value;
 
-        return await printData.Invoke(from, to, computer ?? [], allComputers, json, cancellationToken);
+        return await printData.Invoke(from, to, computer ?? [], allComputers, newestFirst, json, cancellationToken);
     }
 
     /// <summary>Save your data on the server to one JSON file</summary>

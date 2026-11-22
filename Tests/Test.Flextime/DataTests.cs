@@ -313,6 +313,35 @@ public class DataTests
     }
 
     [Fact]
+    public void Newest_first_reads_as_the_web_does()
+    {
+        var data = new DataDataContract(
+            [new DataComputerDataContract("a1", "One")],
+            [
+                Row(new DateOnly(2026, 10, 30), "08:00", "09:00", TimeSpan.FromHours(1)),
+                Row(new DateOnly(2026, 11, 16), "08:00", "09:00", TimeSpan.FromHours(1)),
+                Row(new DateOnly(2026, 11, 20), "08:00", "10:00", TimeSpan.FromHours(2)),
+            ]);
+
+        Assert.Equal(
+            """
+            One
+
+            November 2026              03:00
+            Week 47
+              Fri 20   08:00 – 10:00   02:00
+              Mon 16   08:00 – 09:00   01:00
+                                       03:00
+
+            October 2026
+            Week 44
+              Fri 30   08:00 – 09:00   01:00
+                                       01:00
+            """.ReplaceLineEndings("\n"),
+            string.Join("\n", PrintData.Format(data, false, false, new DateOnly(2026, 10, 23), new DateOnly(2026, 11, 22), new DateOnly(2026, 11, 22), newestFirst: true)));
+    }
+
+    [Fact]
     public void No_days_says_so()
     {
         Assert.Equal(

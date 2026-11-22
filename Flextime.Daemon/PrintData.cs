@@ -42,6 +42,7 @@ public class PrintData(
         DateOnly to,
         string[] computers,
         bool allComputers,
+        bool newestFirst,
         bool json,
         CancellationToken cancellationToken)
     {
@@ -75,7 +76,7 @@ public class PrintData(
 
                 var today = DateOnly.FromDateTime(DateTime.Now);
 
-                foreach (var line in Format(data, allComputers, colour, from, to, today))
+                foreach (var line in Format(data, allComputers, colour, from, to, today, newestFirst))
                 {
                     Console.WriteLine(line);
                 }
@@ -264,9 +265,14 @@ public class PrintData(
     /// total sums within one month.  A month the range only touches gets
     /// no total: under the month's name, the sum of a few of its days
     /// would read as the month's.  The month so far counts as whole.
+    /// Newest first, it reads as the web app does: the month's total on
+    /// its heading, then its weeks and days, latest first, each week's
+    /// total under its days.  JSON keeps the days oldest first either
+    /// way.
     /// </summary>
     public static IEnumerable<string> Format(
-        DataDataContract data, bool allComputers, bool colour, DateOnly from, DateOnly to, DateOnly today)
+        DataDataContract data, bool allComputers, bool colour, DateOnly from, DateOnly to, DateOnly today,
+        bool newestFirst = false)
     {
         yield return allComputers
             ? "All computers"
@@ -278,12 +284,20 @@ public class PrintData(
             yield break;
         }
 
-        foreach (var month in data.Days.GroupBy(day => (day.Date.Year, day.Date.Month)))
+        var days = newestFirst ? data.Days.Reverse() : data.Days;
+
+        foreach (var month in days.GroupBy(day => (day.Date.Year, day.Date.Month)))
         {
             var first = month.First().Date;
+            var start = new DateOnly(first.Year, first.Month, 1);
+            var end = start.AddMonths(1).AddDays(-1);
+            var whole = from <= start && to >= (today < end ? today : end);
+            var heading = first.ToString("MMMM yyyy", CultureInfo.InvariantCulture);
 
             yield return string.Empty;
-            yield return first.ToString("MMMM yyyy", CultureInfo.InvariantCulture);
+            yield return newestFirst && whole
+                ? heading + Hours(Sum(month)).PadLeft(Width - heading.Length)
+                : heading;
 
             // Consecutive days of one ISO week; the days are in order,
             // so a week is never met twice within a month.
@@ -299,10 +313,7 @@ public class PrintData(
                 yield return Hours(Sum(week)).PadLeft(Width);
             }
 
-            var start = new DateOnly(first.Year, first.Month, 1);
-            var end = start.AddMonths(1).AddDays(-1);
-
-            if (from <= start && to >= (today < end ? today : end))
+            if (!newestFirst && whole)
             {
                 var name = first.ToString("MMMM", CultureInfo.InvariantCulture);
 
