@@ -4,12 +4,10 @@ using Flextime;
 namespace Flextime.Daemon;
 
 /// <summary>
-/// Reads the idle policy the web client stores: the idle profiles, the
-/// time marked as not work, and the time added to days by hand.  All
-/// are free-form documents in the server's per-user store, written by
-/// the web client.  The only other
-/// writer is the pause command, through <see cref="MarksWriter"/>, which
-/// writes conditionally on the version it read, as the web does.
+/// Reads the idle profiles the web client stores, a free-form document
+/// in the server's per-user store written by the web client alone.  The
+/// time marked as not work and the time added by hand are rows of their
+/// own on the server, and come with the days in the /ids answer.
 /// </summary>
 public class PolicyClient(IHttpClientFactory httpClientFactory)
 {
@@ -17,12 +15,6 @@ public class PolicyClient(IHttpClientFactory httpClientFactory)
 
     public async Task<StoredDocument<IdlePolicy>> GetProfiles(CancellationToken cancellationToken) =>
         await Get("profiles", IdlePolicy.Decode, cancellationToken);
-
-    public async Task<StoredDocument<Marks>> GetMarks(CancellationToken cancellationToken) =>
-        await Get("marks", Marks.Decode, cancellationToken);
-
-    public async Task<StoredDocument<AddedTime>> GetAdded(CancellationToken cancellationToken) =>
-        await Get("added", AddedTime.Decode, cancellationToken);
 
     private async Task<StoredDocument<T>> Get<T>(
         string name,

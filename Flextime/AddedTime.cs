@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 
 namespace Flextime;
@@ -27,48 +26,21 @@ public sealed class AddedTime(IReadOnlyDictionary<DateOnly, AddedDay> days)
     public AddedDay? On(DateOnly date) => Days.GetValueOrDefault(date);
 
     /// <summary>
-    /// Reads the stored document the way the web's decoder does: any
-    /// shape it would refuse is refused here, since a document read
-    /// differently would be counted differently.
+    /// Reads the added rows of the server's <c>days</c> (api-version
+    /// 1.10) the way the web's decoder does: any shape it would refuse is
+    /// refused here, since a day read differently would be counted
+    /// differently.
     /// </summary>
-    public static AddedTime Decode(JsonElement document)
+    public static AddedTime Decode(JsonElement days)
     {
-        if (document.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+        var added = new Dictionary<DateOnly, AddedDay>();
+
+        foreach (var (date, name, value) in DayItems.Values(days, "added"))
         {
-            return Empty;
+            added[date] = DecodeDay(name, value);
         }
 
-        if (document.ValueKind != JsonValueKind.Object)
-        {
-            throw new IdlePolicyException("The added document must be an object.");
-        }
-
-        if (!document.TryGetProperty("days", out var stored))
-        {
-            return Empty;
-        }
-
-        if (stored.ValueKind != JsonValueKind.Object)
-        {
-            throw new IdlePolicyException("Added days must be an object.");
-        }
-
-        var days = new Dictionary<DateOnly, AddedDay>();
-
-        foreach (var item in stored.EnumerateObject())
-        {
-            var day = DecodeDay(item.Name, item.Value);
-
-            // The web looks a day up by its ISO date and never checks
-            // the keys, so a key that is not one is read but never
-            // counted, rather than refused.
-            if (DateOnly.TryParseExact(item.Name, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
-            {
-                days[date] = day;
-            }
-        }
-
-        return new AddedTime(days);
+        return new AddedTime(added);
     }
 
     private static AddedDay DecodeDay(string name, JsonElement stored)

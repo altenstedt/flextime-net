@@ -25,58 +25,37 @@ public sealed class Marks(IReadOnlySet<DateOnly> days, IReadOnlyDictionary<DateO
     public IReadOnlyList<MarkRange> RangesOn(DateOnly date) =>
         Ranges.TryGetValue(date, out var list) ? list : [];
 
-    public static Marks Decode(JsonElement document)
+    /// <summary>
+    /// Reads the marks rows of the server's <c>days</c> (api-version
+    /// 1.10): <c>"day"</c> for a whole day, or a list of ranges.
+    /// </summary>
+    public static Marks Decode(JsonElement days)
     {
-        if (document.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
-        {
-            return Empty;
-        }
-
-        if (document.ValueKind != JsonValueKind.Object)
-        {
-            throw new IdlePolicyException("The marks document must be an object.");
-        }
-
-        if (!document.TryGetProperty("marks", out var marks))
-        {
-            return Empty;
-        }
-
-        if (marks.ValueKind != JsonValueKind.Object)
-        {
-            throw new IdlePolicyException("Marks must be an object.");
-        }
-
-        var days = new HashSet<DateOnly>();
+        var marked = new HashSet<DateOnly>();
         var ranges = new Dictionary<DateOnly, IReadOnlyList<MarkRange>>();
 
-        foreach (var item in marks.EnumerateObject())
+        foreach (var (date, name, value) in DayItems.Values(days, "marks"))
         {
-            if (!DateOnly.TryParse(item.Name, out var date))
+            if (value.ValueKind == JsonValueKind.Array)
             {
-                throw new IdlePolicyException($"A mark is keyed by \"{item.Name}\", which is not a date.");
-            }
-
-            if (item.Value.ValueKind == JsonValueKind.Array)
-            {
-                ranges[date] = DecodeRanges(item.Name, item.Value);
+                ranges[date] = DecodeRanges(name, value);
 
                 continue;
             }
 
-            if (item.Value.ValueKind != JsonValueKind.String || item.Value.GetString() != "day")
+            if (value.ValueKind != JsonValueKind.String || value.GetString() != "day")
             {
-                throw new IdlePolicyException($"The mark on {item.Name} is not a shape this version knows.");
+                throw new IdlePolicyException($"The mark on {name} is not a shape this version knows.");
             }
 
-            days.Add(date);
+            marked.Add(date);
         }
 
-        return new Marks(days, ranges);
+        return new Marks(marked, ranges);
     }
 
-    // The ranges the web's decoder accepts, and no others: a document
-    // read differently here would be counted differently.
+    // The ranges the web's decoder accepts, and no others: a mark read
+    // differently here would be counted differently.
     private static List<MarkRange> DecodeRanges(string name, JsonElement array)
     {
         var list = new List<MarkRange>();

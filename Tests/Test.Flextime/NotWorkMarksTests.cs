@@ -1,14 +1,12 @@
 using System.Net;
-using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Flextime;
 using Flextime.Daemon;
 
 namespace Test.Flextime;
 
-// Backdating a pause: finding the stretch before it, writing it to the
-// web's marks document, and keeping it for sync when that fails.
+// Backdating a pause: finding the stretch before it, posting it to the
+// server's marks, and keeping it for sync when that fails.
 public class NotWorkMarksTests : IDisposable
 {
     private readonly string folder = Path.Combine(Path.GetTempPath(), $"flextime-marks-tests-{Guid.NewGuid():N}");
@@ -126,92 +124,17 @@ public class NotWorkMarksTests : IDisposable
         Assert.Equal(20 * 60, range.To - range.From);
     }
 
-    // ---- The document ---------------------------------------------------
-
-    private static JsonObject Document(string json) => (JsonObject)JsonNode.Parse(json)!;
+    // ---- The server -----------------------------------------------------
 
     private static readonly DateOnly Monday = new(2026, 11, 16);
 
-    [Fact]
-    public void A_range_is_added_and_the_rest_kept()
+    // The API merges the ranges into each date's marks; here only the
+    // requests and the answers matter.
+    private sealed class FakeServer : HttpMessageHandler
     {
-        var document = Document("""{ "v": 3, "future": { "x": 1 }, "marks": { "2026-11-01": "day" } }""");
-
-        Assert.Null(MarksDocument.Merge(document, [new DayRange(Monday, 100, 200)], out var changed));
-
-        Assert.True(changed);
-        Assert.Equal(
-            """{"v":3,"future":{"x":1},"marks":{"2026-11-01":"day","2026-11-16":[{"from":100,"to":200}]}}""",
-            document.ToJsonString());
-    }
-
-    [Fact]
-    public void Ranges_that_touch_or_overlap_are_merged()
-    {
-        var document = Document("""{ "marks": { "2026-11-16": [{ "from": 0, "to": 100 }, { "from": 300, "to": 400 }] } }""");
-
-        MarksDocument.Merge(document, [new DayRange(Monday, 100, 350)], out var changed);
-
-        Assert.True(changed);
-        Assert.Equal("""{"marks":{"2026-11-16":[{"from":0,"to":400}]}}""", document.ToJsonString());
-    }
-
-    [Fact]
-    public void A_range_already_marked_changes_nothing()
-    {
-        var document = Document("""{ "marks": { "2026-11-16": [{ "from": 0, "to": 400 }] } }""");
-
-        MarksDocument.Merge(document, [new DayRange(Monday, 100, 350)], out var changed);
-
-        Assert.False(changed);
-    }
-
-    [Fact]
-    public void A_whole_marked_day_is_left_alone()
-    {
-        var document = Document("""{ "marks": { "2026-11-16": "day" } }""");
-
-        Assert.Null(MarksDocument.Merge(document, [new DayRange(Monday, 100, 350)], out var changed));
-        Assert.False(changed);
-        Assert.Equal("""{"marks":{"2026-11-16":"day"}}""", document.ToJsonString());
-    }
-
-    [Theory]
-    [InlineData("""{ "marks": [] }""")]
-    [InlineData("""{ "marks": { "2026-11-16": "week" } }""")]
-    [InlineData("""{ "marks": { "2026-11-16": [{ "from": 5, "to": 1 }] } }""")]
-    [InlineData("""{ "marks": { "2026-11-16": [{ "from": "0", "to": 100 }] } }""")]
-    [InlineData("""{ "marks": { "2026-11-16": [{ "from": 0, "to": 90000 }] } }""")]
-    public void A_shape_this_version_does_not_know_is_left_unchanged(string json)
-    {
-        var document = Document(json);
-        var before = document.ToJsonString();
-
-        Assert.NotNull(MarksDocument.Merge(document, [new DayRange(Monday, 100, 350)], out var changed));
-        Assert.False(changed);
-        Assert.Equal(before, document.ToJsonString());
-    }
-
-    [Fact]
-    public void What_is_written_reads_back_as_marks()
-    {
-        var document = Document("{}");
-
-        MarksDocument.Merge(document, [new DayRange(Monday, 100, 350)], out _);
-
-        var marks = Marks.Decode(JsonDocument.Parse(document.ToJsonString()).RootElement);
-
-        Assert.Equal([new MarkRange(100, 350)], marks.RangesOn(Monday));
-    }
-
-    // ---- The server -----------------------------------------------------
-
-    private sealed class FakeStore : HttpMessageHandler
-    {
-        public string? Document { get; set; }
-        public int Version { get; set; } = 1;
         public List<string> Requests { get; } = [];
-        public Queue<HttpStatusCode> PutAnswers { get; } = new();
+        public List<string> Bodies { get; } = [];
+        public Queue<HttpStatusCode> Answers { get; } = new();
         public Func<CancellationToken, Task>? Hang { get; set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -221,38 +144,10 @@ public class NotWorkMarksTests : IDisposable
                 await Hang(cancellationToken);
             }
 
-            Requests.Add($"{request.Method} {request.Headers.IfMatch}");
+            Requests.Add($"{request.Method} {request.RequestUri!.PathAndQuery}");
+            Bodies.Add(request.Content == null ? "" : await request.Content.ReadAsStringAsync(cancellationToken));
 
-            if (request.Method == HttpMethod.Get)
-            {
-                var response = new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new StringContent(Document ?? "null", Encoding.UTF8, "application/json"),
-                };
-
-                if (Document != null)
-                {
-                    response.Headers.ETag = new System.Net.Http.Headers.EntityTagHeaderValue($"\"v{Version}\"", true);
-                }
-
-                return response;
-            }
-
-            if (PutAnswers.TryDequeue(out var answer))
-            {
-                // Someone else wrote in between.
-                if (answer == HttpStatusCode.PreconditionFailed)
-                {
-                    Version++;
-                }
-
-                return new HttpResponseMessage(answer);
-            }
-
-            Document = await request.Content!.ReadAsStringAsync(cancellationToken);
-            Version++;
-
-            return new HttpResponseMessage(HttpStatusCode.NoContent);
+            return new HttpResponseMessage(Answers.TryDequeue(out var answer) ? answer : HttpStatusCode.NoContent);
         }
     }
 
@@ -262,100 +157,54 @@ public class NotWorkMarksTests : IDisposable
     private static readonly DayRange Evening = new(Monday, 71_000, 71_100);
 
     [Fact]
-    public async Task A_first_mark_creates_the_document()
+    public async Task A_mark_is_one_post_of_its_ranges()
     {
-        var store = new FakeStore();
-        var (result, _) = await new MarksWriter(Client(store)).Apply([Evening], TestContext.Current.CancellationToken);
+        var server = new FakeServer();
+        var (result, _) = await new MarksWriter(Client(server)).Apply(
+            [Evening, new DayRange(Monday.AddDays(1), 0, 600.5)], TestContext.Current.CancellationToken);
 
         Assert.Equal(MarkResult.Written, result);
-        Assert.Equal(["GET ", "PUT "], store.Requests);
-        Assert.Equal("""{"marks":{"2026-11-16":[{"from":71000,"to":71100}]}}""", store.Document);
+        Assert.Equal(["POST /days/marks?api-version=1.10"], server.Requests);
+        Assert.Equal(
+            """{"ranges":[{"date":"2026-11-16","from":71000,"to":71100},{"date":"2026-11-17","from":0,"to":600.5}]}""",
+            Assert.Single(server.Bodies));
     }
 
     [Fact]
-    public async Task A_mark_is_written_against_the_version_read()
+    public async Task No_ranges_ask_nothing()
     {
-        var store = new FakeStore { Document = """{ "marks": {}, "other": true }""" };
-        await new MarksWriter(Client(store)).Apply([Evening], TestContext.Current.CancellationToken);
-
-        Assert.Equal(["GET ", "PUT W/\"v1\""], store.Requests);
-        Assert.Contains("\"other\":true", store.Document);
-    }
-
-    [Fact]
-    public async Task A_write_that_lost_a_race_is_merged_again()
-    {
-        var store = new FakeStore { Document = """{ "marks": {} }""" };
-
-        store.PutAnswers.Enqueue(HttpStatusCode.PreconditionFailed);
-
-        var (result, _) = await new MarksWriter(Client(store)).Apply([Evening], TestContext.Current.CancellationToken);
+        var server = new FakeServer();
+        var (result, _) = await new MarksWriter(Client(server)).Apply([], TestContext.Current.CancellationToken);
 
         Assert.Equal(MarkResult.Written, result);
-        Assert.Equal(["GET ", "PUT W/\"v1\"", "GET ", "PUT W/\"v2\""], store.Requests);
+        Assert.Empty(server.Requests);
     }
 
     [Fact]
-    public async Task A_create_that_lost_a_race_is_merged_again()
+    public async Task A_mark_the_server_refuses_is_refused_with_a_reason()
     {
-        var store = new FakeStore();
+        var server = new FakeServer();
 
-        store.PutAnswers.Enqueue(HttpStatusCode.Conflict);
+        server.Answers.Enqueue(HttpStatusCode.BadRequest);
 
-        var (result, _) = await new MarksWriter(Client(store)).Apply([Evening], TestContext.Current.CancellationToken);
+        var (result, reason) = await new MarksWriter(Client(server)).Apply([Evening], TestContext.Current.CancellationToken);
 
-        Assert.Equal(MarkResult.Written, result);
-    }
-
-    [Fact]
-    public async Task A_document_that_never_settles_throws_so_the_mark_is_kept()
-    {
-        var store = new FakeStore { Document = """{ "marks": {} }""" };
-
-        for (var i = 0; i < 10; i++)
-        {
-            store.PutAnswers.Enqueue(HttpStatusCode.PreconditionFailed);
-        }
-
-        await Assert.ThrowsAsync<HttpRequestException>(() =>
-            new MarksWriter(Client(store)).Apply([Evening], TestContext.Current.CancellationToken));
-    }
-
-    [Fact]
-    public async Task A_mark_already_there_is_not_written_again()
-    {
-        var store = new FakeStore { Document = """{ "marks": { "2026-11-16": [{ "from": 0, "to": 86400 }] } }""" };
-
-        var (result, _) = await new MarksWriter(Client(store)).Apply([Evening], TestContext.Current.CancellationToken);
-
-        Assert.Equal(MarkResult.AlreadyMarked, result);
-        Assert.Equal(["GET "], store.Requests);
+        Assert.Equal(MarkResult.Refused, result);
+        Assert.Equal("the server refused the range as not a mark it can store", reason);
     }
 
     [Theory]
-    [InlineData("[1, 2]")]
-    [InlineData("\"text\"")]
-    [InlineData("""{ "marks": { "2026-11-16": "something new" } }""")]
-    public async Task A_document_this_version_cannot_merge_is_refused_untouched(string document)
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.InternalServerError)]
+    public async Task A_server_error_throws_so_the_mark_is_kept(HttpStatusCode status)
     {
-        var store = new FakeStore { Document = document };
+        var server = new FakeServer();
 
-        var (result, reason) = await new MarksWriter(Client(store)).Apply([Evening], TestContext.Current.CancellationToken);
-
-        Assert.Equal(MarkResult.Refused, result);
-        Assert.NotNull(reason);
-        Assert.Equal(["GET "], store.Requests);
-    }
-
-    [Fact]
-    public async Task A_server_error_throws_so_the_mark_is_kept()
-    {
-        var store = new FakeStore { Document = """{ "marks": {} }""" };
-
-        store.PutAnswers.Enqueue(HttpStatusCode.ServiceUnavailable);
+        server.Answers.Enqueue(status);
 
         await Assert.ThrowsAsync<HttpRequestException>(() =>
-            new MarksWriter(Client(store)).Apply([Evening], TestContext.Current.CancellationToken));
+            new MarksWriter(Client(server)).Apply([Evening], TestContext.Current.CancellationToken));
     }
 
     // ---- Waiting for sync -----------------------------------------------
@@ -473,7 +322,7 @@ public class NotWorkMarksTests : IDisposable
     {
         // A server that ignores cancellation, standing in for any call
         // that blocks: sync must still finish.
-        var store = new FakeStore { Hang = _ => new TaskCompletionSource().Task };
+        var store = new FakeServer { Hang = _ => new TaskCompletionSource().Task };
         var measurements = Path.Combine(folder, "measurements");
 
         Directory.CreateDirectory(measurements);
@@ -508,7 +357,7 @@ public class NotWorkMarksTests : IDisposable
     [Fact]
     public async Task Sync_writes_what_waits_and_removes_it()
     {
-        var store = new FakeStore();
+        var store = new FakeServer();
         var pending = Pending;
         var notes = new List<(string, bool)>();
 
@@ -517,14 +366,14 @@ public class NotWorkMarksTests : IDisposable
             TestContext.Current.CancellationToken);
 
         Assert.Empty(await pending.Read(Now, null, TestContext.Current.CancellationToken));
-        Assert.Equal("""{"marks":{"2026-11-16":[{"from":70860,"to":71070}]}}""", store.Document);
+        Assert.Equal("""{"ranges":[{"date":"2026-11-16","from":70860,"to":71070}]}""", Assert.Single(store.Bodies));
         Assert.Equal([("Marked 19:41–19:44 as not work.", false)], notes);
     }
 
     [Fact]
     public async Task A_server_that_cannot_be_reached_keeps_the_marks_and_never_throws()
     {
-        var store = new FakeStore { Hang = _ => throw new HttpRequestException("No route to host") };
+        var store = new FakeServer { Hang = _ => throw new HttpRequestException("No route to host") };
         var pending = Pending;
         var notes = new List<(string Line, bool Warning)>();
 
@@ -537,9 +386,26 @@ public class NotWorkMarksTests : IDisposable
     }
 
     [Fact]
+    public async Task A_busy_server_keeps_the_marks_for_the_next_sync()
+    {
+        var store = new FakeServer();
+        var pending = Pending;
+        var notes = new List<(string Line, bool Warning)>();
+
+        store.Answers.Enqueue(HttpStatusCode.ServiceUnavailable);
+
+        await pending.Add(Mark(), Now, TestContext.Current.CancellationToken);
+        await pending.Retry(new MarksWriter(Client(store)), Now, (line, warning) => notes.Add((line, warning)),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal([Mark()], await pending.Read(Now, null, TestContext.Current.CancellationToken));
+        Assert.StartsWith("Not-work marks wait for the next sync", Assert.Single(notes).Line);
+    }
+
+    [Fact]
     public async Task A_hanging_server_is_given_up_on_at_the_timeout()
     {
-        var store = new FakeStore { Hang = cancellationToken => Task.Delay(Timeout.Infinite, cancellationToken) };
+        var store = new FakeServer { Hang = cancellationToken => Task.Delay(Timeout.Infinite, cancellationToken) };
         var pending = Pending;
         var notes = new List<string>();
 
@@ -556,8 +422,10 @@ public class NotWorkMarksTests : IDisposable
     [Fact]
     public async Task A_mark_the_server_cannot_take_is_dropped_not_retried_forever()
     {
-        var store = new FakeStore { Document = """{ "marks": { "2026-11-16": "something new" } }""" };
+        var store = new FakeServer();
         var pending = Pending;
+
+        store.Answers.Enqueue(HttpStatusCode.BadRequest);
         var notes = new List<(string Line, bool Warning)>();
 
         await pending.Add(Mark(), Now, TestContext.Current.CancellationToken);
@@ -574,7 +442,10 @@ public class NotWorkMarksTests : IDisposable
     public void Ranges_are_read_from_the_stored_marks()
     {
         var marks = Marks.Decode(JsonDocument.Parse(
-            """{ "marks": { "2026-11-16": [{ "from": 300, "to": 400 }, { "from": 0, "to": 100 }], "2026-11-17": "day" } }""").RootElement);
+            """
+            [ { "date": "2026-11-16", "marks": { "value": [{ "from": 300, "to": 400 }, { "from": 0, "to": 100 }], "version": "W/\"1\"" } },
+              { "date": "2026-11-17", "marks": { "value": "day", "version": "W/\"2\"" } } ]
+            """).RootElement);
 
         Assert.Equal([new MarkRange(0, 100), new MarkRange(300, 400)], marks.RangesOn(Monday));
         Assert.True(marks.IsMarked(new DateOnly(2026, 11, 17)));
@@ -585,7 +456,7 @@ public class NotWorkMarksTests : IDisposable
     public void Overlapping_stored_ranges_count_once()
     {
         var marks = Marks.Decode(JsonDocument.Parse(
-            """{ "marks": { "2026-11-16": [{ "from": 0, "to": 200 }, { "from": 100, "to": 300 }, { "from": 300, "to": 400 }] } }""").RootElement);
+            """[ { "date": "2026-11-16", "marks": { "value": [{ "from": 0, "to": 200 }, { "from": 100, "to": 300 }, { "from": 300, "to": 400 }] } } ]""").RootElement);
 
         Assert.Equal([new MarkRange(0, 400)], marks.RangesOn(Monday));
     }

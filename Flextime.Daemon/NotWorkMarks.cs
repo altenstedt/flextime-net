@@ -1,12 +1,11 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Flextime.Daemon;
 
-/// <summary>A range of one day, in seconds of the day in the day's zone, as the marks document stores it.</summary>
+/// <summary>A range of one day, in seconds of the day in the day's zone, as the server stores a mark.</summary>
 public readonly record struct DayRange(DateOnly Date, double From, double To);
 
 /// <summary>
@@ -113,266 +112,70 @@ public static class Backdate
     }
 }
 
-/// <summary>
-/// Adds ranges to the marks document the web client keeps, the way the
-/// web does: merged where they touch or overlap, a whole marked day left
-/// alone, and everything this build does not know kept as it was.
-/// </summary>
-public static class MarksDocument
-{
-    /// <summary>
-    /// Merges <paramref name="ranges"/> into <paramref name="document"/>.
-    /// Returns why it cannot, or null.  Nothing is changed when it
-    /// cannot: a document the web could no longer read would cost every
-    /// mark in it.
-    /// </summary>
-    public static string? Merge(JsonObject document, IEnumerable<DayRange> ranges, out bool changed)
-    {
-        changed = false;
-
-        var marks = document["marks"];
-
-        if (marks != null && marks is not JsonObject)
-        {
-            return "the stored marks are not a shape this version knows";
-        }
-
-        var merged = new Dictionary<string, List<(double From, double To)>>();
-        var byDate = (JsonObject?)marks;
-
-        foreach (var range in ranges)
-        {
-            var key = range.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-
-            if (!merged.TryGetValue(key, out var list))
-            {
-                var current = byDate?[key];
-
-                if (current is JsonValue value && value.TryGetValue<string>(out var text) && text == "day")
-                {
-                    // Already not work, as a whole day.
-                    continue;
-                }
-
-                if (current != null && !TryReadRanges(current, out list))
-                {
-                    return $"the mark on {key} is not a shape this version knows";
-                }
-
-                list ??= [];
-                merged[key] = list;
-            }
-
-            list.Add((range.From, range.To));
-        }
-
-        if (merged.Count == 0)
-        {
-            return null;
-        }
-
-        var target = byDate ?? new JsonObject();
-
-        foreach (var (key, list) in merged)
-        {
-            var result = Combine(list);
-            var before = target[key] is { } existing && TryReadRanges(existing, out var old) ? old : null;
-
-            if (before != null && before.SequenceEqual(result))
-            {
-                continue;
-            }
-
-            target[key] = new JsonArray(result
-                .Select(item => (JsonNode)new JsonObject { ["from"] = item.From, ["to"] = item.To })
-                .ToArray());
-            changed = true;
-        }
-
-        if (changed && byDate == null)
-        {
-            document["marks"] = target;
-        }
-
-        return null;
-    }
-
-    // Exactly the ranges the web's decoder accepts.
-    private static bool TryReadRanges(JsonNode node, out List<(double From, double To)>? ranges)
-    {
-        ranges = null;
-
-        if (node is not JsonArray array)
-        {
-            return false;
-        }
-
-        var list = new List<(double, double)>();
-
-        foreach (var item in array)
-        {
-            if (item is not JsonObject range
-                || !TryReadSecond(range["from"], out var from)
-                || !TryReadSecond(range["to"], out var to)
-                || from >= to)
-            {
-                return false;
-            }
-
-            list.Add((from, to));
-        }
-
-        ranges = list;
-
-        return true;
-    }
-
-    private static bool TryReadSecond(JsonNode? node, out double value)
-    {
-        value = 0;
-
-        return node is JsonValue json
-               && json.GetValueKind() == JsonValueKind.Number
-               && json.TryGetValue(out value)
-               && double.IsFinite(value)
-               && value is >= 0 and <= 86_400;
-    }
-
-    private static List<(double From, double To)> Combine(List<(double From, double To)> ranges)
-    {
-        var merged = new List<(double From, double To)>();
-
-        foreach (var next in ranges.OrderBy(item => item.From))
-        {
-            if (merged.Count > 0 && next.From <= merged[^1].To)
-            {
-                merged[^1] = (merged[^1].From, Math.Max(merged[^1].To, next.To));
-            }
-            else
-            {
-                merged.Add(next);
-            }
-        }
-
-        return merged;
-    }
-}
-
 public enum MarkResult
 {
     /// <summary>The server holds the ranges now.</summary>
     Written,
-
-    /// <summary>The server already held them.</summary>
-    AlreadyMarked,
 
     /// <summary>They can never be written; see the reason.</summary>
     Refused,
 }
 
 /// <summary>
-/// Writes ranges to the server's marks document: read, merge, write
-/// back conditionally, and again from the top when someone else wrote
-/// in between.  Throws when the server cannot be reached, so the caller
-/// keeps the ranges for later.
+/// Adds ranges to the server's marks in one request.  The server merges
+/// them into each date's marks where they touch or overlap and leaves a
+/// whole marked day as it is, so a range already marked changes nothing
+/// and writing one twice is safe.  Throws when the server cannot be
+/// reached or is busy, so the caller keeps the ranges for later.
 /// </summary>
 public sealed class MarksWriter(HttpClient httpClient)
 {
-    private const int Attempts = 4;
-
     public async Task<(MarkResult Result, string? Reason)> Apply(IReadOnlyList<DayRange> ranges, CancellationToken cancellationToken)
     {
-        for (var attempt = 0; attempt < Attempts; attempt++)
+        if (ranges.Count == 0)
         {
-            using var get = await httpClient.GetAsync("/store/marks?api-version=1.0", cancellationToken);
-
-            get.EnsureSuccessStatusCode();
-
-            var body = await get.Content.ReadAsStringAsync(cancellationToken);
-            var etag = get.Headers.ETag?.ToString();
-
-            JsonNode? parsed;
-
-            try
-            {
-                parsed = JsonNode.Parse(body);
-            }
-            catch (JsonException)
-            {
-                return (MarkResult.Refused, "the stored marks are not JSON");
-            }
-
-            // Nothing stored yet reads as the literal null, with no
-            // version: then only creating the document is allowed.
-            JsonObject document;
-
-            if (parsed == null)
-            {
-                document = new JsonObject();
-                etag = null;
-            }
-            else if (parsed is JsonObject value)
-            {
-                document = value;
-
-                if (etag == null)
-                {
-                    // Without a version the write would be create-only,
-                    // and fail; better to say why.
-                    return (MarkResult.Refused, "the server gave no version of the stored marks");
-                }
-            }
-            else
-            {
-                return (MarkResult.Refused, "the stored marks are not a shape this version knows");
-            }
-
-            if (MarksDocument.Merge(document, ranges, out var changed) is { } problem)
-            {
-                return (MarkResult.Refused, problem);
-            }
-
-            if (!changed)
-            {
-                return (MarkResult.AlreadyMarked, null);
-            }
-
-            var json = document.ToJsonString();
-
-            using var request = new HttpRequestMessage(HttpMethod.Put, "/store/marks?api-version=1.0");
-
-            request.Content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            if (etag != null)
-            {
-                request.Headers.TryAddWithoutValidation("If-Match", etag);
-            }
-
-            using var put = await httpClient.SendAsync(request, cancellationToken);
-
-            switch (put.StatusCode)
-            {
-                case HttpStatusCode.NoContent or HttpStatusCode.OK:
-                    return (MarkResult.Written, null);
-
-                case HttpStatusCode.PreconditionFailed or HttpStatusCode.Conflict:
-                    // Someone else wrote in between: read it again.
-                    continue;
-
-                case HttpStatusCode.BadRequest:
-                    // The size limit is the server's alone, so a later
-                    // raise needs no new client; a full document lands
-                    // here.
-                    return (MarkResult.Refused, "the server refused the marks, perhaps because they are full");
-
-                default:
-                    put.EnsureSuccessStatusCode();
-
-                    return (MarkResult.Written, null);
-            }
+            return (MarkResult.Written, null);
         }
 
-        throw new HttpRequestException("The stored marks kept changing while they were written.");
+        // As JsonNodes, which are safe to trim, like the rest of the
+        // daemon's hand-built bodies.
+        var items = new JsonArray();
+
+        foreach (var range in ranges)
+        {
+            items.Add((JsonNode)new JsonObject
+            {
+                ["date"] = range.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                ["from"] = range.From,
+                ["to"] = range.To,
+            });
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/days/marks?api-version=1.10");
+
+        request.Content = new StringContent(new JsonObject { ["ranges"] = items }.ToJsonString(), Encoding.UTF8, "application/json");
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+
+        switch (response.StatusCode)
+        {
+            case HttpStatusCode.NoContent or HttpStatusCode.OK:
+                return (MarkResult.Written, null);
+
+            case HttpStatusCode.BadRequest:
+                // The server validates every mark, and trying again
+                // sends the same ranges, so they are dropped rather than
+                // kept for a week.
+                return (MarkResult.Refused, "the server refused the range as not a mark it can store");
+
+            default:
+                // 503, when the server's merge kept meeting other writes,
+                // lands here with everything else, as does a server older
+                // than 1.10: kept, and tried again at the next sync.
+                response.EnsureSuccessStatusCode();
+
+                return (MarkResult.Written, null);
+        }
     }
 }
 

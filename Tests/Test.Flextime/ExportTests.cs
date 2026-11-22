@@ -41,9 +41,8 @@ public class ExportTests : IDisposable
             ["/ids?api-version=1.5&id=b2"] = """{ "items": [], "count": 0, "continuation": "" }""",
             ["/places/hints?api-version=1.5&id=a1&id=b2"] = """{ "items": [ { "router": "95313127c39c", "hint": "lan", "updated": 1000 } ] }""",
             ["/store/profiles?api-version=1.0"] = """{ "v": 1 }""",
-            ["/store/marks?api-version=1.0"] = "null",
-            ["/store/added?api-version=1.0"] = """{ "days": { "2026-11-20": { "started": 27900 } } }""",
             ["/store/places?api-version=1.0"] = """{ "names": {} }""",
+            ["/days?api-version=1.10"] = """{ "days": [ { "date": "2026-11-20", "added": { "value": { "started": 27900 }, "version": "W/\"1\"" } } ] }""",
         }, asked), Now, "7.15.0");
 
         Assert.Equal("2026-10-21T08:00:00.0000000+00:00", export["exported"]!.GetValue<string>());
@@ -61,12 +60,14 @@ public class ExportTests : IDisposable
         Assert.Equal("lan", export["hints"]![0]!["hint"]!.GetValue<string>());
 
         Assert.Equal(1, export["settings"]!["profiles"]!["v"]!.GetValue<int>());
-        Assert.True(export["settings"]!.AsObject().ContainsKey("marks"));
-        Assert.Null(export["settings"]!["marks"]);
-        Assert.Equal(27900, export["settings"]!["added"]!["days"]!["2026-11-20"]!["started"]!.GetValue<int>());
+        Assert.Equal(["profiles", "places", "days"], export["settings"]!.AsObject().Select(item => item.Key));
+
+        var day = Assert.Single(export["settings"]!["days"]!.AsArray())!;
+        Assert.Equal("2026-11-20", day["date"]!.GetValue<string>());
+        Assert.Equal(27900, day["added"]!["value"]!["started"]!.GetValue<int>());
 
         // Every answer is read once, the activity one computer at a time.
-        Assert.Equal(8, asked.Count);
+        Assert.Equal(7, asked.Count);
     }
 
     [Fact]
@@ -76,9 +77,8 @@ public class ExportTests : IDisposable
         {
             ["/computers?api-version=1.7"] = """{ "items": [] }""",
             ["/store/profiles?api-version=1.0"] = "null",
-            ["/store/marks?api-version=1.0"] = "null",
-            ["/store/added?api-version=1.0"] = "null",
             ["/store/places?api-version=1.0"] = "null",
+            ["/days?api-version=1.10"] = """{ "days": [] }""",
         }), Now, "7.15.0");
 
         Assert.Empty(export["computers"]!.AsArray());
@@ -97,9 +97,8 @@ public class ExportTests : IDisposable
             ["/ids?api-version=1.5&id=a%20b"] = """{ "items": [] }""",
             ["/places/hints?api-version=1.5&id=a%20b"] = """{ "items": [] }""",
             ["/store/profiles?api-version=1.0"] = "null",
-            ["/store/marks?api-version=1.0"] = "null",
-            ["/store/added?api-version=1.0"] = "null",
             ["/store/places?api-version=1.0"] = "null",
+            ["/days?api-version=1.10"] = """{ "days": [] }""",
         }, asked), Now, "7.15.0");
 
         Assert.Contains("/ids?api-version=1.5&id=a%20b", asked);
@@ -116,9 +115,8 @@ public class ExportTests : IDisposable
             ["/ids?api-version=1.8&id=a1&from=2026-11-01&before=2026-12-01"] = """{ "items": [ { "zone": "Europe/Stockholm", "deltas": [1000, 60, 120], "places": [ [0, "95313127c39c", 2] ] } ], "count": 1, "continuation": "" }""",
             ["/places/hints?api-version=1.5&id=a1"] = """{ "items": [] }""",
             ["/store/profiles?api-version=1.0"] = """{ "v": 1 }""",
-            ["/store/marks?api-version=1.0"] = "null",
-            ["/store/added?api-version=1.0"] = "null",
             ["/store/places?api-version=1.0"] = "null",
+            ["/days?api-version=1.10&from=2026-11-01&before=2026-12-01"] = """{ "days": [ { "date": "2026-11-03", "marks": { "value": "day", "version": "W/\"1\"" } } ] }""",
         }, asked), Now, "7.15.0", (new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 30)));
 
         var day = export["activity"]![0]!["days"]![0]!.AsObject();
@@ -127,10 +125,12 @@ public class ExportTests : IDisposable
         Assert.Equal([1000L, 1060L, 1180L], day["timestamps"]!.AsArray().Select(item => item!.GetValue<long>()));
         Assert.Equal(2, day["places"]![0]![2]!.GetValue<int>());
 
-        // The settings are whole all the same, and the file says it is
-        // part of the activity.
+        // The profiles are whole all the same, the marks and added time
+        // follow the range, and the file says it holds part of both.
         Assert.Equal(1, export["settings"]!["profiles"]!["v"]!.GetValue<int>());
+        Assert.Equal("2026-11-03", Assert.Single(export["settings"]!["days"]!.AsArray())!["date"]!.GetValue<string>());
         Assert.Contains("from 2026-11-01 to 2026-11-30", export["about"]!["activity"]!.GetValue<string>());
+        Assert.Contains("from 2026-11-01 to 2026-11-30", export["about"]!["settings"]!.GetValue<string>());
         Assert.DoesNotContain(asked, uri => uri.StartsWith("/ids?api-version=1.5"));
     }
 
@@ -141,9 +141,8 @@ public class ExportTests : IDisposable
         {
             ["/computers?api-version=1.7"] = """{ "items": [] }""",
             ["/store/profiles?api-version=1.0"] = "null",
-            ["/store/marks?api-version=1.0"] = "null",
-            ["/store/added?api-version=1.0"] = "null",
             ["/store/places?api-version=1.0"] = "null",
+            ["/days?api-version=1.10"] = """{ "days": [] }""",
         }), Now, "7.15.0");
 
         Assert.Equal(

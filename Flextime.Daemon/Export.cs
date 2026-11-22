@@ -9,22 +9,25 @@ namespace Flextime.Daemon;
 /// Writes everything the server holds for the user to one JSON file:
 /// computers with their name and hostname histories, every day of
 /// activity with the places in effect, the network hints, and the
-/// settings documents.  The About page promises a copy of all your
-/// data, and this is it.  The server's answers are copied as they come,
-/// so a field the server adds later is exported without a new client.
+/// settings: the idle profiles and place names, and the marks and added
+/// time of each day.  The About page promises a copy of all your data,
+/// and this is it.  The server's answers are copied as they come, so a
+/// field the server adds later is exported without a new client.
 /// </summary>
 public class Export(IHttpClientFactory httpClientFactory, DeviceCode deviceCode)
 {
     private readonly HttpClient httpClient = httpClientFactory.CreateClient("ApiHttpClient");
 
-    // The documents the server's store accepts.
-    private static readonly string[] Documents = ["profiles", "marks", "added", "places"];
+    // The documents the server's store accepts.  Marks and added time
+    // are rows of their own, one a date, read with GET /days.
+    private static readonly string[] Documents = ["profiles", "places"];
 
     /// <summary>What export prints after its generated help.  Every line fits in 80 columns.</summary>
     public const string HelpKey = """
 
         Without a range it saves all of it: every computer, every timestamp, and
-        your settings.  A range limits the activity to those days.  Settings are
+        your settings.  A range limits the activity, and the time marked as not
+        work or added by hand, to those days.  Idle profiles and place names are
         always saved whole, since they do not belong to single days.
         """;
 
@@ -86,7 +89,7 @@ public class Export(IHttpClientFactory httpClientFactory, DeviceCode deviceCode)
     /// a GET on the API.  Activity is read one computer at a time, since
     /// the ids answer does not say which computer a day came from.  With
     /// a <paramref name="range"/>, only the days in it, from and to
-    /// inclusive.
+    /// inclusive, for the activity and for the marks and added time.
     /// </summary>
     public static async Task<JsonObject> Build(
         Func<string, Task<string>> get,
@@ -133,6 +136,14 @@ public class Export(IHttpClientFactory httpClientFactory, DeviceCode deviceCode)
             settings[name] = JsonNode.Parse(await get($"/store/{name}?api-version=1.0"));
         }
 
+        // One item per date with a mark or added time, as the server
+        // answers it; no bounds read the whole history.
+        settings["days"] = JsonNode.Parse(await get(range is { } dates
+            ? "/days?api-version=1.10"
+              + $"&from={dates.From.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
+              + $"&before={dates.To.AddDays(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
+            : "/days?api-version=1.10"))?["days"]?.DeepClone();
+
         return new JsonObject
         {
             ["exported"] = now.ToString("O"),
@@ -157,7 +168,11 @@ public class Export(IHttpClientFactory httpClientFactory, DeviceCode deviceCode)
             : "For each computer, one entry per day and time zone. Timestamps are Unix seconds, one for each minute the computer was in use.",
         ["places"] = "Only with location on. Each place is [start, router, flags]: when it took effect (Unix seconds), a hashed router id, and flags. Flag 1 means the internet went through a tunnel, 2 a VPN was connected, 4 location was turned off, 8 the network was metered, like a phone hotspot.",
         ["hints"] = "The network domain each router was last seen on.",
-        ["settings"] = "Your idle profiles, the time you marked as not work, the time you added to days by hand, and your names for places, as the web app stores them.",
+        ["settings"] = range is { } days
+            ? "Your idle profiles and your names for places, as the web app stores them, and in days, "
+              + $"only for the days from {days.From.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)} to {days.To.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}, "
+              + "the time you marked as not work and the time you added by hand, one entry per date, in seconds of the day."
+            : "Your idle profiles and your names for places, as the web app stores them, and in days the time you marked as not work and the time you added by hand, one entry per date, in seconds of the day.",
     };
 
     // Each item as 1.5 writes it: zone, timestamps, places.  A running

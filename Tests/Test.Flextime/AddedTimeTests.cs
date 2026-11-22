@@ -85,45 +85,53 @@ public class AddedTimeTests
     public void No_added_time_adds_nothing() =>
         Assert.Equal(TimeSpan.Zero, AddedTime.Declared(Timestamps, FiveMinutes, null));
 
+    // An item of the server's days, with the added row only.
+    private static string Day(string date, string value) =>
+        $$"""[ { "date": "{{date}}", "added": { "value": {{value}}, "version": "W/\"1\"" } } ]""";
+
     [Fact]
-    public void The_stored_document_is_read()
+    public void The_added_rows_are_read()
     {
         var added = Decode("""
-            { "days": { "2026-11-10": { "started": 25200, "ended": 73800.5, "ranges": [{ "from": 32400, "to": 36000 }] } }, "v": 2 }
+            [ { "date": "2026-11-10", "added": { "value": { "started": 25200, "ended": 73800.5, "ranges": [{ "from": 32400, "to": 36000 }] }, "version": "v" } },
+              { "date": "2026-11-12", "marks": { "value": "day", "version": "v" } } ]
             """);
 
         Assert.Equal(new AddedDay(25_200, 73_800.5, [new MarkRange(32_400, 36_000)]), added.On(Date), new AddedDayComparer());
         Assert.Null(added.On(Date.AddDays(1)));
+        Assert.Null(added.On(Date.AddDays(2)));
     }
 
     [Fact]
-    public void An_unwritten_document_is_empty()
+    public void No_days_are_no_added_time()
     {
         Assert.Empty(Decode("null").Days);
-        Assert.Empty(Decode("{}").Days);
+        Assert.Empty(Decode("[]").Days);
     }
 
-    [Fact]
-    public void A_key_that_is_not_a_date_is_never_counted() =>
-        // The web never checks the keys, so neither refuses the document.
-        Assert.Empty(Decode("""{ "days": { "someday": { "started": 0 } } }""").Days);
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("[3]")]
+    [InlineData("""[ { "added": { "value": { "started": 0 } } } ]""")]
+    [InlineData("""[ { "date": "someday", "added": { "value": { "started": 0 } } } ]""")]
+    [InlineData("""[ { "date": "2026-11-10", "added": { "version": "v" } } ]""")]
+    [InlineData("""[ { "date": "2026-11-10", "added": [] } ]""")]
+    public void Malformed_days_are_refused(string stored) =>
+        Assert.Throws<IdlePolicyException>(() => Decode(stored));
 
     [Theory]
+    [InlineData("null")]
     [InlineData("[]")]
-    [InlineData("""{ "days": null }""")]
-    [InlineData("""{ "days": [] }""")]
-    [InlineData("""{ "days": { "2026-11-10": null } }""")]
-    [InlineData("""{ "days": { "2026-11-10": { "started": null } } }""")]
-    [InlineData("""{ "days": { "2026-11-10": { "started": "07:45" } } }""")]
-    [InlineData("""{ "days": { "2026-11-10": { "ended": 86401 } } }""")]
-    [InlineData("""{ "days": { "2026-11-10": { "started": -1 } } }""")]
-    [InlineData("""{ "days": { "2026-11-10": { "ranges": {} } } }""")]
-    [InlineData("""{ "days": { "2026-11-10": { "ranges": [{ "from": 10, "to": 10 }] } } }""")]
-    [InlineData("""{ "days": { "2026-11-10": { "ranges": [{ "from": 0 }] } } }""")]
-    [InlineData("""{ "days": { "2026-11-10": { "ranges": [3] } } }""")]
-    [InlineData("""{ "days": { "someday": { "started": "x" } } }""")]
-    public void Malformed_documents_are_refused(string stored) =>
-        Assert.Throws<IdlePolicyException>(() => Decode(stored));
+    [InlineData("""{ "started": null }""")]
+    [InlineData("""{ "started": "07:45" }""")]
+    [InlineData("""{ "ended": 86401 }""")]
+    [InlineData("""{ "started": -1 }""")]
+    [InlineData("""{ "ranges": {} }""")]
+    [InlineData("""{ "ranges": [{ "from": 10, "to": 10 }] }""")]
+    [InlineData("""{ "ranges": [{ "from": 0 }] }""")]
+    [InlineData("""{ "ranges": [3] }""")]
+    public void Malformed_added_time_is_refused(string value) =>
+        Assert.Throws<IdlePolicyException>(() => Decode(Day("2026-11-10", value)));
 
     private sealed class AddedDayComparer : IEqualityComparer<AddedDay?>
     {

@@ -131,8 +131,6 @@ public class PrintData(
         CancellationToken cancellationToken)
     {
         var profiles = await policyClient.GetProfiles(cancellationToken);
-        var marks = (await policyClient.GetMarks(cancellationToken)).Value ?? Marks.Empty;
-        var added = (await policyClient.GetAdded(cancellationToken)).Value ?? AddedTime.Empty;
 
         var known = (await httpClient.GetFromJsonAsync(
             "/computers?api-version=1.7",
@@ -179,20 +177,49 @@ public class PrintData(
             DataSourceGenerationContext.Default.DeltaZonesDataContract,
             cancellationToken);
 
+        var (marks, added) = ReadDays(zones?.Days);
         var days = Count(zones?.Items ?? [], profiles.Value, marks, added, from, to);
 
         return new DataDataContract(targets.ToArray(), days);
     }
 
     /// <summary>
+    /// The marks and the added time in the days of an /ids 1.10 answer,
+    /// which holds every row of the window: a date it leaves out has
+    /// neither.  An answer without them is refused rather than read as
+    /// none, since every marked day would then count in full.
+    /// </summary>
+    public static (Marks Marks, AddedTime Added) ReadDays(JsonElement? days)
+    {
+        if (days is not { ValueKind: not (JsonValueKind.Undefined or JsonValueKind.Null) } rows)
+        {
+            throw new IdlePolicyException("The server sent no marks or added time with the days.");
+        }
+
+        try
+        {
+            return (Marks.Decode(rows), AddedTime.Decode(rows));
+        }
+        catch (IdlePolicyException exception)
+        {
+            // Refusing is the point.  This runs to reproduce the number
+            // the user read in the web client; a day read wrong would
+            // reproduce a different one just as confidently.
+            throw new IdlePolicyException(
+                $"The marks and added time from the server cannot be read by this version of flextimed: {TerminalText.Clean(exception.Message)}");
+        }
+    }
+
+    /// <summary>
     /// The request the web makes for these computers' days: the ids in
-    /// one request, sorted, so the server merges them; API 1.9, which
-    /// answers each date as one item even on a day measured in two
-    /// zones, so the day owes its hours once, as in the web.  The window
-    /// is the server's, from inclusive, before exclusive.
+    /// one request, sorted, so the server merges them.  API 1.9 answers
+    /// each date as one item even on a day measured in two zones, so the
+    /// day owes its hours once, as in the web; 1.10 adds the marks and
+    /// the added time of the same window.  The window is the server's,
+    /// from inclusive, before exclusive.
     /// </summary>
     public static string IdsUri(IEnumerable<string> ids, DateOnly from, DateOnly to) =>
-        "/ids?api-version=1.9&"
+        "/ids?api-version=1.10&"
         + string.Join("&", ids.Order(StringComparer.Ordinal).Select(id => $"id={Uri.EscapeDataString(id)}"))
         + $"&from={from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}"
         + $"&before={to.AddDays(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}";
@@ -377,7 +404,12 @@ internal record ZonesDataContract(ZoneDataContract[] Items);
 /// <summary>An item of API 1.6 and later: a day's timestamps as deltas.</summary>
 public record DeltaZoneDataContract(string Zone, long[]? Deltas);
 
-public record DeltaZonesDataContract(DeltaZoneDataContract[] Items);
+/// <summary>
+/// The /ids answer.  From API 1.10 it carries the user's <c>days</c>,
+/// kept as JSON for <see cref="PrintData.ReadDays"/> to decode, as the
+/// stored documents were.
+/// </summary>
+public record DeltaZonesDataContract(DeltaZoneDataContract[] Items, JsonElement? Days = null);
 
 // The shape data --json writes, its own and not the flextime CLI's: a
 // day here is the web's day row, merged over the computers, so it has

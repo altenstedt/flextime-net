@@ -47,7 +47,7 @@ public class DataTests
     public void The_computers_are_asked_for_in_one_request_as_the_web_asks()
     {
         Assert.Equal(
-            "/ids?api-version=1.9&id=a%20b&id=b2&id=c3&from=2026-11-01&before=2026-12-01",
+            "/ids?api-version=1.10&id=a%20b&id=b2&id=c3&from=2026-11-01&before=2026-12-01",
             PrintData.IdsUri(["c3", "a b", "b2"], new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 30)));
     }
 
@@ -411,19 +411,25 @@ public class DataTests
     private static Dictionary<string, string> Answers(string ids, string items) => new()
     {
         ["/store/profiles?api-version=1.0"] = "null",
-        ["/store/marks?api-version=1.0"] = """{ "marks": { "2026-11-03": "day" } }""",
-        ["/store/added?api-version=1.0"] = """{ "days": { "2026-11-02": { "started": 25200 } } }""",
         ["/computers?api-version=1.7"] = """
             { "items": [
               { "id": "a1", "name": null, "hostname": "macbook", "displayName": "macbook", "names": [], "hostnames": [], "firstDay": null, "lastDay": null },
               { "id": "b2", "name": "Omegapoint", "hostname": "op", "displayName": "Omegapoint", "names": [], "hostnames": [], "firstDay": null, "lastDay": null }
             ] }
             """,
-        [$"/ids?api-version=1.9&{ids}&from=2026-11-01&before=2026-12-01"] = items,
+        [$"/ids?api-version=1.10&{ids}&from=2026-11-01&before=2026-12-01"] = items,
     };
 
+    // Added from 07:00 on Monday; Tuesday marked whole.
+    private const string Days = """
+        [ { "date": "2026-11-02", "added": { "value": { "started": 25200 }, "version": "W/\"1\"" } },
+          { "date": "2026-11-03", "marks": { "value": "day", "version": "W/\"2\"" } } ]
+        """;
+
     private static string Items(params long[][] days) =>
-        JsonSerializer.Serialize(new DeltaZonesDataContract(days.Select(day => Item(day)).ToArray()), DataSourceGenerationContext.Default.DeltaZonesDataContract);
+        JsonSerializer.Serialize(
+            new DeltaZonesDataContract(days.Select(day => Item(day)).ToArray(), JsonDocument.Parse(Days).RootElement),
+            DataSourceGenerationContext.Default.DeltaZonesDataContract);
 
     [Fact]
     public async Task Load_counts_the_chosen_computers_from_one_merged_answer()
@@ -438,12 +444,39 @@ public class DataTests
         Assert.Equal(["Omegapoint", "macbook"], data.Computers.Select(item => item.Name));
         Assert.Single(api.Asked, uri => uri.StartsWith("/ids?"));
 
+        // The marks and the added time came with the days, not from the
+        // store.
+        Assert.Equal(["/store/profiles?api-version=1.0"], api.Asked.Where(uri => uri.StartsWith("/store/")));
+
         // Added from 07:00 on Monday; Tuesday marked whole.
         Assert.Equal("07:00", Time(data.Days[0].Start));
         Assert.Equal(TimeSpan.FromHours(10), data.Days[0].Work);
         Assert.True(data.Days[0].Custom);
         Assert.True(data.Days[1].NotWork);
         Assert.Equal(TimeSpan.Zero, data.Days[1].Work);
+    }
+
+    [Fact]
+    public async Task Load_refuses_days_without_marks_or_added_time()
+    {
+        // An answer of 1.9's shape would count every marked day in full.
+        var items = JsonSerializer.Serialize(
+            new DeltaZonesDataContract([Item(Minutes(Monday, (8, 0), (17, 0)))]),
+            DataSourceGenerationContext.Default.DeltaZonesDataContract);
+
+        var api = new FakeApi(Answers("id=a1", items));
+
+        await Assert.ThrowsAsync<IdlePolicyException>(() =>
+            Create(api).Load(new DateOnly(2026, 11, 1), new DateOnly(2026, 11, 30), [], false, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public void Days_the_server_sends_wrong_are_refused_with_what_they_are()
+    {
+        var exception = Assert.Throws<IdlePolicyException>(() =>
+            PrintData.ReadDays(JsonDocument.Parse("""[ { "date": "2026-11-03", "marks": { "value": "week" } } ]""").RootElement));
+
+        Assert.StartsWith("The marks and added time from the server cannot be read", exception.Message);
     }
 
     [Fact]

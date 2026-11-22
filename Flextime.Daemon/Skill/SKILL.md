@@ -77,9 +77,10 @@ The export file explains itself in its `about` field.  In short:
 `computers`; `activity`, one entry per computer with its `days`, each a
 `zone`, `timestamps` (Unix seconds, one per minute in use) and, with
 location on, `places`; `hints`; and `settings`, the user's idle profiles
-(`profiles`), not-work marks (`marks`), time added by hand (`added`) and
-place names (`places`) as the web app stores them.  With a range, only the
-activity is limited; settings are always whole.
+(`profiles`) and place names (`places`) as the web app stores them, and
+`days`, one entry per date with not-work marks (`marks`) or time added by
+hand (`added`), each with its `value` in seconds of the day.  A range limits
+the activity and `days`; profiles and place names are always whole.
 
 Use export for questions data cannot answer, such as when in the day the
 computer is used, or how long the breaks are.

@@ -186,7 +186,7 @@ public class IdleProfileTests
     [Fact]
     public void WholeDayMarksAreRead()
     {
-        var marks = Marks.Decode(Json("""{ "marks": { "2026-06-22": "day" } }"""));
+        var marks = Marks.Decode(Json("""[ { "date": "2026-06-22", "marks": { "value": "day", "version": "v" } } ]"""));
 
         Assert.True(marks.IsMarked(new DateOnly(2026, 6, 22)));
         Assert.False(marks.IsMarked(new DateOnly(2026, 6, 23)));
@@ -195,25 +195,41 @@ public class IdleProfileTests
     [Fact]
     public void RangeMarksAreRead()
     {
-        var marks = Marks.Decode(Json("""{ "marks": { "2026-06-22": [{ "from": 0, "to": 3600 }] } }"""));
+        var marks = Marks.Decode(Json("""[ { "date": "2026-06-22", "marks": { "value": [{ "from": 0, "to": 3600 }], "version": "v" } } ]"""));
 
         Assert.Equal([new MarkRange(0, 3600)], marks.RangesOn(new DateOnly(2026, 6, 22)));
         Assert.False(marks.IsMarked(new DateOnly(2026, 6, 22)));
     }
 
     [Theory]
-    [InlineData("""{ "marks": { "2026-06-22": [{ "from": 3600, "to": 0 }] } }""")]
-    [InlineData("""{ "marks": { "2026-06-22": [{ "from": -1, "to": 10 }] } }""")]
-    [InlineData("""{ "marks": { "2026-06-22": [{ "from": 0, "to": 86401 }] } }""")]
-    [InlineData("""{ "marks": { "2026-06-22": [{ "from": "0", "to": 10 }] } }""")]
-    [InlineData("""{ "marks": { "2026-06-22": [{ "from": 0 }] } }""")]
-    [InlineData("""{ "marks": { "2026-06-22": [3] } }""")]
+    [InlineData("""[ { "date": "2026-06-22", "marks": { "value": [{ "from": 3600, "to": 0 }] } } ]""")]
+    [InlineData("""[ { "date": "2026-06-22", "marks": { "value": [{ "from": -1, "to": 10 }] } } ]""")]
+    [InlineData("""[ { "date": "2026-06-22", "marks": { "value": [{ "from": 0, "to": 86401 }] } } ]""")]
+    [InlineData("""[ { "date": "2026-06-22", "marks": { "value": [{ "from": "0", "to": 10 }] } } ]""")]
+    [InlineData("""[ { "date": "2026-06-22", "marks": { "value": [{ "from": 0 }] } } ]""")]
+    [InlineData("""[ { "date": "2026-06-22", "marks": { "value": [3] } } ]""")]
+    [InlineData("""[ { "date": "2026-06-22", "marks": { "value": "week" } } ]""")]
+    [InlineData("""[ { "date": "2026-06-22", "marks": { "version": "v" } } ]""")]
+    [InlineData("""[ { "date": "2026-06-22", "marks": "day" } ]""")]
+    [InlineData("""[ { "date": "22/06/2026", "marks": { "value": "day" } } ]""")]
+    [InlineData("""[ { "marks": { "value": "day" } } ]""")]
+    [InlineData("""{ "2026-06-22": "day" }""")]
     public void MalformedRangeMarksAreRefused(string stored) =>
         Assert.Throws<IdlePolicyException>(() => Marks.Decode(Json(stored)));
 
     [Fact]
-    public void AnAbsentMarksDocumentIsEmpty()
+    public void NoDaysAreNoMarks()
     {
-        Assert.Empty(Marks.Decode(Json("{}")).Days);
+        Assert.Empty(Marks.Decode(Json("[]")).Days);
+        Assert.Empty(Marks.Decode(Json("null")).Days);
+    }
+
+    [Fact]
+    public void ADayWithOnlyAddedTimeHasNoMark()
+    {
+        var marks = Marks.Decode(Json("""[ { "date": "2026-06-22", "added": { "value": { "started": 0 } }, "marks": null } ]"""));
+
+        Assert.Empty(marks.Days);
+        Assert.Empty(marks.Ranges);
     }
 }

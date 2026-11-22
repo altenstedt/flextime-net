@@ -145,8 +145,9 @@ as not work; the totals are sums of the days.
 
 `flextimed export` saves your data on the server to one JSON file, `-o
 -` to standard out: every computer, every timestamp, and your settings.
-`--since`, `--week` or `--month` limit the activity to those days; the
-settings are saved whole all the same, and the file's `about` says
+`--since`, `--week` or `--month` limit the activity, and the time
+marked as not work or added by hand, to those days; idle profiles and
+place names are saved whole all the same, and the file's `about` says
 which days it holds.
 
 `flextimed skill` prints an agent skill that teaches an AI agent, such
