@@ -24,7 +24,7 @@ public static class Reader
             {
                 // A file cut short — listen killed midway through a write
                 // before writes went through a rename, say.  Losing its
-                // hour is better than every sync, data and report failing
+                // hour is better than every sync and data failing
                 // for good.  Standard error, so data's JSON stays clean
                 // and the services' logs have it.  A file gone since the
                 // folder was listed is skipped the same way, and so is one

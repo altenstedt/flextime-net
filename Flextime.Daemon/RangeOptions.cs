@@ -3,7 +3,7 @@ namespace Flextime.Daemon;
 /// <summary>
 /// The days a command covers, from its --since, --week and --month
 /// options.  One reading for every command that takes them, so the same
-/// words name the same days in report, data and export.
+/// words name the same days in data and export.
 /// </summary>
 public static class RangeOptions
 {

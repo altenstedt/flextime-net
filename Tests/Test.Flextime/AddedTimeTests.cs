@@ -125,50 +125,6 @@ public class AddedTimeTests
     public void Malformed_documents_are_refused(string stored) =>
         Assert.Throws<IdlePolicyException>(() => Decode(stored));
 
-    // The report's count, which takes marks out before it adds time.
-    private static readonly (string Zone, long[] Timestamps)[] Rows =
-        [("UTC", Timestamps.Select(item => item.ToUnixTimeSeconds()).ToArray())];
-
-    private static TimeSpan Counted(Marks marks, AddedTime added) =>
-        Report.Count(Rows, null, 5, marks, added)[Date];
-
-    private static readonly AddedTime GapHour = new(new Dictionary<DateOnly, AddedDay>
-    {
-        [Date] = Ranges((9 * 3600, 10 * 3600)),
-    });
-
-    [Fact]
-    public void The_report_counts_added_time() =>
-        Assert.Equal(TimeSpan.FromHours(3), Counted(Marks.Empty, GapHour));
-
-    [Fact]
-    public void A_day_marked_whole_counts_no_added_time() =>
-        Assert.Equal(TimeSpan.Zero, Counted(new Marks(new HashSet<DateOnly> { Date }), GapHour));
-
-    [Fact]
-    public void A_marked_range_takes_no_added_time_away()
-    {
-        // 08:30 to 09:30 marked: half an hour of measured work goes, the
-        // added hour from 09:00 stays.
-        var marks = new Marks(new HashSet<DateOnly>(), new Dictionary<DateOnly, IReadOnlyList<MarkRange>>
-        {
-            [Date] = [new MarkRange(8 * 3600 + 1800, 9 * 3600 + 1800)],
-        });
-
-        Assert.Equal(TimeSpan.FromHours(2.5), Counted(marks, GapHour));
-    }
-
-    [Fact]
-    public void Added_time_counts_once_for_a_date_with_two_rows()
-    {
-        var morning = Rows[0].Timestamps.Take(61).ToArray();
-        var evening = Rows[0].Timestamps.Skip(61).ToArray();
-
-        var work = Report.Count([("UTC", morning), ("UTC", evening)], null, 5, Marks.Empty, GapHour);
-
-        Assert.Equal(TimeSpan.FromHours(3), work[Date]);
-    }
-
     private sealed class AddedDayComparer : IEqualityComparer<AddedDay?>
     {
         public bool Equals(AddedDay? x, AddedDay? y) =>

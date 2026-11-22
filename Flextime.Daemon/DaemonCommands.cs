@@ -11,7 +11,6 @@ public class DaemonCommands(
     PrintInfo printInfo,
     PrintData printData,
     Export export,
-    Report report,
     ILogger<DaemonCommands> logger,
     ILogger<UserInputMonitor> monitorLogger,
     DeviceCode deviceCode,
@@ -295,45 +294,6 @@ public class DaemonCommands(
         }
 
         return await export.Invoke(output, range, cancellationToken);
-    }
-
-    /// <summary>Compare reported hours with measured activity</summary>
-    /// <param name="timesheet">-t, JSON file of reported hours, or - for stdin.</param>
-    /// <param name="since">-s, How far back: 1w (default), 3d or P7D.</param>
-    /// <param name="week">-w, ISO weeks: this, last, 34, 32-34 or 2026-W34.</param>
-    /// <param name="month">Months: this, last, aug, jun-aug, 8 or 2026-08.</param>
-    /// <param name="machines">-m, Computer ids to count. Default: all.</param>
-    /// <param name="idle">-i, Flat idle limit when there are no profiles.</param>
-    /// <param name="noProfile">Ignore idle profiles, marks and added time.</param>
-    /// <param name="threshold">Minutes a day may differ quietly.</param>
-    /// <param name="tags">Total (default), matrix, days, weeks or months.</param>
-    /// <param name="verbose">-v, Also list machines and uncounted activity.</param>
-    /// <param name="json">Write JSON to standard out.</param>
-    public async Task<int> Report(
-        [HideDefaultValue] string? timesheet = null,
-        [HideDefaultValue] string since = "1w",
-        [HideDefaultValue] string? week = null,
-        [HideDefaultValue] string? month = null,
-        [HideDefaultValue] string[]? machines = null,
-        [HideDefaultValue] int? idle = null,
-        bool noProfile = false,
-        int threshold = Daemon.Report.DefaultThreshold,
-        [HideDefaultValue] TagLayout tags = TagLayout.Total,
-        bool verbose = false,
-        bool json = false,
-        CancellationToken cancellationToken = default)
-    {
-        logger.LogDebug("Report invoked.");
-
-        // --since has a default here, so a range is always read.
-        if (!RangeOptions.TryRead(since, week, month, DateTimeOffset.Now, out var range))
-        {
-            return 1;
-        }
-
-        var (from, to) = range!.Value;
-
-        return await report.Invoke(timesheet, from, to, machines ?? [], idle, noProfile, threshold, tags, verbose, json, cancellationToken);
     }
 
     /// <summary>Record use once a minute, and the place when location is on</summary>

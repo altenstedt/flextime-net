@@ -12,9 +12,8 @@ namespace Flextime.Daemon;
 /// <summary>
 /// The data command: the hours of the chosen computers as the web app's
 /// day list shows them.  The server merges the computers, as it does for
-/// the web, and each day is counted by <see cref="DayCount"/>, the same
-/// arithmetic report reconciles with, so a day here is the day the user
-/// read there, to the minute.  Nothing on the command line changes the
+/// the web, and each day is counted by <see cref="DayCount"/>, so a day
+/// here is the day the user read there, to the minute.  Nothing on the command line changes the
 /// arithmetic: a number that could differ from the web's would need
 /// explaining every time it was read.
 /// </summary>

@@ -136,11 +136,12 @@ November                  102:47
 The days run oldest first, so the latest is next to the prompt;
 `--newest-first` lists them as the web app does, each month's total on
 its heading.  `--hide-not-work` leaves out days marked as not work, as
-Hide not work does on the web.  `--since`, `--week` and `--month` read
-as in `report`.  `--json` writes
-the computers and one entry per day, with its date, zone, start, end,
-work, and whether it is custom or marked whole as not work; the totals
-are sums of the days.
+Hide not work does on the web.  `--since` (`30d`, `1w`, `P7D`,
+`yesterday`), `--week` (`this`, `last`, `47`, `45-47`, `2026-W47`) and
+`--month` (`this`, `last`, `nov`, `sep-nov`, `2026-11`) choose the
+days.  `--json` writes the computers and one entry per day, with its
+date, zone, start, end, work, and whether it is custom or marked whole
+as not work; the totals are sums of the days.
 
 `flextimed export` saves your data on the server to one JSON file, `-o
 -` to standard out: every computer, every timestamp, and your settings.
@@ -168,62 +169,6 @@ dotnet publish Flextime.Daemon -c Release --use-current-runtime
 
 and install the two binaries as `~/.local/bin/flextime` and
 `~/.local/bin/flextimed`.
-
-# Reconciling reported hours
-
-The daemon's `report` command compares the hours you reported — to a
-client, an employer, an invoicing system — against the activity the
-server measured, and shows where they disagree.
-
-The reported side is yours to provide: a JSON file with one entry per
-day and tag, written by hand or exported from whatever you report your
-time in.  The format is deliberately small so that anything can
-produce it:
-
-```json
-[
-  { "date": "2026-08-17", "tag": "ClientA", "minutes": 480 },
-  { "date": "2026-08-18", "tag": "ClientA", "minutes": 510 },
-  { "date": "2026-08-18", "minutes": 30 }
-]
-```
-
-The tag is optional and means whatever your reporting means by it — a
-client, a project.  Then:
-
-    flextimed report --timesheet hours.json --month this
-
-or pipe the timesheet in.  The command needs a logged-in daemon, since
-the measured side comes from the server, and it applies your stored
-idle profiles, marks and added time so the numbers match what the web
-client showed when you wrote the hours down.  `report --help`
-describes the window, machine and layout options; running `flextimed report` with no timesheet
-prints a primer much like this section.
-
-The reported hours are summed per tag under `Tags:`, and `--tags`
-picks the layout:
-
-    total     one line per tag over the whole window (the default)
-    matrix    days down, tags across; one week and five tags at most
-    days      each tag's sum, then the days that make it up
-    weeks     a block per week, each tag's days as columns Mon to Sun
-    months    a block per month, its sum, then each tag's share of it
-
-The other sections are the same whichever layout you pick.  Over more
-than one month, `months` ends with a total for the window:
-
-    flextimed report --timesheet hours.json --month jun-aug --tags months
-
-    Tags:
-    2026-06              168:00
-      ClientA            160:00
-      ClientB             08:00
-    2026-07               84:00
-      ClientA             84:00
-    2026-08              176:00
-      ClientA            152:00
-      ClientB             24:00
-    total                428:00
 
 # Places
 

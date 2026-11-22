@@ -240,7 +240,7 @@ public class ComputerClient(IHttpClientFactory httpClientFactory, DeviceCode dev
     }
 
     // One line per computer, id first: the ids are what data's
-    // --computer and report's --machines take.  The hostname is left out where the computer is
+    // --computer takes.  The hostname is left out where the computer is
     // shown by it anyway.  Dormant computers come last, under their own
     // heading.  Every line fits 80 columns.
     public static IEnumerable<string> FormatList(ComputerNamesDataContract[] items, string? hereId, DateOnly today)

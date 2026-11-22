@@ -24,7 +24,6 @@ builder.Services.AddSingleton<PrintInfo>();
 builder.Services.AddSingleton<PrintData>();
 builder.Services.AddSingleton<Export>();
 builder.Services.AddSingleton<PolicyClient>();
-builder.Services.AddSingleton<Report>();
 builder.Services.AddSingleton<Installer>();
 builder.Services.AddSingleton<LocationClient>();
 builder.Services.AddSingleton<ComputerClient>();
