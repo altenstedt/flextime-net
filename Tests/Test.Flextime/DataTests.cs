@@ -240,7 +240,7 @@ public class DataTests
                                        08:35
             November                   18:35
             """.ReplaceLineEndings("\n"),
-            string.Join("\n", PrintData.Format(data, allComputers: false, colour: false)));
+            string.Join("\n", PrintData.Format(data, allComputers: false, colour: false, October, NovemberEnd, Later)));
     }
 
     [Fact]
@@ -255,7 +255,7 @@ public class DataTests
                 Row(new DateOnly(2026, 11, 1), "08:00", "10:00", TimeSpan.FromHours(2)),
             ]);
 
-        var lines = PrintData.Format(data, allComputers: true, colour: false).ToArray();
+        var lines = PrintData.Format(data, allComputers: true, colour: false, October, NovemberEnd, Later).ToArray();
 
         Assert.Equal("All computers", lines[0]);
         Assert.Equal(2, lines.Count(line => line == "Week 44"));
@@ -276,7 +276,7 @@ public class DataTests
                 Row(Monday.AddDays(1), "08:00", "09:00", work),
             ]);
 
-        var lines = PrintData.Format(data, allComputers: false, colour: false).ToArray();
+        var lines = PrintData.Format(data, allComputers: false, colour: false, October, NovemberEnd, Later).ToArray();
 
         Assert.Equal("  Mon  2   08:00 – 09:00   01:01", lines[4]);
         Assert.Equal("                           02:01", lines[6]);
@@ -285,12 +285,39 @@ public class DataTests
         Assert.Equal("102:47", PrintData.Hours(new TimeSpan(102, 47, 0)));
     }
 
+    // A range that takes in all of October and November, read later.
+    private static readonly DateOnly October = new(2026, 10, 1);
+    private static readonly DateOnly NovemberEnd = new(2026, 11, 30);
+    private static readonly DateOnly Later = new(2026, 12, 31);
+
+    [Fact]
+    public void A_month_the_range_only_touches_gets_no_total()
+    {
+        var data = new DataDataContract(
+            [new DataComputerDataContract("a1", "One")],
+            [
+                Row(new DateOnly(2026, 11, 16), "08:00", "09:00", TimeSpan.FromHours(1)),
+                Row(new DateOnly(2026, 11, 20), "08:00", "10:00", TimeSpan.FromHours(2)),
+            ]);
+
+        // Week 47 alone: the week's total, and no November line.
+        var week = PrintData.Format(data, false, false, new DateOnly(2026, 11, 16), new DateOnly(2026, 11, 22), Later).ToArray();
+
+        Assert.Contains("                           03:00", week);
+        Assert.DoesNotContain(week, line => line.StartsWith("November ") && !line.EndsWith("2026"));
+
+        // November so far, read on the 22nd, counts as the whole month.
+        var soFar = PrintData.Format(data, false, false, new DateOnly(2026, 10, 23), new DateOnly(2026, 11, 22), new DateOnly(2026, 11, 22)).ToArray();
+
+        Assert.Contains("November                   03:00", soFar);
+    }
+
     [Fact]
     public void No_days_says_so()
     {
         Assert.Equal(
             ["One", "No data."],
-            PrintData.Format(new DataDataContract([new DataComputerDataContract("a1", "One")], []), false, false));
+            PrintData.Format(new DataDataContract([new DataComputerDataContract("a1", "One")], []), false, false, October, NovemberEnd, Later));
     }
 
     [Fact]

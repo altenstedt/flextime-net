@@ -73,7 +73,9 @@ public class PrintData(
                              && AnsiConsole.Profile.Capabilities.Ansi
                              && PrintInfo.ColourWanted(false, Environment.GetEnvironmentVariable("NO_COLOR"));
 
-                foreach (var line in Format(data, allComputers, colour))
+                var today = DateOnly.FromDateTime(DateTime.Now);
+
+                foreach (var line in Format(data, allComputers, colour, from, to, today))
                 {
                     Console.WriteLine(line);
                 }
@@ -259,9 +261,12 @@ public class PrintData(
     /// for each month, a week heading for each week part with its total
     /// after it, and the month's total after its days.  Weeks are split
     /// where they cross a month, as the web splits them, so that every
-    /// total sums within one month.
+    /// total sums within one month.  A month the range only touches gets
+    /// no total: under the month's name, the sum of a few of its days
+    /// would read as the month's.  The month so far counts as whole.
     /// </summary>
-    public static IEnumerable<string> Format(DataDataContract data, bool allComputers, bool colour)
+    public static IEnumerable<string> Format(
+        DataDataContract data, bool allComputers, bool colour, DateOnly from, DateOnly to, DateOnly today)
     {
         yield return allComputers
             ? "All computers"
@@ -294,9 +299,15 @@ public class PrintData(
                 yield return Hours(Sum(week)).PadLeft(Width);
             }
 
-            var name = first.ToString("MMMM", CultureInfo.InvariantCulture);
+            var start = new DateOnly(first.Year, first.Month, 1);
+            var end = start.AddMonths(1).AddDays(-1);
 
-            yield return name + Hours(Sum(month)).PadLeft(Width - name.Length);
+            if (from <= start && to >= (today < end ? today : end))
+            {
+                var name = first.ToString("MMMM", CultureInfo.InvariantCulture);
+
+                yield return name + Hours(Sum(month)).PadLeft(Width - name.Length);
+            }
         }
     }
 
