@@ -27,7 +27,7 @@ public class DaemonCommands(
     public async Task<int> Root(CancellationToken cancellationToken = default) =>
         await printInfo.Invoke(cancellationToken: cancellationToken);
 
-    /// <summary>Show whether recording and sync work, and this computer</summary>
+    /// <summary>Show Flextime status (default command)</summary>
     /// <param name="days">-d, Also list the latest days, or 0 for all.</param>
     /// <param name="json">Write JSON to standard out.</param>
     [Command("status")]
