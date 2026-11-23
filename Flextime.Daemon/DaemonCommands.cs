@@ -21,7 +21,7 @@ public class DaemonCommands(
     ComputerClient computerClient,
     PauseCommand pauseCommand)
 {
-    /// <summary>Flextime -- track working hours. Without a command, show the status.</summary>
+    /// <summary>Flextime -- track working hours. Without a command, status runs.</summary>
     [Command("")]
     [ConsoleAppFilter<NoArgumentsFilter>]
     public async Task<int> Root(CancellationToken cancellationToken = default) =>
