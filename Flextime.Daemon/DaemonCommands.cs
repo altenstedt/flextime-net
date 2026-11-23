@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 using ConsoleAppFramework;
 using Flextime.Monitor;
@@ -73,6 +74,22 @@ public class DaemonCommands(
         if (!TryReadInterval(every, out var everyValue))
         {
             return;
+        }
+
+        if (once)
+        {
+            // Before anything can fail: the run started, which is what
+            // the status command needs to know.  Why it then failed is
+            // the business of the rows after it.
+            try
+            {
+                StateFiles.Write(StateFiles.SyncRunPath,
+                    DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture));
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                logger.LogDebug("Could not record the sync run: {Message}", exception.Message);
+            }
         }
 
         if (!deviceCode.IsAuthenticated)

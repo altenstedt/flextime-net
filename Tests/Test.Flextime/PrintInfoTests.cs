@@ -147,6 +147,37 @@ public class PrintInfoTests
     }
 
     [Fact]
+    public void A_schedule_that_stopped_running_is_stalled()
+    {
+        var grace = TimeSpan.FromMinutes(15);
+        var lastRun = Now.AddDays(-1);
+        var schedule = new StatusSyncDataContract("scheduled", "00:01:00", "2026-10-28", lastRun);
+
+        Assert.True(PrintInfo.Stalled(schedule, Now, grace));
+        Assert.Equal($"Every 1 minute, not run since {lastRun.ToLocalTime():yyyy-MM-dd HH:mm}",
+            PrintInfo.SyncStatus(schedule, Now, grace, Now));
+    }
+
+    [Fact]
+    public void A_schedule_is_not_stalled_within_the_grace_or_after_sleep_or_unknown()
+    {
+        var grace = TimeSpan.FromMinutes(15);
+
+        // Ran ten minutes before the newest minute.
+        Assert.False(PrintInfo.Stalled(new StatusSyncDataContract("scheduled", "00:01:00", "2026-10-28", Now.AddMinutes(-10)), Now, grace));
+
+        // Asleep overnight: no minutes and no runs, so the newest minute
+        // is as old as the last run, however late the clock.
+        Assert.False(PrintInfo.Stalled(new StatusSyncDataContract("scheduled", "00:01:00", "2026-10-28", Now), Now.AddSeconds(30), grace));
+
+        // A client that never recorded a run, and a loop, which holds a lock instead.
+        Assert.False(PrintInfo.Stalled(new StatusSyncDataContract("scheduled", "00:01:00", "2026-10-28"), Now, grace));
+        Assert.False(PrintInfo.Stalled(new StatusSyncDataContract("running", "00:01:00", null, Now.AddDays(-1)), Now, grace));
+        Assert.Equal("Every 1 minute (installed 2026-10-28)",
+            PrintInfo.SyncStatus(new StatusSyncDataContract("scheduled", "00:01:00", "2026-10-28", Now.AddMinutes(-1)), Now, grace, Now));
+    }
+
+    [Fact]
     public void The_json_names_stay_put()
     {
         var json = PrintInfo.ToJson(new StatusDataContract(
@@ -169,7 +200,7 @@ public class PrintInfoTests
         // One line in the output; broken here at the top-level names.
         const string expected = """
             {"listen":{"state":"running","zone":"Europe/Stockholm","stoppedOn":null,"lastMinute":"2026-11-12T15:00:00+01:00","pausedUntil":null,"pauseIgnored":null},
-            "sync":{"state":"scheduled","every":"00:01:00","installedOn":"2026-10-28"},
+            "sync":{"state":"scheduled","every":"00:01:00","installedOn":"2026-10-28","lastRun":null},
             "signedIn":{"state":"yes","name":"Name","email":"name@example.com"},
             "serverData":{"days":2,"outOfSync":1,"error":null,"items":[{"date":"2026-11-12","status":"canSync","inSync":false}]},
             "location":{"on":true,"clearPending":false},

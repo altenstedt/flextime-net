@@ -75,7 +75,8 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                     "stopped" => Tone.Warn,
                     _ => Tone.Bad,
                 })),
-                Row("Sync schedule", new(null, SyncStatus(schedule), schedule.State == "notScheduled" ? Tone.Bad : Tone.Plain)),
+                Row("Sync schedule", new(null, SyncStatus(schedule, listen.LastMinute, grace, now),
+                    schedule.State == "notScheduled" || Stalled(schedule, listen.LastMinute, grace) ? Tone.Bad : Tone.Plain)),
                 Row("Signed in", state.SignIn is { } signIn
                     ? new(null, SignInStatus(signIn), signIn.State == "yes" ? Tone.Plain : Tone.Bad)
                     : waiting),
@@ -670,14 +671,36 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
 
         // No loop; the install command may have registered a schedule.
         return StateFiles.TryRead(StateFiles.InstallPath) is [var interval, var date, ..]
-            ? new StatusSyncDataContract("scheduled", TerminalText.Clean(interval), TerminalText.Clean(date))
+            ? new StatusSyncDataContract("scheduled", TerminalText.Clean(interval), TerminalText.Clean(date), ReadSyncRun())
             : new StatusSyncDataContract("notScheduled", null, null);
     }
 
-    private static string SyncStatus(StatusSyncDataContract schedule) => schedule switch
+    private static DateTimeOffset? ReadSyncRun() =>
+        StateFiles.TryRead(StateFiles.SyncRunPath) is [var line, ..]
+        && long.TryParse(line, NumberStyles.None, CultureInfo.InvariantCulture, out var seconds)
+            ? DateTimeOffset.FromUnixTimeSeconds(seconds)
+            : null;
+
+    /// <summary>
+    /// A schedule the system no longer runs, while listen records on: on
+    /// macOS, launchd can stop starting the job after the binary is
+    /// replaced ("spawn failed"), and nothing else says so.  Measured
+    /// from the newest minute rather than the clock, so a computer just
+    /// woken from sleep, where neither ran, does not read as stalled.
+    /// Unknown before the first run that records itself.
+    /// </summary>
+    public static bool Stalled(StatusSyncDataContract schedule, DateTimeOffset? lastMinute, TimeSpan grace) =>
+        schedule is { State: "scheduled", LastRun: { } lastRun }
+        && lastMinute is { } last
+        && last - lastRun > grace;
+
+    public static string SyncStatus(StatusSyncDataContract schedule, DateTimeOffset? lastMinute, TimeSpan grace,
+        DateTimeOffset now) => schedule switch
     {
         { State: "running", Every: { } every } => $"Running (every {HumanizeInterval(every)})",
         { State: "running" } => "Running",
+        { State: "scheduled", Every: { } every, LastRun: { } lastRun } when Stalled(schedule, lastMinute, grace) =>
+            $"Every {HumanizeInterval(every)}, not run since {FormatLastMinute(lastRun.ToLocalTime(), now)}",
         { State: "scheduled", Every: { } every } => $"Every {HumanizeInterval(every)} (installed {schedule.InstalledOn})",
         _ => "Not scheduled",
     };
@@ -778,7 +801,7 @@ public record StatusListenDataContract(
     DateTimeOffset? PausedUntil = null,
     string? PauseIgnored = null);
 
-public record StatusSyncDataContract(string State, string? Every, string? InstalledOn);
+public record StatusSyncDataContract(string State, string? Every, string? InstalledOn, DateTimeOffset? LastRun = null);
 
 public record StatusSignInDataContract(string State, string? Name, string? Email);
 

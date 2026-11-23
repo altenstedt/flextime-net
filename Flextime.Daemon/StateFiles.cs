@@ -18,6 +18,14 @@ public static class StateFiles
     public static readonly string InstallPath = Path.Combine(Folder, "install.txt");
     public static readonly string StopPath = Path.Combine(Folder, "stop.txt");
 
+    /// <summary>
+    /// When a scheduled sync --once last started, in Unix seconds.  The
+    /// status command compares it with the newest measurement, to tell a
+    /// schedule the system no longer runs.  Not guarded by a lock: it is
+    /// a time, and an old one is exactly what it should show.
+    /// </summary>
+    public static readonly string SyncRunPath = Path.Combine(Folder, "sync-run.txt");
+
     /// <summary>When sync last compared every day against the server.</summary>
     public static readonly string ReconcilePath = Path.Combine(Folder, "reconcile.txt");
 
