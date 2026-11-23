@@ -278,4 +278,19 @@ public class PrintInfoTests
             PrintInfo.Unexpected(new System.Text.Json.JsonException("'<' is an invalid start of a value.")));
         Assert.Equal("Failed, Token response was null", PrintInfo.Unexpected(new InvalidOperationException("Token response was null.")));
     }
+
+    [Theory]
+    [InlineData("--no-color status", "status --no-color")]
+    [InlineData("--no-color", "--no-color")]
+    [InlineData("--no-color --no-color data -d 1", "data -d 1 --no-color --no-color")]
+    [InlineData("--no-color computer rename -- --odd", "computer rename --no-color -- --odd")]
+    [InlineData("status --no-color", "status --no-color")]
+    [InlineData("", "")]
+    [InlineData("--no-color --help", "--help")]
+    public void No_color_before_the_command_moves_behind_it(string given, string expected)
+    {
+        string[] Split(string value) => value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(Split(expected), Colour.CommandFirst(Split(given)));
+    }
 }

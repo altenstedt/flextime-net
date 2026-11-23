@@ -15,6 +15,8 @@ await deviceCode.Initialize();
 var computer = new Computer();
 await computer.Initialize();
 
+args = Colour.CommandFirst(args);
+
 // Read here as well as by the global option below: the console logger
 // takes its colour when the host is built, before the options are.
 Colour.NoColorOption = args.TakeWhile(arg => arg != "--")
