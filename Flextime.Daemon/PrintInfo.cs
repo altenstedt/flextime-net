@@ -103,7 +103,6 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
                     state.SignIn?.State == "yes" ? Tone.Warn : Tone.Plain)));
             }
 
-            lines.AddRange(dayRows.Select(row => new Line(null, row, Tone.Plain)));
             lines.Add(Row("Location", new(null, LocationStatus(location), Tone.Plain)));
 
             // What it is and where, for looking up now and then.
@@ -124,6 +123,14 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
             if (logs != null)
             {
                 lines.Add(Row("Logs", new(null, HomeRelative(logs, home), Tone.Plain)));
+            }
+
+            // The days last, in a section of their own: they are as wide
+            // as the block, and between the health rows they split it.
+            if (dayRows.Count > 0)
+            {
+                lines.Add(new Line(null, "", Tone.Plain));
+                lines.AddRange(dayRows.Select(row => new Line(null, row, Tone.Plain)));
             }
 
             return lines;
