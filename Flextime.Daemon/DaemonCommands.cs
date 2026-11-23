@@ -53,7 +53,7 @@ public class DaemonCommands(
         await deviceCode.LogOn(cancellationToken);
     }
 
-    /// <summary>Remove the sign-in from this computer; measurements are kept</summary>
+    /// <summary>Log out on this computer; measurements are kept</summary>
     [ConsoleAppFilter<NoArgumentsFilter>]
     public int Logout()
     {
@@ -245,7 +245,7 @@ public class DaemonCommands(
         return locationClient.Off();
     }
 
-    /// <summary>Remove this computer's place history, here and on the server</summary>
+    /// <summary>Remove this computer's places, here and on the server</summary>
     /// <param name="allComputers">Clear every computer on the account, on the server too.</param>
     [Command("location clear")]
     public Task<int> LocationClear(bool allComputers = false, CancellationToken cancellationToken = default)
