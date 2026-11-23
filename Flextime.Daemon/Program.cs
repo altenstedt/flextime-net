@@ -15,6 +15,11 @@ await deviceCode.Initialize();
 var computer = new Computer();
 await computer.Initialize();
 
+// Read here as well as by the global option below: the console logger
+// takes its colour when the host is built, before the options are.
+Colour.NoColorOption = args.TakeWhile(arg => arg != "--")
+    .Any(arg => arg.Equals(Colour.Option, StringComparison.OrdinalIgnoreCase));
+
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.AddSingleton(computer);
@@ -44,6 +49,9 @@ builder.Logging.AddSimpleConsole(formatterOptions =>
 {
     formatterOptions.SingleLine = true;
     formatterOptions.TimestampFormat = "HH:mm:ss ";
+    formatterOptions.ColorBehavior = Colour.Wanted
+        ? Microsoft.Extensions.Logging.Console.LoggerColorBehavior.Default
+        : Microsoft.Extensions.Logging.Console.LoggerColorBehavior.Disabled;
 });
 
 if (OperatingSystem.IsWindows())
@@ -52,6 +60,12 @@ if (OperatingSystem.IsWindows())
 }
 
 var app = builder.ToConsoleAppBuilder();
+
+app.ConfigureGlobalOptions((ref ConsoleApp.GlobalOptionsBuilder options) =>
+{
+    // Declared for the help, and so the commands do not see it.
+    return options.AddGlobalOption<bool>(Colour.Option, Colour.Description);
+});
 
 app.UseFilter<UnknownCommandFilter>();
 app.Add<DaemonCommands>();

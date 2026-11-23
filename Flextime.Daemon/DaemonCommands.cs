@@ -21,13 +21,18 @@ public class DaemonCommands(
     ComputerClient computerClient,
     PauseCommand pauseCommand)
 {
-    /// <summary>Flextime -- track working hours. Without a command, show the installation.</summary>
-    /// <param name="days">-d, Also list the latest days, or 0 for all.</param>
-    /// <param name="noColor">No colour; NO_COLOR set and not empty does the same.</param>
-    /// <param name="json">Write JSON to standard out.</param>
+    /// <summary>Flextime -- track working hours. Without a command, show the status.</summary>
     [Command("")]
-    public async Task<int> Root(
-        [HideDefaultValue] int? days = null, bool noColor = false, bool json = false,
+    [ConsoleAppFilter<NoArgumentsFilter>]
+    public async Task<int> Root(CancellationToken cancellationToken = default) =>
+        await printInfo.Invoke(cancellationToken: cancellationToken);
+
+    /// <summary>Show whether recording and sync work, and this computer</summary>
+    /// <param name="days">-d, Also list the latest days, or 0 for all.</param>
+    /// <param name="json">Write JSON to standard out.</param>
+    [Command("status")]
+    public async Task<int> Status(
+        [HideDefaultValue] int? days = null, bool json = false,
         CancellationToken cancellationToken = default)
     {
         if (days is < 0)
@@ -37,7 +42,7 @@ public class DaemonCommands(
             return 1;
         }
 
-        return await printInfo.Invoke(days, noColor, json, cancellationToken);
+        return await printInfo.Invoke(days, json, cancellationToken);
     }
 
     /// <summary>Log in to the Flextime server, so sync can upload</summary>

@@ -6,13 +6,17 @@ namespace Flextime.Daemon;
 /// Rejects any argument to a command without options.  ConsoleAppFramework
 /// checks arguments only for commands that have options, so without this
 /// "flextimed stop --foo" would stop and exit 0.  A lone --help or --version
-/// passes, since the generated code checks for them after the filters.
+/// passes, since the generated code checks for them after the filters, and
+/// so does the global --no-color, which the filters still see.
 /// </summary>
 internal sealed class NoArgumentsFilter(ConsoleAppFilter next) : ConsoleAppFilter(next)
 {
     public override Task InvokeAsync(ConsoleAppContext context, CancellationToken cancellationToken)
     {
-        if (context.CommandArguments is [var first, ..] and not ["-h" or "--help" or "--version"])
+        string[] arguments = [.. context.CommandArguments.ToArray()
+            .Where(argument => !argument.Equals(Colour.Option, StringComparison.OrdinalIgnoreCase))];
+
+        if (arguments is [var first, ..] and not ["-h" or "--help" or "--version"])
         {
             ConsoleApp.LogError($"Argument '{first}' is not recognized.");
 

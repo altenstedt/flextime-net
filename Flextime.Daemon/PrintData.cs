@@ -77,7 +77,7 @@ public class PrintData(
 
                 var colour = !Console.IsOutputRedirected
                              && AnsiConsole.Profile.Capabilities.Ansi
-                             && PrintInfo.ColourWanted(false, Environment.GetEnvironmentVariable("NO_COLOR"));
+                             && Colour.Wanted;
 
                 var today = DateOnly.FromDateTime(DateTime.Now);
 

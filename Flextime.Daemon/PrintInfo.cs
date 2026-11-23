@@ -14,7 +14,7 @@ namespace Flextime.Daemon;
 
 public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCode, Computer computer, Sync sync)
 {
-    public async Task<int> Invoke(int? days = null, bool noColor = false, bool json = false,
+    public async Task<int> Invoke(int? days = null, bool json = false,
         CancellationToken cancellationToken = default)
     {
         var httpClient = httpClientFactory.CreateClient("ApiHttpClient");
@@ -24,7 +24,7 @@ public class PrintInfo(IHttpClientFactory httpClientFactory, DeviceCode deviceCo
         Console.OutputEncoding = Encoding.UTF8;
 
         var terminal = !json && !Console.IsOutputRedirected && AnsiConsole.Profile.Capabilities.Ansi;
-        var colour = terminal && ColourWanted(noColor, Environment.GetEnvironmentVariable("NO_COLOR"));
+        var colour = terminal && Colour.Wanted;
         var now = DateTimeOffset.Now;
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
