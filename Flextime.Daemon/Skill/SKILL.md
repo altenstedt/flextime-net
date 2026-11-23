@@ -7,8 +7,9 @@ description: Read the user's own working hours from Flextime with the flextimed 
 
 Flextime measures when a computer is in use, once a minute, and keeps the
 measurements on a server.  `flextimed` reads them back, signed in as the
-user.  This skill came with flextimed; `flextimed skill` prints the version
-that matches the flextimed installed.
+user.  This skill came with flextimed.  If this copy may be out of date,
+`flextimed skill` prints the text of the skill that matches the flextimed
+installed.
 
 ## Commands
 
@@ -23,6 +24,9 @@ All of these only read.
   - Days: `--since 30d` (the default; also `1w`, `P7D`, `yesterday`),
     `--week this` (also `last`, `47`, `45-47`, `2026-W47`) or
     `--month this` (also `last`, `nov`, `sep-nov`, `11`, `2026-11`).
+    `--since` runs from that day through today: `--since yesterday` gives
+    yesterday and today, and `30d` gives 31 dates.  In `--since`, `m` is
+    minutes, not months: use `--month` for months.
   - Computers: `-c id,id`, or `--all-computers`.  The default is this
     computer.  The computers chosen are merged: time on two at once counts
     once.
@@ -51,12 +55,14 @@ Without `--json`, data prints a table for people; parse only the JSON.
 ```
 
 - `days` run oldest first.  A date with no entry had no use of the chosen
-  computers.
+  computers, or a single minute; time added by hand to such a date is not
+  shown, as in the web.
 - `work` is the time counted as work that day, as `hh:mm:ss`.  The web shows
   it rounded to the minute, and rounds a week's or month's total once, over
   the exact sum.  Do the same, and totals will match the web.
 - `start` and `end` are the first and last minute counted, in the day's own
-  zone, including time the user added by hand.
+  zone, including time the user added by hand.  On a day marked whole as
+  not work, they are the first and last minute measured.
 - `custom` means the user changed the day: its own idle profile, or time
   added by hand.
 - `notWork` means the whole day is marked as not work; its `work` is zero.
@@ -79,8 +85,11 @@ The export file explains itself in its `about` field.  In short:
 location on, `places`; `hints`; and `settings`, the user's idle profiles
 (`profiles`) and place names (`places`) as the web app stores them, and
 `days`, one entry per date with not-work marks (`marks`) or time added by
-hand (`added`), each with its `value` in seconds of the day.  A range limits
-the activity and `days`; profiles and place names are always whole.
+hand (`added`), each with a `value` and a `version`.  A marks `value` is
+`"day"` for the whole day, or a list of `{ "from", "to" }`; an added `value`
+has `started`, `ended` and `ranges`, each optional.  Times are seconds of
+the day in the day's own zone.  A range limits the activity and `days`;
+profiles and place names are always whole.
 
 Use export for questions data cannot answer, such as when in the day the
 computer is used, or how long the breaks are.
@@ -91,9 +100,11 @@ computer is used, or how long the breaks are.
 - Never read flextimed's token files or call the server yourself.  If
   flextimed says the user is not logged in, ask them to run
   `flextimed login`.
-- Run only the commands above.  Others change the user's setup (`pause`,
-  `resume`, `location`, `login`, `logout`, `install`, `uninstall`, `stop`,
-  `start`): suggest them, never run them.
+- Run only the commands above, and `flextimed skill` without options.
+  Others change the user's setup or data on the server (`pause`, `resume`,
+  `location on`, `location off`, `location clear`, `computer rename`,
+  `login`, `logout`, `sync`, `listen`, `install`, `uninstall`, `stop`,
+  `start`, `skill --install`): suggest them, never run them.
 - Measured hours are not hours worked or charged.  Travel, meetings away
   from the computer and agreements with a customer are not in Flextime;
   users often keep them in their own notes.  Ask before reading such a
