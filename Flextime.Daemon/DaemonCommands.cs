@@ -528,12 +528,12 @@ public class DaemonCommands(
     /// Marks the active stretch just before the pause as not work, when
     /// it is no longer than 30 minutes, or from --since.  The pause ends
     /// by itself; resume ends it sooner.  A pause lasts until the end of
-    /// tomorrow at the most.  Listen's stop and start are measurements like
+    /// the next weekday at the most.  Listen's stop and start are measurements like
     /// any other, so a pause shorter than the idle limit is bridged and
     /// still counts as work.
     /// </remarks>
     /// <param name="for">Pause this long instead: 2h, 90m or "1 hour".</param>
-    /// <param name="until">Pause until this time of day: 07:00.</param>
+    /// <param name="until">Pause until this time: 07:00 or "mon 07:00".</param>
     /// <param name="since">Mark as not work from 19:42, or 10m ago.</param>
     /// <param name="noBackdate">Mark nothing before the pause.</param>
     [ConsoleAppFilter<PauseHelpFilter>]

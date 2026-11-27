@@ -9,8 +9,8 @@ public static class PauseHelp
     public const string Key = """
 
         The pause ends by itself, at midnight unless --for or --until says
-        otherwise, and never later than the end of tomorrow. Resume ends it
-        sooner.
+        otherwise, and never later than the end of the next weekday: from a
+        Friday, the end of Monday. Resume ends it sooner.
 
         The active stretch just before the pause is marked as not work, if
         it is no longer than 30 minutes. --since marks from the time you give

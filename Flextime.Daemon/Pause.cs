@@ -45,10 +45,11 @@ public static class PauseFile
 
     /// <summary>
     /// The longest a pause may last.  The command stops at the end of the
-    /// next day, at most 48 hours away, plus a daylight saving hour; one
-    /// written by anything else that lasts longer is ignored.
+    /// next weekday: from the first minute of a Friday, the end of Monday,
+    /// 96 hours away, plus a daylight saving hour.  One written by anything
+    /// else that lasts longer is ignored.
     /// </summary>
-    public static readonly TimeSpan MaxLength = TimeSpan.FromHours(49);
+    public static readonly TimeSpan MaxLength = TimeSpan.FromHours(97);
 
     /// <summary>
     /// How far ahead of now the time a pause was written at may lie.  A
@@ -211,19 +212,40 @@ public static class PauseFile
 
     /// <summary>
     /// The latest a pause started at <paramref name="now"/> may end: the
-    /// end of the next day.
+    /// end of the next weekday, so a pause from Friday covers the weekend
+    /// and Monday morning.  Monday to Thursday, that is the end of
+    /// tomorrow.
     /// </summary>
-    public static DateTimeOffset Latest(DateTimeOffset now, TimeZoneInfo zone) => StartOfDay(now, 2, zone);
+    public static DateTimeOffset Latest(DateTimeOffset now, TimeZoneInfo zone)
+    {
+        var today = TimeZoneInfo.ConvertTime(now, zone).Date;
+        var days = 1;
+
+        while (today.AddDays(days).DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+        {
+            days++;
+        }
+
+        return StartOfDay(now, days + 1, zone);
+    }
 
     /// <summary>
     /// The next time the clock shows <paramref name="time"/>: today, or
-    /// tomorrow when it has passed.
+    /// tomorrow when it has passed.  With <paramref name="day"/>, the next
+    /// time on that weekday: today when it is that day and the time is
+    /// still ahead.
     /// </summary>
-    public static DateTimeOffset Next(DateTimeOffset now, TimeOnly time, TimeZoneInfo zone)
+    public static DateTimeOffset Next(DateTimeOffset now, TimeOnly time, TimeZoneInfo zone, DayOfWeek? day = null)
     {
-        for (var days = 0; days <= 2; days++)
+        for (var days = 0; days <= 8; days++)
         {
             var date = TimeZoneInfo.ConvertTime(now, zone).Date.AddDays(days);
+
+            if (day is { } wanted && date.DayOfWeek != wanted)
+            {
+                continue;
+            }
+
             var candidate = date + time.ToTimeSpan();
 
             // A time the clock skips that night is taken as the first
@@ -241,7 +263,7 @@ public static class PauseFile
             }
         }
 
-        // Unreachable: two days on is always later.
+        // Unreachable: eight days on holds every weekday, later than now.
         return now.AddDays(1);
     }
 

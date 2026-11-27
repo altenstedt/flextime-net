@@ -76,29 +76,31 @@ public partial class PauseCommand(IHttpClientFactory httpClientFactory, DeviceCo
                 return 1;
             }
 
-            if (length > latest - now)
-            {
-                Error.WriteLine("A pause ends by the end of tomorrow at the latest. Use the stop command to stop for longer.");
-
-                return 1;
-            }
-
             end = now + length;
         }
         else if (until != null)
         {
-            if (!TryReadClock(until, out var time))
+            if (!TryReadUntil(until, out var time, out var day))
             {
-                Error.WriteLine($"Cannot read \"{TerminalText.Clean(until)}\" as a time of day. Try 07:00.");
+                Error.WriteLine($"Cannot read \"{TerminalText.Clean(until)}\" as a time. Try 07:00 or \"mon 07:00\".");
 
                 return 1;
             }
 
-            end = PauseFile.Next(now, time, Zone);
+            end = PauseFile.Next(now, time, Zone, day);
         }
         else
         {
             end = PauseFile.StartOfDay(now, 1, Zone);
+        }
+
+        if (end > latest)
+        {
+            var lastDay = TimeZoneInfo.ConvertTime(latest, Zone).AddDays(-1).DayOfWeek;
+
+            Error.WriteLine($"A pause ends by the end of {lastDay} at the latest. Use the stop command to stop for longer.");
+
+            return 1;
         }
 
         DateTimeOffset? sinceFrom = null;
@@ -368,6 +370,43 @@ public partial class PauseCommand(IHttpClientFactory httpClientFactory, DeviceCo
         return ClockPattern().IsMatch(text.Trim())
                && TimeOnly.TryParseExact(text.Trim(), ["H:mm", "HH:mm"], CultureInfo.InvariantCulture,
                    DateTimeStyles.None, out time);
+    }
+
+    // A time of day, or a weekday and a time of day: 07:00, mon 07:00,
+    // Monday 7:00.  Weekdays in English, as the rest of the command.
+    private static bool TryReadUntil(string text, out TimeOnly time, out DayOfWeek? day)
+    {
+        day = null;
+
+        var parts = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (parts.Length == 2)
+        {
+            var name = parts[0].ToLowerInvariant();
+            var match = Enum.GetValues<DayOfWeek>().Where(weekday =>
+            {
+                var full = weekday.ToString().ToLowerInvariant();
+
+                return name == full || name == full[..3];
+            }).ToList();
+
+            if (match.Count != 1)
+            {
+                time = default;
+
+                return false;
+            }
+
+            day = match[0];
+        }
+        else if (parts.Length != 1)
+        {
+            time = default;
+
+            return false;
+        }
+
+        return TryReadClock(parts[^1], out time);
     }
 
     public static string FormatLength(TimeSpan length)

@@ -64,9 +64,11 @@ start`; sync keeps going.  To leave a stretch out for a while instead:
     flextimed pause                 # until midnight
     flextimed pause --for 2h
     flextimed pause --until 07:00
+    flextimed pause --until "mon 07:00"
     flextimed resume
 
-A pause ends by itself, never later than the end of tomorrow.  The
+A pause ends by itself, never later than the end of the next weekday:
+from a Friday, the end of Monday.  The
 active stretch just before it, if no longer than 30 minutes, is marked
 as not work; `--since` marks from the time you give instead, and
 `--no-backdate` marks nothing.  The mark is undone in the web app.  A

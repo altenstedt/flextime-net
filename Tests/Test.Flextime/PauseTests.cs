@@ -159,13 +159,57 @@ public class PauseTests : IDisposable
     [Fact]
     public void The_latest_end_lies_within_what_listen_accepts_on_a_daylight_saving_night()
     {
-        // The night the clocks go back has 25 hours.
+        // The night the clocks go back has 25 hours.  A Saturday: the
+        // end of Monday.
         var evening = new DateTimeOffset(2026, 10, 24, 23, 59, 0, TimeSpan.FromHours(2));
         var latest = PauseFile.Latest(evening, Stockholm);
 
-        Assert.Equal(new DateTimeOffset(2026, 10, 26, 0, 0, 0, TimeSpan.FromHours(1)), latest);
+        Assert.Equal(new DateTimeOffset(2026, 10, 27, 0, 0, 0, TimeSpan.FromHours(1)), latest);
         Assert.True(latest - evening <= PauseFile.MaxLength);
         Assert.True(PauseFile.Parse(Text(latest, evening), evening).IsPaused);
+    }
+
+    [Fact]
+    public void The_latest_end_is_the_end_of_the_next_weekday()
+    {
+        // Monday: the end of Tuesday.
+        Assert.Equal(new DateTimeOffset(2026, 11, 18, 0, 0, 0, TimeSpan.FromHours(1)), PauseFile.Latest(Now, Stockholm));
+
+        // Friday, Saturday and Sunday: the end of Monday.
+        foreach (var day in new[] { 20, 21, 22 })
+        {
+            var then = new DateTimeOffset(2026, 11, day, 9, 0, 0, TimeSpan.FromHours(1));
+
+            Assert.Equal(new DateTimeOffset(2026, 11, 24, 0, 0, 0, TimeSpan.FromHours(1)), PauseFile.Latest(then, Stockholm));
+        }
+    }
+
+    [Fact]
+    public void A_weekend_pause_over_a_daylight_saving_night_is_one_listen_accepts()
+    {
+        // The first minute of the Friday before the clocks go back: the
+        // longest pause the command writes, 97 hours.
+        var friday = new DateTimeOffset(2026, 10, 23, 0, 0, 0, TimeSpan.FromHours(2));
+        var latest = PauseFile.Latest(friday, Stockholm);
+
+        Assert.Equal(new DateTimeOffset(2026, 10, 27, 0, 0, 0, TimeSpan.FromHours(1)), latest);
+        Assert.Equal(PauseFile.MaxLength, latest - friday);
+        Assert.True(PauseFile.Parse(Text(latest, friday), friday).IsPaused);
+    }
+
+    [Fact]
+    public void Until_a_weekday_means_its_next_time()
+    {
+        var friday = new DateTimeOffset(2026, 11, 20, 17, 0, 0, TimeSpan.Zero);
+
+        Assert.Equal(new DateTimeOffset(2026, 11, 23, 7, 0, 0, TimeSpan.FromHours(1)),
+            PauseFile.Next(friday, new TimeOnly(7, 0), Stockholm, DayOfWeek.Monday));
+
+        // Today, while the time is still ahead; a week on once it has passed.
+        Assert.Equal(new DateTimeOffset(2026, 11, 16, 22, 0, 0, TimeSpan.FromHours(1)),
+            PauseFile.Next(Now, new TimeOnly(22, 0), Stockholm, DayOfWeek.Monday));
+        Assert.Equal(new DateTimeOffset(2026, 11, 23, 7, 0, 0, TimeSpan.FromHours(1)),
+            PauseFile.Next(Now, new TimeOnly(7, 0), Stockholm, DayOfWeek.Monday));
     }
 
     [Fact]

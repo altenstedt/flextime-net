@@ -55,14 +55,14 @@ public class PauseCommandTests : IDisposable
         ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("null", Encoding.UTF8, "application/json") }
         : new HttpResponseMessage(HttpStatusCode.NoContent)));
 
-    private PauseCommand Command(FakeServer? server = null, bool authenticated = true, TimeSpan? timeout = null) =>
+    private PauseCommand Command(FakeServer? server = null, bool authenticated = true, TimeSpan? timeout = null, DateTimeOffset? now = null) =>
         new(new Factory(server ?? Accepting()), new DeviceCode())
         {
             PausePath = PausePath,
             StopPath = Path.Combine(folder, "stop.txt"),
             MeasurementsFolder = Path.Combine(folder, "measurements"),
             Pending = new PendingMarks(PendingPath, Path.Combine(folder, "pause-mark.lock")),
-            Now = () => Now,
+            Now = () => now ?? Now,
             Zone = Stockholm,
             ZoneId = () => "Europe/Stockholm",
             IsAuthenticated = () => authenticated,
@@ -178,6 +178,52 @@ public class PauseCommandTests : IDisposable
 
         await Command().Pause(null, "07:00", null, true, Token);
         Assert.Equal(new DateTimeOffset(2026, 11, 17, 7, 0, 0, TimeSpan.FromHours(1)), Status().End);
+    }
+
+    // Friday 2026-11-20 18:00 in Stockholm.
+    private static readonly DateTimeOffset Friday = new(2026, 11, 20, 17, 0, 0, TimeSpan.Zero);
+
+    [Theory]
+    [InlineData(null, "mon 07:00")]
+    [InlineData(null, "Monday 7:00")]
+    [InlineData("60h", null)]
+    public async Task A_pause_from_friday_may_last_until_monday(string? length, string? until)
+    {
+        Assert.Equal(0, await Command(now: Friday).Pause(length, until, null, true, Token));
+
+        var status = new PauseReader(new PauseFileSource(PausePath)).Check(Friday);
+
+        Assert.True(status.IsPaused);
+        Assert.Equal(DayOfWeek.Monday, TimeZoneInfo.ConvertTime(status.End!.Value, Stockholm).DayOfWeek);
+    }
+
+    [Fact]
+    public async Task Until_a_weekday_names_the_day_it_ends()
+    {
+        await Command(now: Friday).Pause(null, "mon 07:00", null, true, Token);
+
+        Assert.StartsWith("Paused until Mon 2026-11-23 07:00.", output.ToString());
+    }
+
+    [Fact]
+    public async Task A_pause_past_the_next_weekday_writes_nothing()
+    {
+        Assert.Equal(1, await Command(now: Friday).Pause(null, "tue 07:00", null, true, Token));
+        Assert.Equal(1, await Command().Pause(null, "wed 07:00", null, true, Token));
+        Assert.False(File.Exists(PausePath));
+        Assert.Contains("end of Monday", errors.ToString());
+        Assert.Contains("end of Tuesday", errors.ToString());
+    }
+
+    [Theory]
+    [InlineData("mo 07:00")]
+    [InlineData("07:00 mon")]
+    [InlineData("next mon 07:00")]
+    [InlineData("mon")]
+    public async Task An_unreadable_until_writes_nothing(string until)
+    {
+        Assert.Equal(1, await Command().Pause(null, until, null, true, Token));
+        Assert.False(File.Exists(PausePath));
     }
 
     [Theory]
