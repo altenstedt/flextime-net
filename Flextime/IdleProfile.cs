@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace Flextime;
@@ -133,16 +134,20 @@ public sealed class IdleProfile
 /// <summary>A named curve and the weekdays it claims.</summary>
 public sealed record NamedProfile(string Id, string Name, IReadOnlySet<DayOfWeek> Days, IdleProfile Profile);
 
+/// <summary>The profiles applied on the days before <see cref="Until"/>.</summary>
+public sealed record EarlierApplied(DateOnly Until, IReadOnlyList<string> Applied);
+
 /// <summary>
 /// The user's whole idle policy: a default curve, a library of named
-/// ones with the weekdays they claim, which of them are applied, and
-/// any per-day overrides.
+/// ones with the weekdays they claim, which of them are applied, which
+/// were applied on earlier days, and any per-day overrides.
 /// </summary>
 public sealed class IdlePolicy(
     IdleProfile shared,
     IReadOnlyList<NamedProfile> library,
     IReadOnlyList<string> applied,
-    IReadOnlyDictionary<DateOnly, IdleProfile> overrides)
+    IReadOnlyDictionary<DateOnly, IdleProfile> overrides,
+    IReadOnlyList<EarlierApplied>? earlier = null)
 {
     public IdleProfile Shared { get; } = shared;
 
@@ -153,9 +158,30 @@ public sealed class IdlePolicy(
     public IReadOnlyDictionary<DateOnly, IdleProfile> Overrides { get; } = overrides;
 
     /// <summary>
+    /// Earlier applied sets, sorted by <see cref="EarlierApplied.Until"/>.
+    /// A day runs on the first whose until is after it, else on
+    /// <see cref="Applied"/>.
+    /// </summary>
+    public IReadOnlyList<EarlierApplied> Earlier { get; } = earlier ?? [];
+
+    /// <summary>The ids applied on a date.</summary>
+    public IReadOnlyList<string> AppliedOn(DateOnly date)
+    {
+        foreach (var entry in Earlier)
+        {
+            if (date < entry.Until)
+            {
+                return entry.Applied;
+            }
+        }
+
+        return Applied;
+    }
+
+    /// <summary>
     /// The curve a day runs on: its own override if it has one, else
-    /// the last applied profile in library order that claims its
-    /// weekday, else the default.  Library order decides who wins a day
+    /// the last profile applied on that date, in library order, that
+    /// claims its weekday, else the default.  Library order decides who wins a day
     /// two profiles both claim, which is why this walks the whole list
     /// rather than stopping at the first match.
     /// </summary>
@@ -166,11 +192,12 @@ public sealed class IdlePolicy(
             return dayOverride;
         }
 
+        var applied = AppliedOn(date);
         IdleProfile? winner = null;
 
         foreach (var entry in Library)
         {
-            if (Applied.Contains(entry.Id) && entry.Days.Contains(weekday))
+            if (applied.Contains(entry.Id) && entry.Days.Contains(weekday))
             {
                 winner = entry.Profile;
             }
@@ -189,6 +216,7 @@ public sealed class IdlePolicy(
         var shared = IdleProfile.Decode(Property(document, "shared"));
         var library = DecodeLibrary(Property(document, "library"));
         var applied = DecodeApplied(Property(document, "applied"), library);
+        var earlier = DecodeEarlier(Property(document, "earlier"), library);
         var overrides = new Dictionary<DateOnly, IdleProfile>();
 
         var stored = Property(document, "overrides");
@@ -210,7 +238,7 @@ public sealed class IdlePolicy(
             throw new IdlePolicyException("Overrides must be an object.");
         }
 
-        return new IdlePolicy(shared, library, applied, overrides);
+        return new IdlePolicy(shared, library, applied, overrides, earlier);
     }
 
     private static JsonElement Property(JsonElement document, string name) =>
@@ -312,6 +340,48 @@ public sealed class IdlePolicy(
         }
 
         return applied;
+    }
+
+    private static List<EarlierApplied> DecodeEarlier(JsonElement stored, List<NamedProfile> library)
+    {
+        var earlier = new List<EarlierApplied>();
+
+        if (stored.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+        {
+            return earlier;
+        }
+
+        if (stored.ValueKind != JsonValueKind.Array)
+        {
+            throw new IdlePolicyException("Earlier profiles must be a list.");
+        }
+
+        foreach (var entry in stored.EnumerateArray())
+        {
+            if (entry.ValueKind != JsonValueKind.Object)
+            {
+                throw new IdlePolicyException("An earlier entry must be an object.");
+            }
+
+            var until = Property(entry, "until");
+
+            if (until.ValueKind != JsonValueKind.String
+                || !DateOnly.TryParseExact(until.GetString(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+            {
+                throw new IdlePolicyException("An earlier entry must have an until date.");
+            }
+
+            var applied = Property(entry, "applied");
+
+            if (applied.ValueKind != JsonValueKind.Array)
+            {
+                throw new IdlePolicyException("An earlier entry must list its applied ids.");
+            }
+
+            earlier.Add(new EarlierApplied(date, DecodeApplied(applied, library)));
+        }
+
+        return earlier;
     }
 
     // Index matches DayOfWeek: 0 = Sunday.

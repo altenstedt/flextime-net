@@ -174,8 +174,70 @@ public class IdleProfileTests
             policy.For(new DateOnly(2026, 6, 22), DayOfWeek.Monday).LimitAt(TimeSpan.FromHours(9)));
     }
 
+    private const string DatedPolicy = """
+        {
+          "shared": [[1440, 10]],
+          "library": [
+            { "id": "a", "name": "Office", "days": ["mon"], "profile": [[1440, 30]], "hidden": true },
+            { "id": "b", "name": "Home",   "days": ["mon"], "profile": [[1440, 45]] }
+          ],
+          "applied": ["b"],
+          "earlier": [
+            { "until": "2026-11-02", "applied": [] },
+            { "until": "2026-11-09", "applied": ["a", "deleted"] }
+          ]
+        }
+        """;
+
+    [Theory]
+    [InlineData("2026-10-26", 10)]
+    [InlineData("2026-11-02", 30)]
+    [InlineData("2026-11-09", 45)]
+    [InlineData("2026-11-16", 45)]
+    public void ADayUsesTheSetAppliedOnItsDate(string date, int minutes)
+    {
+        // A boundary date already runs on the next set: d < until.
+        // Profile "a" is hidden, and still resolves.
+        var policy = IdlePolicy.Decode(Json(DatedPolicy));
+
+        Assert.Equal(
+            TimeSpan.FromMinutes(minutes),
+            policy.For(DateOnly.Parse(date), DayOfWeek.Monday).LimitAt(TimeSpan.FromHours(9)));
+    }
+
+    [Fact]
+    public void AnEarlierIdNoLongerInTheLibraryIsIgnored()
+    {
+        var policy = IdlePolicy.Decode(Json(DatedPolicy));
+
+        Assert.Equal(["a"], policy.Earlier[1].Applied);
+    }
+
+    [Fact]
+    public void WithoutEarlierEveryDayUsesApplied()
+    {
+        var policy = IdlePolicy.Decode(Json("""
+            {
+              "shared": [[1440, 10]],
+              "library": [{ "id": "a", "name": "Office", "days": ["mon"], "profile": [[1440, 30]] }],
+              "applied": ["a"]
+            }
+            """));
+
+        Assert.Empty(policy.Earlier);
+        Assert.Equal(
+            TimeSpan.FromMinutes(30),
+            policy.For(new DateOnly(2000, 1, 3), DayOfWeek.Monday).LimitAt(TimeSpan.FromHours(9)));
+    }
+
     [Theory]
     [InlineData("[]")]
+    [InlineData("""{ "earlier": {} }""")]
+    [InlineData("""{ "earlier": ["2026-11-01"] }""")]
+    [InlineData("""{ "earlier": [{ "applied": [] }] }""")]
+    [InlineData("""{ "earlier": [{ "until": "1 Nov 2026", "applied": [] }] }""")]
+    [InlineData("""{ "earlier": [{ "until": "2026-11-01" }] }""")]
+    [InlineData("""{ "earlier": [{ "until": "2026-11-01", "applied": [1] }] }""")]
     [InlineData("""{ "library": "no" }""")]
     [InlineData("""{ "library": [{ "name": "x", "days": [] }] }""")]
     [InlineData("""{ "library": [{ "id": "a", "name": "x", "days": ["funday"] }] }""")]
